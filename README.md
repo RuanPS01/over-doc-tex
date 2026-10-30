@@ -40,6 +40,10 @@ npm run check:responsive     # requer Playwright com Chromium
 npm --prefix tests/rules install && npm run test:rules   # requer Java 21+
 ```
 
+## Deploy
+
+Cada push na `main` roda o CI e, se tudo passar, publica as regras e os índices do Firebase e, em seguida, o PWA no GitHub Pages (`.github/workflows/deploy.yml`). Pull requests rodam só as verificações. A configuração única (variáveis, autenticação e papéis) está em [`docs/02-tecnologias.md`](docs/02-tecnologias.md#6-deploy-github-pages-com-firebase-antes).
+
 ## Documentação
 
 | Arquivo | Assunto |

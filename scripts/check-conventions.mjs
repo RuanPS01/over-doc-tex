@@ -43,6 +43,7 @@ const texts = [
   join(ROOT, 'README.md'),
   ...code,
   ...walk(join(ROOT, 'src'), ['.css']),
+  ...walk(join(ROOT, '.github'), ['.yml']),
 ];
 
 check(frontend, /#[0-9a-fA-F]{3,8}\b/, 'cor hexadecimal fixa: use tokens semânticos');

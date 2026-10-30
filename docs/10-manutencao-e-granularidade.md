@@ -72,6 +72,8 @@ Toda mudança que altere o LaTeX gerado incrementa `DIFF_ENGINE_VERSION`. Como a
 | `npm --prefix functions run build` | Ao mexer em `functions/` ou `shared/` |
 | `npm run test:rules` | Ao mexer em regras, tipos ou caminhos (requer Java 21+; instale antes com `npm --prefix tests/rules install`) |
 
+O workflow `.github/workflows/deploy.yml` roda todas essas verificações em cada pull request e antes de cada deploy; um PR só deve ser mesclado com o CI verde.
+
 Os testes de regras ficam em um pacote separado (`tests/rules/`) porque `@firebase/rules-unit-testing` exige o SDK Firebase 12, enquanto o app usa o 13.
 
 ## 5. Dependências
@@ -97,7 +99,7 @@ Os testes de regras ficam em um pacote separado (`tests/rules/`) porque `@fireba
 | `latex-worker` | Implementar `/compile`, `/snapshot` e `/diff` conforme `07-fluxos.md` | Alta |
 | Visualizador pdf.js | Substituir os marcadores de página do `PdfPreviewPanel` por páginas reais com camadas de texto e anotação | Alta |
 | Funções de revisão | `requestReview`, `acceptInvite`, `requestDiff`, `getDiffUrl` e os triggers de contadores e notificações | Alta |
-| Regras do Storage com consulta ao Firestore | Os dois cenários positivos de `storage-rules.test.mjs` falharam no ambiente onde a suíte foi criada; lá, até o exemplo mínimo de `firestore.exists` falhou no emulador. Confirmar em máquina local ou homologação antes do primeiro deploy | Alta |
+| Regras do Storage com consulta ao Firestore | Os dois cenários positivos de `storage-rules.test.mjs` falharam no ambiente onde a suíte foi criada; lá, até o exemplo mínimo de `firestore.exists` falhou no emulador. O job `rules-tests` do CI é o primeiro ambiente limpo onde eles rodam; se falharem lá, a regra precisa ser corrigida antes do deploy (o workflow bloqueia o deploy nesse caso) | Alta |
 | Limite de uso da IA | Cota por usuário e por projeto (contador diário no Firestore) e App Check no `aiStream` | Média |
 | Tamanho do SDK Firebase | Chunk de cerca de 650 kB; carregar Storage e Firestore sob demanda | Média |
 | Egress do verificador de links | Rodar com VPC, Cloud NAT e firewall bloqueando faixas privadas | Média |

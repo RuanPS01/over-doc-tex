@@ -7,7 +7,7 @@ O OverDocTeX é um PWA de edição LaTeX com revisão por versões congeladas (s
 ```
 +--------------------------------------+
 |  PWA  (React 18 + Vite + Tailwind)   |
-|  Firebase Hosting + Service Worker   |
+|  GitHub Pages + Service Worker       |
 +------------------+-------------------+
                    |
      SDK Firebase  |  HTTPS (Bearer = ID token)
@@ -58,7 +58,9 @@ Região padrão: `southamerica-east1` (São Paulo), para latência menor no púb
 
 **D4. Threads aninhadas na revisão.** `reviews/{rid}/threads/{tid}` permite que as regras verifiquem o revisor com um único `get` pelo caminho, sem consultas, e que consultas `collectionGroup` sirvam os painéis agregados.
 
-**D5. IA em stream NDJSON direto na função.** O cliente chama a URL da função `aiStream` (não o rewrite do Hosting, que tem limite de 60 segundos e pode acumular a resposta). Cada linha é um evento validado por Zod nos dois lados.
+**D5. IA em stream NDJSON direto na função.** O PWA é estático (GitHub Pages) e chama a URL da função `aiStream` diretamente, com CORS liberado só para as origens configuradas. Mesmo se o app migrar para o Firebase Hosting, o rewrite não deve ser usado para o stream: ele tem limite de 60 segundos e pode acumular a resposta. Cada linha é um evento validado por Zod nos dois lados.
+
+**D11. Hospedagem estática no GitHub Pages.** O build do Vite é publicado pelo workflow `.github/workflows/deploy.yml`, sempre depois do deploy das regras e índices do Firebase, para que o app nunca rode contra regras antigas. O subcaminho do Pages (`/<repositório>/`) é injetado em `BASE_PATH` e repassado ao roteador; um `404.html` igual ao `index.html` faz as rotas do SPA abrirem em acesso direto. O bloco `hosting` do `firebase.json` fica como alternativa.
 
 **D6. RAG lexical (BM25) em vez de embeddings.** Projetos LaTeX têm centenas de blocos, não milhões. BM25 é determinístico, não exige banco vetorial nem custo de indexação e explica por que um trecho foi escolhido (eventos `context`). Embeddings ficam como evolução se a avaliação mostrar ganho.
 
@@ -138,7 +140,9 @@ over-doc-tex/
 │           ├── compile/               latexmk em sandbox
 │           ├── snapshot/              congelamento e extração de texto por página
 │           └── diff/                  lexer, alinhamento, diff fino, emissor, preâmbulo
+├── .github/workflows/deploy.yml       CI em PRs; deploy do Firebase e do GitHub Pages na main
 ├── scripts/                           verificações automatizadas (responsividade, convenções)
+├── tests/rules/                       testes das regras nos emuladores (pacote isolado)
 ├── firestore.rules
 ├── firestore.indexes.json
 ├── storage.rules

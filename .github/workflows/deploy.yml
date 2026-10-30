@@ -1,0 +1,231 @@
+# CI e deploy.
+#
+# Pull request: verificações do código e testes das regras de segurança.
+# Push na main (ou execução manual):
+#   1. verificações e testes das regras (em paralelo);
+#   2. deploy das configurações do Firebase (regras, índices e, opcionalmente, Functions)
+#      em paralelo com o build do PWA para o GitHub Pages;
+#   3. publicação no GitHub Pages, somente depois do deploy do Firebase dar certo.
+#
+# Configuração necessária: docs/02-tecnologias.md, seção "Deploy".
+
+name: CI e deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Em PR, um push novo cancela a verificação anterior; deploys na main nunca são interrompidos.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  NODE_VERSION: '22'
+  FIREBASE_TOOLS_VERSION: '15'
+
+jobs:
+  verify:
+    name: Verificações do código
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            functions/package-lock.json
+
+      - name: Instalar dependências
+        run: |
+          npm ci
+          npm ci --prefix functions
+
+      - name: Convenções (docs/00-regras-para-ia.md)
+        run: npm run check:conventions
+
+      - name: Build do frontend (typecheck e PWA)
+        run: npm run build
+
+      - name: Build das Cloud Functions
+        run: npm run build --prefix functions
+
+      - name: Instalar Playwright
+        run: |
+          npm install --no-save playwright@1
+          npx playwright install --with-deps chromium
+
+      - name: Contrato de responsividade (360px)
+        run: npm run check:responsive
+
+      - name: Guardar capturas da verificação de responsividade
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: capturas-responsividade
+          path: dist-screenshots/
+          if-no-files-found: ignore
+
+  rules-tests:
+    name: Testes das regras de segurança
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: tests/rules/package-lock.json
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Cache dos emuladores do Firebase
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ hashFiles('tests/rules/package-lock.json') }}
+
+      - name: Instalar dependências dos testes
+        run: npm ci --prefix tests/rules
+
+      - name: Regras do Firestore e do Storage nos emuladores
+        run: npm run test:rules
+
+  firebase-deploy:
+    name: Deploy das configurações do Firebase
+    needs: [verify, rules-tests]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment: firebase
+    permissions:
+      contents: read
+      id-token: write # necessário para Workload Identity Federation
+    env:
+      FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+      DEPLOY_FUNCTIONS: ${{ vars.DEPLOY_FUNCTIONS }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+
+      - name: Conferir configuração
+        env:
+          SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          WIF_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          WIF_SERVICE_ACCOUNT: ${{ vars.GCP_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$FIREBASE_PROJECT_ID" ]; then
+            echo "::error::Defina a variável FIREBASE_PROJECT_ID em Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+          has_key=false; has_wif=false
+          [ -n "$SERVICE_ACCOUNT_JSON" ] && has_key=true
+          [ -n "$WIF_PROVIDER" ] && [ -n "$WIF_SERVICE_ACCOUNT" ] && has_wif=true
+          if [ "$has_key" = "$has_wif" ]; then
+            echo "::error::Configure exatamente uma forma de autenticação: o secret FIREBASE_SERVICE_ACCOUNT ou as variáveis GCP_WORKLOAD_IDENTITY_PROVIDER e GCP_SERVICE_ACCOUNT."
+            exit 1
+          fi
+
+      - name: Autenticar no Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Preparar Cloud Functions
+        if: env.DEPLOY_FUNCTIONS == 'true'
+        env:
+          ALLOWED_ORIGINS: ${{ vars.ALLOWED_ORIGINS }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          npm ci --prefix functions
+          # CORS do aiStream: por padrão, a origem do GitHub Pages do dono do repositório.
+          origins="${ALLOWED_ORIGINS:-https://${OWNER,,}.github.io}"
+          echo "ALLOWED_ORIGINS=${origins}" > functions/.env
+          echo "Origens liberadas: ${origins}"
+
+      - name: Deploy no Firebase
+        run: |
+          targets="firestore:rules,firestore:indexes,storage"
+          if [ "$DEPLOY_FUNCTIONS" = "true" ]; then targets="${targets},functions"; fi
+          echo "Alvos: ${targets}"
+          npx -y "firebase-tools@${FIREBASE_TOOLS_VERSION}" deploy \
+            --only "${targets}" \
+            --project "${FIREBASE_PROJECT_ID}" \
+            --non-interactive
+
+  pages-build:
+    name: Build para o GitHub Pages
+    needs: verify
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Configurar GitHub Pages
+        id: pages
+        uses: actions/configure-pages@v6
+
+      - name: Build do PWA
+        env:
+          # "/<repositório>/" em páginas de projeto; "/" com domínio próprio.
+          BASE_PATH: ${{ steps.pages.outputs.base_path }}/
+          # Configuração pública do app web do Firebase (não é segredo).
+          VITE_FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET: ${{ vars.FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ vars.FIREBASE_APP_ID }}
+          VITE_API_BASE_URL: ${{ vars.API_BASE_URL || format('https://southamerica-east1-{0}.cloudfunctions.net', vars.FIREBASE_PROJECT_ID) }}
+          VITE_USE_FIREBASE_EMULATORS: 'false'
+        # build:pages também gera o 404.html que faz as rotas do SPA funcionarem no Pages.
+        run: npm run build:pages
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+
+  pages-deploy:
+    name: Publicar no GitHub Pages
+    needs: [firebase-deploy, pages-build]
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Publicar
+        id: deployment
+        uses: actions/deploy-pages@v5

@@ -72,11 +72,13 @@ Functions:
 | --- | --- |
 | `npm run dev` | Servidor de desenvolvimento do Vite |
 | `npm run build` | Typecheck (`tsc -b`) e build de produção com service worker |
+| `npm run build:pages` | `build` mais o `404.html` usado pelo GitHub Pages (defina `BASE_PATH`, ex.: `/over-doc-tex/`) |
 | `npm run preview` | Serve o build localmente |
 | `npm run typecheck` | Apenas o typecheck |
 | `npm run check:conventions` | Verifica as proibições de `00-regras-para-ia.md` |
 | `npm run check:responsive` | Abre o build em 4 viewports e valida o contrato de 360px |
 | `npm --prefix functions run build` | Typecheck e bundle das Functions em `functions/lib` |
+| `npm run test:rules` | Testes das regras nos emuladores (depois de `npm --prefix tests/rules install`) |
 
 ## 5. Por que estas escolhas
 
@@ -84,3 +86,40 @@ Functions:
 - **Monaco do CDN:** mantém o bundle inicial pequeno. O Workbox guarda o Monaco com `CacheFirst`, então o editor abre offline depois da primeira visita. Empacotar o Monaco localmente é a alternativa se o uso offline na primeira visita virar requisito.
 - **Wouter em vez de React Router:** o app tem poucas rotas e não precisa de loaders ou ações de dados; o estado assíncrono já está no React Query.
 - **esbuild nas Functions:** o deploy do Firebase envia só a pasta `functions/`; o bundle embute `shared/` e mantém `node_modules` como dependências externas.
+
+## 6. Deploy (GitHub Pages com Firebase antes)
+
+O workflow `.github/workflows/deploy.yml` faz o CI e o deploy.
+
+| Job | Quando roda | O que faz |
+| --- | --- | --- |
+| `verify` | PR e main | Convenções, build do frontend, build das Functions e contrato de responsividade |
+| `rules-tests` | PR e main | Regras do Firestore e do Storage nos emuladores |
+| `firebase-deploy` | main e execução manual, depois de `verify` e `rules-tests` | `firebase deploy --only firestore:rules,firestore:indexes,storage` (mais `functions` se `DEPLOY_FUNCTIONS=true`) |
+| `pages-build` | main e execução manual, depois de `verify` | `npm run build:pages` com o subcaminho do Pages e a configuração pública do Firebase |
+| `pages-deploy` | depois de `firebase-deploy` **e** `pages-build` | Publica no GitHub Pages |
+
+Se o deploy do Firebase falhar, o site não é publicado: o app nunca vai ao ar contra regras antigas.
+
+### Configuração única
+
+1. **GitHub Pages:** Settings > Pages > Source: **GitHub Actions**.
+2. **Variáveis do repositório** (Settings > Secrets and variables > Actions > Variables):
+
+| Variável | Obrigatória | Valor |
+| --- | --- | --- |
+| `FIREBASE_PROJECT_ID` | sim | id do projeto Firebase |
+| `FIREBASE_API_KEY`, `FIREBASE_AUTH_DOMAIN`, `FIREBASE_STORAGE_BUCKET`, `FIREBASE_MESSAGING_SENDER_ID`, `FIREBASE_APP_ID` | sim, para sair do modo demonstração | configuração do app web (Console do Firebase > Configurações do projeto). Não são segredos |
+| `DEPLOY_FUNCTIONS` | não | `true` para incluir as Cloud Functions no deploy (padrão: desligado) |
+| `ALLOWED_ORIGINS` | não | origens do CORS do `aiStream`, separadas por vírgula. Padrão: `https://<dono>.github.io` |
+| `API_BASE_URL` | não | URL base das funções. Padrão: `https://southamerica-east1-<projeto>.cloudfunctions.net` |
+
+3. **Autenticação do deploy**, uma das duas formas:
+   - **Workload Identity Federation (recomendada, sem chave de longa duração):** variáveis `GCP_WORKLOAD_IDENTITY_PROVIDER` (`projects/<número>/locations/global/workloadIdentityPools/<pool>/providers/<provider>`) e `GCP_SERVICE_ACCOUNT` (e-mail da conta de serviço), com o provider restrito a este repositório;
+   - **Chave de conta de serviço:** secret `FIREBASE_SERVICE_ACCOUNT` com o JSON da chave.
+4. **Papéis da conta de serviço:** para regras, índices e Storage, `Firebase Rules Admin`, `Cloud Datastore Index Admin` e `Service Usage Consumer`. Para incluir Functions, o caminho mais simples é acrescentar `Firebase Admin` e `Service Account User`; o deploy com segredos também pede acesso ao Secret Manager. Refine os papéis depois do primeiro deploy.
+5. **Firebase Authentication:** em Authentication > Settings > Authorized domains, adicionar `<dono>.github.io` (ou o domínio próprio).
+6. **Cloud Storage:** o bucket padrão exige o plano Blaze desde fevereiro de 2026 (o uso gratuito continua dentro das cotas). Crie o bucket antes do primeiro deploy, senão o alvo `storage` falha.
+7. **Cloud Functions (só com `DEPLOY_FUNCTIONS=true`):** plano Blaze e o segredo criado uma vez com `firebase functions:secrets:set ANTHROPIC_API_KEY`.
+
+O ambiente `firebase` do GitHub é criado no primeiro deploy; nele dá para exigir aprovação manual antes de publicar regras (Settings > Environments > firebase > Required reviewers).
