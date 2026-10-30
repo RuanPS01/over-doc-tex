@@ -3,7 +3,12 @@ import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
+// Subcaminho de publicação. No GitHub Pages de projeto é "/<repositório>/"; o
+// workflow de deploy injeta o valor via BASE_PATH. Localmente fica na raiz.
+const base = process.env.BASE_PATH ?? '/';
+
 export default defineConfig({
+  base,
   plugins: [
     react(),
     VitePWA({
@@ -16,8 +21,8 @@ export default defineConfig({
         lang: 'pt-BR',
         display: 'standalone',
         orientation: 'any',
-        start_url: '/',
-        scope: '/',
+        start_url: base,
+        scope: base,
         // Única exceção à regra de cores por token: o manifesto exige valores literais.
         // Os valores espelham --foreground e --background de src/styles/globals.css.
         theme_color: 'hsl(222 47% 11%)',
