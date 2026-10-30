@@ -1,0 +1,213 @@
+rules_version = '2';
+
+// Regras do Firestore. Modelo detalhado em docs/06-banco-de-dados.md.
+// Princípios:
+// - Membros do projeto (members[uid]) leem tudo do projeto; owner/editor escrevem.
+// - Revisores NÃO são membros: leem apenas snapshots com grant e a própria revisão.
+// - Snapshots, jobs, diffs e mensagens de IA são escritos só pelo servidor (Admin SDK).
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function uid() {
+      return request.auth.uid;
+    }
+
+    function projectData(pid) {
+      return get(/databases/$(database)/documents/projects/$(pid)).data;
+    }
+
+    function roleIn(pid) {
+      return projectData(pid).members.get(uid(), null);
+    }
+
+    function isMember(pid) {
+      return signedIn() && roleIn(pid) != null;
+    }
+
+    function canEdit(pid) {
+      return signedIn() && roleIn(pid) in ['owner', 'editor'];
+    }
+
+    function hasGrant(pid, sid) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/projects/$(pid)/snapshots/$(sid)/grants/$(uid()));
+    }
+
+    function reviewData(pid, rid) {
+      return get(/databases/$(database)/documents/projects/$(pid)/reviews/$(rid)).data;
+    }
+
+    function isReviewer(pid, rid) {
+      return signedIn() && reviewData(pid, rid).reviewerUid == uid();
+    }
+
+    function onlyChanges(keys) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
+    }
+
+    // ------------------------------------------------------------------ users
+    match /users/{userId} {
+      allow read: if signedIn() && uid() == userId;
+      allow create: if signedIn() && uid() == userId;
+      allow update: if signedIn() && uid() == userId
+        && onlyChanges(['displayName', 'photoURL', 'preferences', 'lastSeenAt']);
+      allow delete: if false;
+
+      match /notifications/{notificationId} {
+        allow read: if signedIn() && uid() == userId;
+        allow update: if signedIn() && uid() == userId && onlyChanges(['read']);
+        allow create, delete: if false;
+      }
+    }
+
+    // --------------------------------------------------------------- projects
+    match /projects/{pid} {
+      allow get: if isMember(pid);
+      // A consulta precisa filtrar por memberIds array-contains uid.
+      allow list: if signedIn() && uid() in resource.data.memberIds;
+      allow create: if signedIn()
+        && request.resource.data.ownerId == uid()
+        && request.resource.data.members.keys().hasOnly([uid()])
+        && request.resource.data.members[uid()] == 'owner'
+        && request.resource.data.memberIds == [uid()];
+      // Membros e contadores mudam apenas via Cloud Function.
+      allow update: if canEdit(pid)
+        && onlyChanges(['name', 'description', 'engine', 'mainDocumentId', 'updatedAt']);
+      allow delete: if false;
+
+      match /files/{fileId} {
+        allow read: if isMember(pid);
+        allow create, update: if canEdit(pid)
+          && request.resource.data.updatedBy == uid()
+          && (request.resource.data.content == null || request.resource.data.content.size() <= 524288);
+        allow delete: if canEdit(pid);
+      }
+
+      match /documents/{documentId} {
+        allow read: if isMember(pid);
+        allow create: if canEdit(pid) && request.resource.data.lastBuild == null;
+        // lastBuild é escrito pelo worker de compilação.
+        allow update: if canEdit(pid)
+          && onlyChanges(['title', 'order', 'rootFileId', 'rootPath', 'engine', 'updatedAt']);
+        allow delete: if canEdit(pid) && resource.data.role != 'main';
+      }
+
+      // Snapshot: imutável. Criado apenas pela função createSnapshot.
+      match /snapshots/{sid} {
+        allow read: if isMember(pid) || hasGrant(pid, sid);
+        allow write: if false;
+
+        match /grants/{grantUid} {
+          allow read: if isMember(pid) || (signedIn() && uid() == grantUid);
+          allow write: if false;
+        }
+      }
+
+      match /reviews/{rid} {
+        allow get: if isMember(pid) || (signedIn() && resource.data.reviewerUid == uid());
+        // Revisor lista com where('reviewerUid', '==', uid).
+        allow list: if isMember(pid) || (signedIn() && resource.data.reviewerUid == uid());
+        // Criada pela função requestReview (congela snapshot, convite e e-mail).
+        allow create, delete: if false;
+        allow update: if (canEdit(pid)
+            && onlyChanges(['title', 'description', 'status', 'closedAt', 'lastActivityAt'])
+            && request.resource.data.status in ['in_review', 'closed'])
+          || (isReviewer(pid, rid)
+            && onlyChanges(['status', 'lastActivityAt'])
+            && request.resource.data.status in ['in_review', 'changes_requested', 'approved']);
+
+        match /threads/{tid} {
+          function canParticipate() {
+            return isMember(pid) || isReviewer(pid, rid);
+          }
+
+          function validNewThread() {
+            let d = request.resource.data;
+            let review = reviewData(pid, rid);
+            return d.createdBy == uid()
+              && d.projectId == pid
+              && d.reviewId == rid
+              && d.snapshotId == review.snapshotId
+              && d.documentId in review.grantedDocumentIds
+              && d.kind in ['text', 'pin']
+              && d.anchor.type == d.kind
+              && d.anchor.page is int && d.anchor.page >= 1
+              && d.status == 'open'
+              && d.resolution == null
+              && d.commentCount == 0;
+          }
+
+          allow read: if canParticipate();
+          allow create: if canParticipate() && validNewThread();
+          // commentCount, participantIds e lastCommentAt são mantidos por trigger.
+          allow update: if canParticipate()
+            && onlyChanges(['status', 'resolution', 'updatedAt'])
+            && (request.resource.data.resolution == null || request.resource.data.resolution.by == uid());
+          allow delete: if false;
+
+          match /comments/{cid} {
+            allow read: if canParticipate();
+            allow create: if canParticipate()
+              && request.resource.data.authorId == uid()
+              && request.resource.data.kind == 'comment'
+              && request.resource.data.body is string
+              && request.resource.data.body.size() <= 10000;
+            // Edição e exclusão lógica pelo próprio autor.
+            allow update: if signedIn() && resource.data.authorId == uid()
+              && onlyChanges(['body', 'editedAt', 'deletedAt']);
+            allow delete: if false;
+          }
+        }
+      }
+
+      match /diffJobs/{diffKey} {
+        allow get: if isMember(pid)
+          || (hasGrant(pid, resource.data.baseSnapshotId) && hasGrant(pid, resource.data.targetSnapshotId));
+        allow list: if isMember(pid);
+        allow write: if false;
+      }
+
+      match /jobs/{jobId} {
+        allow read: if isMember(pid);
+        allow write: if false;
+      }
+
+      // Conversas com a IA são privadas de quem as criou.
+      match /aiConversations/{cid} {
+        allow read: if isMember(pid) && resource.data.createdBy == uid();
+        allow update: if isMember(pid) && resource.data.createdBy == uid() && onlyChanges(['title']);
+        allow delete: if isMember(pid) && resource.data.createdBy == uid();
+        allow create: if false;
+
+        match /messages/{mid} {
+          allow read: if isMember(pid)
+            && get(/databases/$(database)/documents/projects/$(pid)/aiConversations/$(cid)).data.createdBy == uid();
+          allow write: if false;
+        }
+      }
+
+      match /referenceChecks/{checkId} {
+        allow read: if isMember(pid);
+        allow write: if false;
+      }
+    }
+
+    // Painel "Minhas revisões": collectionGroup('reviews') filtrado por reviewerUid.
+    match /{path=**}/reviews/{rid} {
+      allow list: if signedIn() && resource.data.reviewerUid == uid();
+    }
+
+    // Somente servidor.
+    match /invites/{inviteId} {
+      allow read, write: if false;
+    }
+
+    match /mail/{mailId} {
+      allow read, write: if false;
+    }
+  }
+}

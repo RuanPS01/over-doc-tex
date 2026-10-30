@@ -1,0 +1,60 @@
+rules_version = '2';
+
+// Regras do Storage. Layout de caminhos em shared/firestore/paths.ts (storagePaths).
+// As regras consultam o Firestore (firestore.get/exists) para reaproveitar o
+// mesmo modelo de permissão: membros do projeto e grants de snapshot.
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function role(pid) {
+      return firestore.get(/databases/(default)/documents/projects/$(pid)).data.members.get(request.auth.uid, null);
+    }
+
+    function isMember(pid) {
+      return signedIn() && role(pid) != null;
+    }
+
+    function canEdit(pid) {
+      return signedIn() && role(pid) in ['owner', 'editor'];
+    }
+
+    function grantPath(pid, sid) {
+      return /databases/(default)/documents/projects/$(pid)/snapshots/$(sid)/grants/$(request.auth.uid);
+    }
+
+    // Conteúdo endereçado por hash (sha256): imutável depois de enviado.
+    match /projects/{pid}/blobs/{hash} {
+      allow read: if isMember(pid);
+      allow create: if canEdit(pid)
+        && hash.matches('^[a-f0-9]{64}$')
+        && request.resource.size < 50 * 1024 * 1024;
+      allow update, delete: if false;
+    }
+
+    // Compilações de trabalho: escritas pelo latex-worker.
+    match /projects/{pid}/builds/{rest=**} {
+      allow read: if isMember(pid);
+      allow write: if false;
+    }
+
+    // Arquivos do snapshot: {documentId}.pdf, .synctex.gz e .pages.json.
+    // O revisor só lê os documentos listados no seu grant.
+    match /projects/{pid}/snapshots/{sid}/{fileName} {
+      allow read: if isMember(pid)
+        || (signedIn()
+          && firestore.exists(grantPath(pid, sid))
+          && fileName.split('\\.')[0] in firestore.get(grantPath(pid, sid)).data.documentIds);
+      allow write: if false;
+    }
+
+    // PDFs de diff: membros leem direto; revisores recebem URL assinada da função.
+    match /projects/{pid}/diffs/{fileName} {
+      allow read: if isMember(pid);
+      allow write: if false;
+    }
+  }
+}
