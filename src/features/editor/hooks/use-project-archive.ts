@@ -1,40 +1,23 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { collection, doc, increment, serverTimestamp, writeBatch } from 'firebase/firestore';
-import { getBytes, getMetadata, ref, uploadBytes } from 'firebase/storage';
 import { useCallback } from 'react';
-import { firestorePaths, storagePaths } from '@shared/firestore/paths';
+import { firestorePaths } from '@shared/firestore/paths';
 import { downloadBytes, slugify } from '@/lib/download';
 import { getFirebase, isFirebaseConfigured } from '@/lib/firebase/app';
-import { classifyFileKind, fileNameOf, isTextPath } from '@/lib/project-archive/archive-paths';
+import { readStoredFile, writeStoredFile } from '@/lib/firebase/stored-files';
+import { classifyFileKind, contentTypeOf, fileNameOf, isTextPath } from '@/lib/project-archive/archive-paths';
 import type { ImportPlan } from '@/lib/project-archive/import-plan';
 import { buildZip } from '@/lib/project-archive/zip';
 import { queryKeys } from '@/lib/query-keys';
+import { sha256Hex } from '@/lib/stored-files/chunks';
 import type { EditorFile } from '../model/editor-file';
 
-/** Texto acima disso vai para o Storage: o documento do Firestore tem teto de 1 MiB. */
+/** Texto acima disso vira blob em pedaços: o documento do Firestore tem teto de 1 MiB. */
 const INLINE_TEXT_LIMIT = 400 * 1024;
 const BATCH_SIZE = 400;
 
 /** Binários importados no modo demonstração (sem Firebase), para a exportação devolvê-los. */
 const demoBlobs = new Map<string, Uint8Array>();
-
-async function sha256Hex(data: Uint8Array): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', data as BufferSource);
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
-}
-
-/**
- * Blob endereçado por hash: se já existe, o conteúdo é o mesmo e não precisa
- * subir de novo (as regras proíbem sobrescrever blob).
- */
-async function uploadBlobIfMissing(path: string, data: Uint8Array): Promise<void> {
-  const target = ref(getFirebase().storage, path);
-  try {
-    await getMetadata(target);
-  } catch {
-    await uploadBytes(target, data);
-  }
-}
 
 /** Exportação do projeto em .zip e aplicação de um plano de importação. */
 export function useProjectArchive(projectId: string) {
@@ -50,7 +33,7 @@ export function useProjectArchive(projectId: string) {
       if (file.content !== null) entries.push({ path: file.path, data: encoder.encode(file.content) });
       else if (demo) entries.push({ path: file.path, data: demo });
       else if (isFirebaseConfigured && file.blobPath) {
-        entries.push({ path: file.path, data: new Uint8Array(await getBytes(ref(getFirebase().storage, file.blobPath))) });
+        entries.push({ path: file.path, data: (await readStoredFile(getFirebase().db, file.blobPath)).data });
       } else missing.push(file.path);
     }
     downloadBytes(buildZip(entries), `${slugify(projectName)}.zip`, 'application/zip');
@@ -97,8 +80,11 @@ export function useProjectArchive(projectId: string) {
       for (const { entry, targetPath, action } of plan.operations) {
         const inline = isTextPath(targetPath) && entry.data.byteLength <= INLINE_TEXT_LIMIT;
         const contentHash = await sha256Hex(entry.data);
-        const blobPath = inline ? null : storagePaths.blob(projectId, contentHash);
-        if (blobPath) await uploadBlobIfMissing(blobPath, entry.data);
+        const blobPath = inline ? null : firestorePaths.blob(projectId, contentHash);
+        // Endereçado pelo hash: se o blob já existe, o conteúdo é o mesmo e nada sobe.
+        if (blobPath) {
+          await writeStoredFile(db, blobPath, entry.data, { contentType: contentTypeOf(targetPath), uid, sha256: contentHash });
+        }
 
         const existing = action === 'overwrite' ? byPath.get(targetPath) : undefined;
         const target = existing

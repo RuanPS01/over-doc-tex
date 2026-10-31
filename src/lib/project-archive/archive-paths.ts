@@ -54,9 +54,32 @@ export function classifyFileKind(path: string): FileKind {
   return 'other';
 }
 
-/** Arquivos de texto ficam no Firestore e abrem no editor; os demais vão para o Storage. */
+/** Arquivos de texto ficam inline no documento e abrem no editor; os demais viram blobs em pedaços. */
 export function isTextPath(path: string): boolean {
   return TEXT_EXTENSIONS.has(extensionOf(path));
+}
+
+const CONTENT_TYPES: Record<string, string> = {
+  pdf: 'application/pdf',
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  svg: 'image/svg+xml',
+  webp: 'image/webp',
+  bmp: 'image/bmp',
+  tif: 'image/tiff',
+  tiff: 'image/tiff',
+  eps: 'application/postscript',
+  json: 'application/json',
+  csv: 'text/csv',
+  zip: 'application/zip',
+};
+
+/** Tipo de conteúdo guardado no cabeçalho do blob (usado na exportação e em visualizações). */
+export function contentTypeOf(path: string): string {
+  if (isTextPath(path)) return 'text/plain; charset=utf-8';
+  return CONTENT_TYPES[extensionOf(path)] ?? 'application/octet-stream';
 }
 
 /**

@@ -2,12 +2,15 @@ import { unzipSync, zipSync, type Zippable } from 'fflate';
 import { normalizeArchivePath } from './archive-paths';
 import type { ImportEntry } from './import-plan';
 
-/** Limites de importação: protegem a aba de travar e o Storage de receber lixo. */
+/**
+ * Limites de importação: protegem a aba de travar e a cota do Firestore, onde
+ * os binários ficam (1 GiB no plano gratuito, somando todos os dados).
+ */
 export const IMPORT_LIMITS = {
   maxFiles: 2_000,
-  maxTotalBytes: 200 * 1024 * 1024,
-  /** Igual ao teto de upload de blob em storage.rules. */
-  maxFileBytes: 50 * 1024 * 1024,
+  maxTotalBytes: 100 * 1024 * 1024,
+  /** Igual ao teto do blob em firestore.rules (26214400 bytes). */
+  maxFileBytes: 25 * 1024 * 1024,
 } as const;
 
 export class ImportLimitError extends Error {}
