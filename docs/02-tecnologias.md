@@ -102,13 +102,35 @@ Se o deploy do Firebase falhar, o site não é publicado: o app nunca vai ao ar 
 ### Configuração única
 
 1. **GitHub Pages:** Settings > Pages > Source: **GitHub Actions**.
-2. **Variáveis do repositório** (Settings > Secrets and variables > Actions > Variables): `FIREBASE_PROJECT_ID` e, para sair do modo demonstração, `FIREBASE_API_KEY`, `FIREBASE_AUTH_DOMAIN`, `FIREBASE_STORAGE_BUCKET`, `FIREBASE_MESSAGING_SENDER_ID`, `FIREBASE_APP_ID` (configuração pública do app web, não são segredos).
-3. **Autenticação do deploy**, uma das duas formas:
-   - **Workload Identity Federation (recomendada):** variáveis `GCP_WORKLOAD_IDENTITY_PROVIDER` e `GCP_SERVICE_ACCOUNT`, com o provider restrito a este repositório;
-   - **Chave de conta de serviço:** secret `FIREBASE_SERVICE_ACCOUNT` com o JSON da chave.
-4. **Papéis da conta de serviço:** `Firebase Rules Admin`, `Cloud Datastore Index Admin` e `Service Usage Consumer`.
-5. **Firebase Authentication:** ativar Google, e-mail e senha e **Link de e-mail**; em Settings > Authorized domains, adicionar `<dono>.github.io` (ou o domínio próprio).
-6. **Cloud Storage:** plano Blaze e bucket padrão criado antes do primeiro deploy, senão o alvo `storage` falha.
+2. **Variáveis do repositório** (Settings > Secrets and variables > Actions > aba Variables, no nível do **repositório**, não só do ambiente `firebase`, porque o job de build do Pages não usa esse ambiente):
+
+   | Variável | Usada por | Onde achar o valor |
+   | --- | --- | --- |
+   | `FIREBASE_PROJECT_ID` | deploy do Firebase e build | Console do Firebase > Configurações do projeto > Geral |
+   | `FIREBASE_API_KEY` | build | mesma tela, em "Seus apps" > app da Web > configuração do SDK (`apiKey`) |
+   | `FIREBASE_AUTH_DOMAIN` | build | `authDomain` |
+   | `FIREBASE_STORAGE_BUCKET` | build | `storageBucket` |
+   | `FIREBASE_MESSAGING_SENDER_ID` | build | `messagingSenderId` |
+   | `FIREBASE_APP_ID` | build | `appId` |
+
+   São a configuração pública do app da Web, não são segredos. Sem `FIREBASE_API_KEY` e `FIREBASE_PROJECT_ID`, o site publicado roda em modo demonstração. `BASE_PATH` não precisa ser configurada: o workflow pega do próprio Pages.
+3. **Autenticação do deploy**, exatamente uma das duas formas (o workflow recusa nenhuma ou as duas):
+   - **Workload Identity Federation (recomendada, sem chave guardada):** variáveis `GCP_WORKLOAD_IDENTITY_PROVIDER` (formato `projects/<número>/locations/global/workloadIdentityPools/<pool>/providers/<provider>`) e `GCP_SERVICE_ACCOUNT` (e-mail da conta). O provider deve ter condição `assertion.repository == '<dono>/<repositório>'`, e a conta de serviço precisa conceder `Workload Identity User` (`roles/iam.workloadIdentityUser`) ao principal do repositório. Exige as APIs IAM Service Account Credentials e Security Token Service ativas;
+   - **Chave de conta de serviço:** secret `FIREBASE_SERVICE_ACCOUNT` (aba Secrets) com o JSON da chave.
+4. **Papéis da conta de serviço** (IAM do Google Cloud, no projeto), conferidos no código do firebase-tools 15:
+
+   | Papel | ID | Para quê |
+   | --- | --- | --- |
+   | Firebase Rules Admin | `roles/firebaserules.admin` | Publicar as regras do Firestore e do Storage |
+   | Cloud Datastore Index Admin | `roles/datastore.indexAdmin` | Criar e remover índices e exceções de campo |
+   | Cloud Storage for Firebase Viewer | `roles/firebasestorage.viewer` | Descobrir o bucket padrão (`firebasestorage.defaultBucket.get`) antes de publicar as regras do Storage |
+   | Service Usage Consumer | `roles/serviceusage.serviceUsageConsumer` | Conferir se as APIs necessárias estão ativas |
+
+   `Service Account User` não é necessário (só serve para deploy de Functions ou Hosting com conta de execução).
+5. **APIs ativas no projeto** (APIs e serviços > Biblioteca): Cloud Firestore API, Firebase Rules API e Cloud Storage for Firebase API. Os papéis acima não incluem ativar APIs, então o deploy falha se alguma estiver desligada.
+6. **Banco do Firestore criado antes do primeiro deploy**, na região desejada (ex.: `southamerica-east1`). Se o banco não existir, o firebase-tools tenta criá-lo em `nam5` (EUA).
+7. **Cloud Storage:** plano Blaze e bucket padrão criado (Console > Storage > Começar) antes do primeiro deploy, senão o alvo `storage` falha.
+8. **Firebase Authentication:** ativar Google, e-mail e senha e **Link de e-mail**; em Settings > Authorized domains, adicionar `<dono>.github.io` (ou o domínio próprio).
 
 O ambiente `firebase` do GitHub é criado no primeiro deploy; nele dá para exigir aprovação manual antes de publicar regras.
 

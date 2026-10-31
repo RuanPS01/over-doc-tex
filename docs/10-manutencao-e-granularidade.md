@@ -89,6 +89,10 @@ O workflow `.github/workflows/deploy.yml` roda todas essas verificações em cad
 
 Os testes de regras ficam em um pacote separado (`tests/rules/`) porque `@firebase/rules-unit-testing` exige o SDK Firebase 12, enquanto o app usa o 13.
 
+Cada suíte de regras começa com os emuladores vazios (`createTestEnv` limpa Firestore e Storage). Não grave dados fora dela nem dependa da ordem das suítes: elas rodam em sequência na mesma sessão do emulador.
+
+Atrás de proxy HTTP (máquinas corporativas, contêineres de agentes), o firebase-tools manda até as chamadas internas entre emuladores pelo proxy, e as regras do Storage que consultam o Firestore passam a receber "documento inexistente". Rode sem as variáveis de proxy: `env -u HTTPS_PROXY -u HTTP_PROXY -u JAVA_TOOL_OPTIONS npm run test:rules`.
+
 Teste com chave real de provedor de IA só por variável de ambiente, nunca gravada em arquivo, commit ou documento (nem mascarada).
 
 ## 5. Dependências
@@ -115,7 +119,6 @@ Teste com chave real de provedor de IA só por variável de ambiente, nunca grav
 | Motor LaTeX em WebAssembly | Avaliar SwiftLaTeX e BusyTeX; compilar em Web Worker com SyncTeX, conforme `07-fluxos.md` | Alta |
 | Visualizador pdf.js | Substituir os marcadores de página do `PdfPreviewPanel` por páginas reais com camadas de texto e anotação | Alta |
 | Revisão | `ReviewPage`, snapshot no navegador, convite do revisor por link de e-mail (`sendSignInLinkToEmail`), threads, desenho e pins | Alta |
-| Regras do Storage com consulta ao Firestore | Os três cenários positivos de `storage-rules.test.mjs` dependem de leitura cruzada entre serviços, que o emulador do ambiente onde a suíte foi criada não executou (até o exemplo mínimo de `firestore.exists` falhou lá). O job `rules-tests` do CI é o primeiro ambiente limpo onde eles rodam; se falharem lá, a regra precisa ser corrigida antes do deploy (o workflow bloqueia o deploy nesse caso) | Alta |
 | Importação contra um projeto Firebase real | O caminho com Firestore e Storage de `useProjectArchive` foi verificado só por tipos; o modo demonstração foi testado de ponta a ponta | Alta |
 | Provedor OpenAI com chave real | Coberto por tipos e pelo contrato, mas ainda não exercitado contra a API (Claude foi testado com API simulada e Gemini com chave real) | Média |
 | Histórico das conversas de IA | Hoje a conversa vive na memória da aba; persistir em `projects/{projectId}/aiConversations` (caminho e tipo já existem) | Média |
