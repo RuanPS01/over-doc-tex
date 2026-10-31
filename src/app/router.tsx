@@ -1,5 +1,6 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, type ComponentType } from 'react';
 import { Route, Router, Switch } from 'wouter';
+import { RequireAuth } from '@/features/auth/components/require-auth';
 
 // Cada rota vira um chunk próprio; o editor (Monaco) só carrega quando aberto.
 const ProjectsPage = lazy(() => import('@/pages/projects-page'));
@@ -15,15 +16,30 @@ function RouteFallback() {
   return <div className="h-viewport animate-pulse bg-muted/40" aria-busy="true" />;
 }
 
+/** Telas de trabalho: exigem login quando o Firebase está configurado. */
+function protectedPage(Page: ComponentType) {
+  return function ProtectedPage() {
+    return (
+      <RequireAuth>
+        <Page />
+      </RequireAuth>
+    );
+  };
+}
+
+const ProtectedProjectsPage = protectedPage(ProjectsPage);
+const ProtectedEditorPage = protectedPage(EditorPage);
+const ProtectedReviewPage = protectedPage(ReviewPage);
+
 export function AppRouter() {
   return (
     <Router base={ROUTER_BASE}>
       <Suspense fallback={<RouteFallback />}>
         <Switch>
-          <Route path="/" component={ProjectsPage} />
+          <Route path="/" component={ProtectedProjectsPage} />
           <Route path="/login" component={LoginPage} />
-          <Route path="/p/:projectId" component={EditorPage} />
-          <Route path="/p/:projectId/reviews/:reviewId" component={ReviewPage} />
+          <Route path="/p/:projectId" component={ProtectedEditorPage} />
+          <Route path="/p/:projectId/reviews/:reviewId" component={ProtectedReviewPage} />
           <Route component={NotFoundPage} />
         </Switch>
       </Suspense>
