@@ -29,7 +29,7 @@ O OverDocTeX é um PWA estático de edição LaTeX com revisão por versões con
 | Dados em tempo real | Firestore (SDK web com cache persistente) | Projetos, arquivos, versões, revisões, threads, configuração de IA |
 | Arquivos | Firestore, em pedaços de até 1.000.000 bytes | Conteúdo por hash, PDFs de versão e de diff (`06-banco-de-dados.md`, seção 3) |
 | Regras | `firestore.rules` | Toda a autorização e a coerência entre documentos gravados em lote, inclusive dos binários |
-| Trabalho pesado | Web Workers no navegador | Compilação LaTeX (Siglum, TeX Live 2025 em WebAssembly) e extração do texto das páginas (pdf.js); planejado, o diff visual em PDF |
+| Trabalho pesado | Web Workers no navegador | Compilação LaTeX (Siglum, TeX Live 2025 em WebAssembly, com SyncTeX), recompilação do diff visual e texto das páginas (pdf.js) |
 | IA | `@anthropic-ai/sdk`, `openai`, `@google/genai` no navegador | Escrita, paráfrase, estrutura, sumário, auditoria de referências |
 | Hospedagem | GitHub Pages e Firebase Hosting | O mesmo site estático nos dois; deploy pelo workflow `.github/workflows/deploy.yml` |
 
@@ -85,8 +85,9 @@ over-doc-tex/
 │   │   │   ├── components/            painel, diálogo "Usar a minha própria IA", cartão de modelo
 │   │   │   └── hooks/                 useAiConfig, useAiStream, useProviderModels
 │   │   ├── snapshots/                 congelar versão, histórico, PDF e código de cada versão
-│   │   ├── review/                    solicitar revisão, ReviewPage, pins, threads, fila e "Revisões para você"
-│   │   └── diff/                      "Ver alterações" (código entre versões ou com o rascunho)
+│   │   ├── review/                    solicitar revisão, ReviewPage (trecho, ponto, desenho), threads, fila e "Revisões para você"
+│   │   ├── notifications/             sino e gravação das notificações
+│   │   └── diff/                      "Ver alterações": código e PDF marcado (com cache em diffs/{diffKey})
 │   ├── components/
 │   │   ├── ui/                        shadcn/ui puro: button, dialog, dropdown-menu, input, resizable, select, sheet, tabs, textarea
 │   │   └── common/                    markdown-content
@@ -98,9 +99,9 @@ over-doc-tex/
 │   │   ├── firebase/                  inicialização preguiçosa, emuladores e leitura/gravação dos pedaços
 │   │   ├── markdown/                  marked + DOMPurify
 │   │   ├── monaco/                    linguagem LaTeX e tema derivado dos tokens
-│   │   ├── latex/                     compilação (Siglum), preparação do projeto e leitura do log
-│   │   ├── diff/                      diff por palavra (Myers) e comparação de árvores; planejado: diff visual em PDF
-│   │   ├── pdf/                       carregamento do pdf.js e texto por página
+│   │   ├── latex/                     compilação (Siglum), preparação do projeto, leitura do log e SyncTeX
+│   │   ├── diff/                      diff por palavra (Myers), comparação de árvores e diff visual (LaTeX anotado e compilação)
+│   │   ├── pdf/                       pdf.js, texto por página, âncoras de trecho e desenho
 │   │   ├── email.ts                   validação de e-mail e endereço de volta do link de acesso
 │   │   ├── download.ts, query-keys.ts, utils.ts
 │   └── styles/globals.css             tokens e utilitários (.h-viewport)

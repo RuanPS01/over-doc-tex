@@ -26,7 +26,9 @@ Não há servidor: todo código de produto roda no navegador. O que antes seria 
 | Infraestrutura (parser, conversões, zip, download) | `src/lib/<assunto>` |
 | Lógica de IA (provedor, prompt, tarefa, contexto) | `src/lib/ai` (mapa completo em `11-servico-de-ia.md`) |
 | Compilação LaTeX (motor, preparação, log) | `src/lib/latex` |
-| Diff de texto (puro) e comparação de árvores | `src/lib/diff`; o diff visual em PDF, planejado, também |
+| Diff de texto, comparação de árvores e diff visual (LaTeX anotado e compilação) | `src/lib/diff` |
+| SyncTeX (leitura e buscas direta e reversa) | `src/lib/latex/synctex.ts` |
+| Âncoras de trecho e desenho (puro) | `src/lib/pdf/text-anchor.ts`, `src/lib/pdf/drawing.ts` |
 | Texto das páginas e carregamento do pdf.js | `src/lib/pdf` |
 | Componente que junta várias features (ex.: os diálogos do editor) | Na página da rota (`EditorDialogs` em `src/pages/editor-page.tsx`) ou por slot de props, nunca chamando hook de outra feature num componente |
 | Um pacote LaTeX que o compilador não tem | Nome do pacote do TeX Live em `ROOT_PACKAGES` de `scripts/latex-packages.mjs` (as dependências entram sozinhas) |
@@ -132,13 +134,9 @@ Teste com chave real de provedor de IA só por variável de ambiente, nunca grav
 | Item | Detalhe | Prioridade |
 | --- | --- | --- |
 | BibTeX e Biber na compilação | O Siglum não roda; citações saem como `[?]`. Avaliar rodar o `bibtex8` do próprio binário do BusyTeX entre as passagens | Alta |
-| Navegação SyncTeX | Ligar clique no PDF à linha do código e vice-versa; as versões guardariam o `.synctex` (`synctexPath`, hoje nulo) para o "Abrir no código" das threads | Média |
+| Threads entre rodadas | Levar threads abertas para a revisão seguinte (`carriedFromThreadId`) e reancorar pela citação e pela posição no `.pages` da versão nova | Média |
+| Diff dentro de argumentos | O diff visual trata `\emph{...}`, `\caption{...}` e títulos como átomos; recursão no argumento deixaria a marcação mais fina | Baixa |
 | Assets do Siglum hospedados por nós | Hoje motor e conjuntos vêm de `cdn.siglum.org` (projeto pequeno, de terceiros). Espelhar no Hosting exige plano pago pelo tráfego de cerca de 45 MB por pessoa | Média |
-| Comentário em trecho de texto na revisão | Camada de texto do pdf.js, `SelectionPopover` e a âncora `TextAnchor` (geometria, citação e posição sobre o `.pages` da versão); hoje só há pins | Alta |
-| Desenho livre nos pins | Camada SVG com `pointerdown`/`pointermove`, simplificação Ramer-Douglas-Peucker e `anchor.drawing` (tipo e regras já aceitam) | Média |
-| Diff visual em PDF | Passos 1 a 12 do cenário C de `07-fluxos.md` (LaTeX anotado, recompilação, `diffs/{diffKey}`, "Próxima alteração"); hoje o diff é de texto | Alta |
-| Notificações | Gravar `users/{uid}/notifications` ao abrir revisão, comentar e mudar status, e uma central no app (regras e índice já existem) | Média |
-| Documentos secundários na revisão | Escolher no "Solicitar revisão" quais documentos o revisor vê (`grant.documentIds`); hoje só o principal | Baixa |
 | Arquivar projeto | Campo `archivedAt` existe, mas as regras não deixam gravá-lo; liberar para o dono e esconder da lista | Baixa |
 | Coleta de lixo de binários | Blobs e PDFs de diff sem referência ficam no banco para sempre (sobrescrever um arquivo cria outro blob). Uma ação "Limpar arquivos não usados" precisaria listar `files` e os manifestos de todos os snapshots e liberar exclusão de blob nas regras com cuidado, porque snapshots dependem deles | Média |
 | Uso da cota do Firestore | Mostrar no app quanto o projeto ocupa (soma de `totalBytes` dos cabeçalhos) e avisar perto do limite de 1 GiB | Média |
@@ -148,4 +146,4 @@ Teste com chave real de provedor de IA só por variável de ambiente, nunca grav
 | Ícones PNG do PWA | Gerar 192 e 512 px (e maskable) a partir de `public/icons/icon.svg` | Baixa |
 | Monaco empacotado localmente | Se a abertura offline na primeira visita virar requisito | Baixa |
 | Tailwind 4 | Migrar para configuração CSS-first quando o padrão do shadcn/ui estabilizar para o projeto | Baixa |
-| Testes unitários | Estender o Vitest para `bibtex.ts`, `model-chain.ts` isolado e o motor do diff visual | Média |
+| Testes unitários | Estender o Vitest para `bibtex.ts` e `model-chain.ts` isolado | Média |

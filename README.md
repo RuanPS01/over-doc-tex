@@ -15,10 +15,11 @@ Este repositório contém a fundação do produto:
 - **Importação e exportação**: projeto inteiro em .zip; importação de .zip, arquivos avulsos ou pastas do dispositivo, para a raiz ou uma pasta interna, sobrescrevendo ou mantendo os dois arquivos (`nome-1`).
 
 - **Compilação LaTeX no navegador** com o Siglum (pdfTeX do TeX Live 2025 em WebAssembly), sem servidor: PDF desenhado com pdf.js, erros com arquivo e linha, pacotes extras servidos pelo próprio site (`node scripts/latex-packages.mjs`).
-- **Versões e revisão**: congelar versões (código e PDF imutáveis), pedir revisão por e-mail (link de acesso do Firebase), tela de revisão com pins numerados, threads, resolução e aprovação, e "Ver alterações" por palavra (código entre versões ou com o rascunho; texto do PDF para o revisor).
-- **Projeto e arquivos**: criar, renomear e excluir arquivos, membros com papéis e convites de coautoria por e-mail, editor somente leitura para quem só lê.
+- **Versões e revisão**: congelar versões (código, PDF, texto das páginas e SyncTeX de cada documento), pedir revisão por e-mail (link de acesso do Firebase) escolhendo os documentos, tela de revisão com comentário em trecho de texto, pins com desenho livre, threads, resolução, aprovação, notificações e "Abrir no código".
+- **Ver alterações**: diff por palavra do código (entre versões ou com o rascunho) e o PDF recompilado com as alterações marcadas (inserido em verde, removido riscado em vermelho), com "Próxima alteração".
+- **Projeto e arquivos**: criar, renomear e excluir arquivos, documentos secundários, membros com papéis e convites de coautoria por e-mail, editor somente leitura para quem só lê, SyncTeX entre PDF e código.
 
-Comentário em trecho de texto, desenho nos pins, notificações e o diff visual recompilado em PDF continuam especificados em `docs/07-fluxos.md` e são as próximas entregas.
+O que ainda falta (threads levadas entre rodadas, BibTeX na compilação e outros) está em `docs/10-manutencao-e-granularidade.md`.
 
 ## Começando
 

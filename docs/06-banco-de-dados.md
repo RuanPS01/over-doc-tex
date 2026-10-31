@@ -119,7 +119,7 @@ Gravado uma vez, no lote que avança `counters.snapshots`, depois de enviar blob
 
 `files` é array porque caminhos têm `/` e `.`, que exigiriam escape em field paths, e o manifesto é sempre lido inteiro.
 
-Como o app grava hoje (`useFreezeSnapshot`): o manifesto inclui os arquivos de texto como estão na tela (cada um vira um blob, deduplicado pelo hash); o PDF é compilado no navegador; `{documentId}.pages` é um JSON `{ "pages": ["texto da página 1", ...] }` extraído com o pdf.js, que alimenta o "Ver alterações" do revisor; `synctexPath` fica nulo (o Siglum ainda não entrega o SyncTeX); `stats.words` conta as palavras desse texto. A versão é `1.0` na primeira vez e depois `1.1`, `1.2`... ou a próxima principal (`2.0`), à escolha de quem congela.
+Como o app grava hoje (`useFreezeSnapshot`): o manifesto inclui os arquivos de texto como estão na tela (cada um vira um blob, deduplicado pelo hash); cada documento de `documents` (principal e secundários) é compilado no navegador e guarda três arquivos: `{documentId}.pdf`; `{documentId}.pages`, um JSON `{ "pages": ["texto da página 1", ...] }` extraído com o pdf.js, que ancora os comentários em trecho e alimenta o "Ver alterações" do revisor; e `{documentId}.synctex`, o SyncTeX em JSON compacto (`{ "v": 1, "files": [caminhos do projeto], "pages": [[[arquivo, linha, x, y, largura, altura, profundidade], ...]] }`, em pontos do PDF, com as linhas do principal já corrigidas), que dá a linha do código de cada comentário. `stats.words` conta as palavras do principal. A versão é `1.0` na primeira vez e depois `1.1`, `1.2`... ou a próxima principal (`2.0`), à escolha de quem congela.
 
 ### 2.6 `snapshots/{snapshotId}/grants/{email}`
 
@@ -189,7 +189,7 @@ Resolução: o autor marca `resolved` com `fixed_next_version`; ao congelar a pr
 
 ### 2.9 `projects/{projectId}/diffs/{diffKey}`
 
-Cache do diff gerado no navegador. `diffKey = base_alvo_documento_versãoDoMotor`; como snapshots são imutáveis, a mesma chave sempre produz o mesmo resultado. Gravado uma vez por quem edita; revisores leem quando têm grant na versão alvo. O PDF fica em `diffs/{diffKey}/chunks`, e o campo `pdf` faz o papel de cabeçalho (seção 3): o documento entra no mesmo lote do último pedaço.
+Cache do diff gerado no navegador (`useVisualDiff`): o autor grava ao pedir a rodada seguinte ou ao abrir o PDF marcado; o revisor só lê. `changes[]` vem dos destinos nomeados `DIF{n}` do PDF (página e altura de cada `\DIFmark`). `diffKey = base_alvo_documento_versãoDoMotor`; como snapshots são imutáveis, a mesma chave sempre produz o mesmo resultado. Gravado uma vez por quem edita; revisores leem quando têm grant na versão alvo. O PDF fica em `diffs/{diffKey}/chunks`, e o campo `pdf` faz o papel de cabeçalho (seção 3): o documento entra no mesmo lote do último pedaço.
 
 ```json
 {
@@ -209,7 +209,7 @@ Cache do diff gerado no navegador. `diffKey = base_alvo_documento_versãoDoMotor
 
 - `aiConversations/{id}` e `messages/{id}`: privados do criador, gravados pelo app.
 - `referenceChecks/{id}`: relatório final de `checkReferences`, gravado por um membro.
-- `users/{uid}/notifications/{id}`: gravadas pelo app de quem age (membro do projeto ou revisor da revisão citada).
+- `users/{uid}/notifications/{id}`: gravadas pelo app de quem age (membro do projeto ou revisor da revisão citada) a cada comentário, resposta, resolução e mudança de status da revisão; o destinatário lê as 30 mais recentes e marca como lidas (`read`).
 
 ## 3. Arquivos em pedaços (binários no Firestore)
 
@@ -279,7 +279,7 @@ O cache offline do Firestore (`persistentLocalCache`) também guarda os pedaços
 | `aiConversations`, `messages` | só o criador | só o criador |
 | `notifications` | só o destinatário | quem age, se participa do projeto ou da revisão |
 
-**Testes** (`npm run test:rules`): 74 de 74 cenários aprovados no emulador, 7 deles para a lista de membros (`memberProfiles`: a própria entrada sim, a de outro não, o dono só remove) e 20 para os arquivos em pedaços (cabeçalho sem o último pedaço, hash diferente do id, tamanho incoerente, pedaço grande demais, gravação depois de finalizar, leitura do revisor por documento concedido). A suíte começa com o Firestore vazio (`createTestEnv` em `tests/rules/harness.mjs`).
+**Testes** (`npm run test:rules`): 79 de 79 cenários aprovados no emulador, 5 deles para comentário em trecho, documento não concedido e notificações, 7 para a lista de membros (`memberProfiles`: a própria entrada sim, a de outro não, o dono só remove) e 20 para os arquivos em pedaços (cabeçalho sem o último pedaço, hash diferente do id, tamanho incoerente, pedaço grande demais, gravação depois de finalizar, leitura do revisor por documento concedido). A suíte começa com o Firestore vazio (`createTestEnv` em `tests/rules/harness.mjs`).
 
 ## 6. Índices
 
