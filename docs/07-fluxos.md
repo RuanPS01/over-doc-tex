@@ -237,9 +237,18 @@ O motor roda no navegador, sem servidor. A especificação completa (provedores,
 
 Verificado de ponta a ponta contra os emuladores de Auth e Firestore, com as regras reais: um binário de 2,5 MB virou 3 pedaços com cabeçalho correto, a segunda importação do mesmo conteúdo não regravou nada e a exportação devolveu o arquivo idêntico (mesmo sha256).
 
+## Criar e abrir um projeto (implementado)
+
+1. Sem sessão, `/` leva a `/login?next=%2F`; depois de entrar (Google ou e-mail e senha, com opção de criar conta), o app volta para a rota pedida.
+2. "Meus projetos" lista, em tempo real, os projetos em que `memberIds` contém o usuário, do mais recente para o mais antigo (índice composto de `firestore.indexes.json`).
+3. "Novo projeto" pede o nome e grava, em duas etapas: o projeto, com o usuário como único membro (`owner`), sem convites e com contadores zerados (o que a regra de criação exige); depois, num lote, `documents/main` e `files/main` (`main.tex` com um modelo em português e o nome escapado no `\title`). São duas etapas porque as regras de `documents` e `files` conferem o papel lendo o projeto, que precisa já existir.
+4. O editor abre em `/p/{id}`. Projeto inexistente ou sem acesso mostra "Projeto não encontrado" (as regras respondem "sem permissão" nos dois casos). Se o arquivo `main` não existir (projeto importado), abre o `main.tex` da raiz, o primeiro `.tex` ou o primeiro arquivo de texto.
+
+Verificado de ponta a ponta contra os emuladores de Auth e Firestore: redirecionamento para o login, criação de conta, lista vazia, criação do projeto, edição salva (revisão 2 no banco), texto mantido depois de recarregar, projeto na lista, aviso de projeto inexistente e saída da conta.
+
 ## Fluxo de compilação de trabalho (rascunho)
 
-1. O autosave grava `files/{id}` com `revision + 1` (debounce de 800 ms).
+1. O salvamento automático (`useFileAutosave`, implementado) grava `files/{id}` com o texto, o tamanho, o sha256 e `revision + 1`, 800 ms depois da última tecla; também grava o que estiver pendente ao sair do editor ou fechar a aba. Vale a última gravação (não há edição simultânea em tempo real). Texto acima de 512 KB não é aceito pelas regras, e o editor avisa.
 2. "Compilar" (ou Ctrl+S) entrega a árvore ao motor WebAssembly no Web Worker.
 3. Ao terminar, o PDF fica só no navegador (memória e cache local) e o app grava o resumo em `documents/{id}.lastBuild`. O PDF de trabalho não vai para o banco: cada pessoa compila no próprio navegador, e gravar cada compilação gastaria a cota.
 4. O `PdfPreviewPanel` mostra o PDF; erros exibem o log com link para a linha.

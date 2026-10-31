@@ -129,6 +129,8 @@ Teste com chave real de provedor de IA só por variável de ambiente, nunca grav
 | --- | --- | --- |
 | Motor LaTeX em WebAssembly | Avaliar SwiftLaTeX e BusyTeX; compilar em Web Worker com SyncTeX, conforme `07-fluxos.md` | Alta |
 | Visualizador pdf.js | Substituir os marcadores de página do `PdfPreviewPanel` por páginas reais com camadas de texto e anotação | Alta |
+| Editor somente leitura para leitores | Quem tem papel `viewer` hoje digita e vê "Sem permissão para editar" no salvamento; o Monaco deveria abrir em modo leitura e esconder Importar | Média |
+| Gerenciar projetos | Renomear, arquivar e convidar coautores pela interface (as regras já permitem renomear e convidar) | Média |
 | Revisão | `ReviewPage`, snapshot no navegador, convite do revisor por link de e-mail (`sendSignInLinkToEmail`), threads, desenho e pins | Alta |
 | Coleta de lixo de binários | Blobs e PDFs de diff sem referência ficam no banco para sempre (sobrescrever um arquivo cria outro blob). Uma ação "Limpar arquivos não usados" precisaria listar `files` e os manifestos de todos os snapshots e liberar exclusão de blob nas regras com cuidado, porque snapshots dependem deles | Média |
 | Uso da cota do Firestore | Mostrar no app quanto o projeto ocupa (soma de `totalBytes` dos cabeçalhos) e avisar perto do limite de 1 GiB | Média |
