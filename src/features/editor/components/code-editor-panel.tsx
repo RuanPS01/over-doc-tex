@@ -1,11 +1,22 @@
 import Editor, { useMonaco, type Monaco } from '@monaco-editor/react';
 import { FileCode2 } from 'lucide-react';
 import { useEffect } from 'react';
+import { Button } from '@/components/ui/button';
 import { useIsDarkTheme } from '@/hooks/use-is-dark-theme';
 import { LATEX_LANGUAGE_ID, registerLatexLanguage } from '@/lib/monaco/latex-language';
 import { applyEditorTheme } from '@/lib/monaco/theme-from-tokens';
+import { cn } from '@/lib/utils';
+import { useFileAutosave, type SaveStatus } from '../hooks/use-file-autosave';
 import { useProjectFiles } from '../hooks/use-project-files';
 import { useEditorStore } from '../state/editor-store';
+
+const SAVE_LABELS: Record<SaveStatus, string> = {
+  idle: '',
+  pending: 'Alterações não salvas',
+  saving: 'Salvando',
+  saved: 'Salvo',
+  error: 'Erro ao salvar',
+};
 
 function EditorSkeleton() {
   return (
@@ -18,9 +29,10 @@ function EditorSkeleton() {
 }
 
 export function CodeEditorPanel() {
-  const { projectId, activeFileId } = useEditorStore();
-  const { data: files } = useProjectFiles(projectId);
+  const { projectId, activeFileId, setImportOpen } = useEditorStore();
+  const { data: files, isPending } = useProjectFiles(projectId);
   const file = files?.find((candidate) => candidate.id === activeFileId);
+  const autosave = useFileAutosave(projectId);
   const isDark = useIsDarkTheme();
   const monaco = useMonaco();
 
@@ -38,8 +50,20 @@ export function CodeEditorPanel() {
     <section aria-label="Editor de código" className="flex h-full min-w-0 flex-col bg-background">
       <div className="flex h-9 shrink-0 items-center gap-2 border-b px-3 text-xs text-muted-foreground">
         <FileCode2 className="size-3.5 shrink-0" />
-        <span className="truncate">{file?.path ?? 'Nenhum arquivo aberto'}</span>
+        <span className="min-w-0 flex-1 truncate">{file?.path ?? 'Nenhum arquivo aberto'}</span>
+        <span
+          role="status"
+          title={autosave.error ?? undefined}
+          className={cn('shrink-0', autosave.status === 'error' && 'font-medium text-destructive')}
+        >
+          {SAVE_LABELS[autosave.status]}
+        </span>
       </div>
+      {autosave.error && (
+        <p className="shrink-0 border-b bg-destructive/5 px-3 py-1.5 text-xs text-destructive" role="alert">
+          {autosave.error}
+        </p>
+      )}
       <div className="min-h-0 flex-1">
         {file?.content != null ? (
           <Editor
@@ -47,6 +71,7 @@ export function CodeEditorPanel() {
             path={file.path}
             defaultLanguage={file.kind === 'bib' ? 'plaintext' : LATEX_LANGUAGE_ID}
             defaultValue={file.content}
+            onChange={(value) => autosave.schedule(file.id, value ?? '')}
             theme={isDark ? 'overdoctex-dark' : 'overdoctex-light'}
             beforeMount={handleBeforeMount}
             loading={<EditorSkeleton />}
@@ -61,8 +86,21 @@ export function CodeEditorPanel() {
               padding: { top: 8 },
             }}
           />
-        ) : (
+        ) : isPending ? (
           <EditorSkeleton />
+        ) : (
+          <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted-foreground">
+            {file ? (
+              <p>Este arquivo é binário e não abre no editor de texto.</p>
+            ) : (
+              <>
+                <p>Nenhum arquivo de texto no projeto ainda.</p>
+                <Button variant="link" size="sm" onClick={() => setImportOpen(true)}>
+                  Importar arquivos ou um .zip
+                </Button>
+              </>
+            )}
+          </div>
         )}
       </div>
     </section>
