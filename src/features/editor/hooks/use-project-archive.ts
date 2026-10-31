@@ -1,3 +1,4 @@
+import { useMonaco } from '@monaco-editor/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { collection, doc, increment, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { useCallback } from 'react';
@@ -22,6 +23,25 @@ const demoBlobs = new Map<string, Uint8Array>();
 /** Exportação do projeto em .zip e aplicação de um plano de importação. */
 export function useProjectArchive(projectId: string) {
   const queryClient = useQueryClient();
+  const monaco = useMonaco();
+
+  /**
+   * O Monaco guarda um modelo por caminho e não relê o arquivo: sem isto, um
+   * texto sobrescrito pela importação continuaria antigo na tela (e seria o
+   * compilado e o salvo na próxima edição).
+   */
+  const refreshOpenModels = useCallback(
+    (plan: ImportPlan) => {
+      const decoder = new TextDecoder();
+      for (const { entry, targetPath, action } of plan.operations) {
+        if (action !== 'overwrite' || !isTextPath(targetPath)) continue;
+        const model = monaco?.editor.getModels().find((candidate) => candidate.uri.path.replace(/^\//, '') === targetPath);
+        const content = decoder.decode(entry.data);
+        if (model && model.getValue() !== content) model.setValue(content);
+      }
+    },
+    [monaco],
+  );
 
   const exportZip = useCallback(async (files: readonly EditorFile[], projectName: string) => {
     const encoder = new TextEncoder();
@@ -68,6 +88,7 @@ export function useProjectArchive(projectId: string) {
           }
           return next;
         });
+        refreshOpenModels(plan);
         return;
       }
 
@@ -116,8 +137,9 @@ export function useProjectArchive(projectId: string) {
         }
       }
       if (pending > 0) await batch.commit();
+      refreshOpenModels(plan);
     },
-    [projectId, queryClient],
+    [projectId, queryClient, refreshOpenModels],
   );
 
   return { exportZip, applyImport };
