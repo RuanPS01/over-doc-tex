@@ -1,5 +1,6 @@
 import { assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
 import {
+  Bytes,
   FieldPath,
   arrayUnion,
   collection,
@@ -18,6 +19,35 @@ import {
 import { createTestEnv, runScenarios } from './harness.mjs';
 
 const env = await createTestEnv();
+
+// Arquivos em pedaços: mesmos valores de src/lib/stored-files/chunks.ts.
+const CHUNK = 1_000_000;
+const sha = (char) => char.repeat(64);
+const zeros = (size) => Bytes.fromUint8Array(new Uint8Array(size));
+const fileInfo = (totalBytes, overrides = {}) => ({
+  totalBytes,
+  contentType: 'application/pdf',
+  sha256: sha('a'),
+  chunkCount: Math.ceil(totalBytes / CHUNK),
+  chunkBytes: CHUNK,
+  ...overrides,
+});
+
+/**
+ * Grava pedaços e cabeçalho num lote só, como src/lib/firebase/stored-files.ts
+ * faz no último lote. `chunks` escolhe quais índices enviar (padrão: todos).
+ */
+function storeFile(db, headerPath, uid, totalBytes, { info = {}, chunks, header } = {}) {
+  const full = fileInfo(totalBytes, info);
+  const batch = writeBatch(db);
+  const indexes = chunks ?? [...Array(full.chunkCount).keys()];
+  for (const index of indexes) {
+    // Pelo menos 1 byte: os cenários de cabeçalho incoerente pedem pedaços além do conteúdo.
+    batch.set(doc(db, `${headerPath}/chunks/${index}`), { data: zeros(Math.max(1, Math.min(CHUNK, totalBytes - index * CHUNK))) });
+  }
+  batch.set(doc(db, headerPath), header ?? { ...full, createdBy: uid, createdAt: serverTimestamp() });
+  return batch.commit();
+}
 
 // p1: ana (owner), bia (editor), caio (viewer). rev@uni.br revisa a revisão r1 sobre o snapshot s1.
 await env.withSecurityRulesDisabled(async (ctx) => {
@@ -53,7 +83,15 @@ await env.withSecurityRulesDisabled(async (ctx) => {
     projectId: 'p1', reviewId: 'r1', status: 'resolved', commentCount: 2, participantIds: ['rev', 'bia'],
     resolution: { kind: 'fixed_next_version', by: 'bia', at: 1, fixedInSnapshotId: null },
   });
-  await setDoc(doc(db, 'projects/p1/diffs/d1'), { targetSnapshotId: 's1', baseSnapshotId: 's0', createdBy: 'bia' });
+  await setDoc(doc(db, 'projects/p1/diffs/d1'), {
+    targetSnapshotId: 's1', baseSnapshotId: 's0', documentId: 'main', createdBy: 'bia', pdf: fileInfo(10),
+  });
+  await setDoc(doc(db, 'projects/p1/diffs/d1/chunks/0'), { data: zeros(10) });
+  // Blob finalizado e arquivos da versão s1 (principal e secundário).
+  for (const path of [`projects/p1/blobs/${sha('a')}`, 'projects/p1/snapshots/s1/files/main.pdf', 'projects/p1/snapshots/s1/files/apendice.pdf']) {
+    await setDoc(doc(db, path), { ...fileInfo(10), createdBy: 'bia', createdAt: 1 });
+    await setDoc(doc(db, `${path}/chunks/0`), { data: zeros(10) });
+  }
   await setDoc(doc(db, 'projects/p1/aiConversations/c1'), { createdBy: 'bia', title: 'x' });
   await setDoc(doc(db, 'users/ana/private/ai'), { models: [] });
 });
@@ -210,6 +248,69 @@ await runScenarios('Firestore', [
     assertSucceeds(setDoc(doc(as('bia'), 'projects/p1/aiConversations/c1/messages/m1'), { role: 'user', content: 'oi' }))],
   ['outro membro não lê conversa alheia', () =>
     assertFails(getDoc(doc(as('ana'), 'projects/p1/aiConversations/c1/messages/m1')))],
+  // ------------------------------------------------- arquivos em pedaços: blobs
+  ['editor grava blob em pedaços com o cabeçalho no último lote', () =>
+    assertSucceeds(storeFile(as('bia'), `projects/p1/blobs/${sha('c')}`, 'bia', CHUNK + 10, { info: { sha256: sha('c') } }))],
+  ['cabeçalho sem o último pedaço é negado', () =>
+    assertFails(storeFile(as('bia'), `projects/p1/blobs/${sha('d')}`, 'bia', CHUNK + 10, { info: { sha256: sha('d') }, chunks: [0] }))],
+  ['cabeçalho com sha256 diferente do id é negado', () =>
+    assertFails(storeFile(as('bia'), `projects/p1/blobs/${sha('e')}`, 'bia', 10, { info: { sha256: sha('f') } }))],
+  ['cabeçalho com número de pedaços incoerente é negado', () =>
+    assertFails(storeFile(as('bia'), `projects/p1/blobs/${sha('9')}`, 'bia', 10, { info: { sha256: sha('9'), chunkCount: 2 }, chunks: [0, 1] }))],
+  ['blob acima de 25 MiB é negado', () =>
+    assertFails(storeFile(as('bia'), `projects/p1/blobs/${sha('8')}`, 'bia', 26214401, { info: { sha256: sha('8') }, chunks: [26] }))],
+  ['pedaço maior que 1.000.000 bytes é negado', () =>
+    assertFails(setDoc(doc(as('bia'), `projects/p1/blobs/${sha('7')}/chunks/0`), { data: zeros(CHUNK + 1) }))],
+  ['viewer não grava pedaço', () =>
+    assertFails(setDoc(doc(as('caio'), `projects/p1/blobs/${sha('6')}/chunks/0`), { data: zeros(10) }))],
+  ['pedaço pode ser reenviado antes do cabeçalho', async () => {
+    const chunk = doc(as('bia'), `projects/p1/blobs/${sha('5')}/chunks/0`);
+    await assertSucceeds(setDoc(chunk, { data: zeros(10) }));
+    await assertSucceeds(setDoc(chunk, { data: zeros(20) }));
+  }],
+  ['blob finalizado não aceita pedaço novo nem mudança no cabeçalho', async () => {
+    await assertFails(setDoc(doc(as('bia'), `projects/p1/blobs/${sha('a')}/chunks/0`), { data: zeros(10) }));
+    await assertFails(updateDoc(doc(as('bia'), `projects/p1/blobs/${sha('a')}`), { contentType: 'text/plain' }));
+  }],
+  ['membro lê os pedaços do blob; estranho e revisor não', async () => {
+    await assertSucceeds(getDocs(collection(as('caio'), `projects/p1/blobs/${sha('a')}/chunks`)));
+    await assertFails(getDocs(collection(as('zeca'), `projects/p1/blobs/${sha('a')}/chunks`)));
+    await assertFails(getDoc(doc(rev(), `projects/p1/blobs/${sha('a')}`)));
+  }],
+
+  // --------------------------------------- arquivos em pedaços: arquivos da versão
+  ['editor grava PDF da versão antes de congelar', () =>
+    assertSucceeds(storeFile(as('bia'), 'projects/p1/snapshots/s7/files/main.pdf', 'bia', CHUNK + 10))],
+  ['versão congelada não recebe arquivo nem pedaço novo', async () => {
+    await assertFails(storeFile(as('bia'), 'projects/p1/snapshots/s1/files/novo.pdf', 'bia', 10));
+    await assertFails(setDoc(doc(as('bia'), 'projects/p1/snapshots/s1/files/outro.pdf/chunks/0'), { data: zeros(10) }));
+  }],
+  ['nome de arquivo de versão fora do padrão é negado', () =>
+    assertFails(storeFile(as('bia'), 'projects/p1/snapshots/s7/files/main.exe', 'bia', 10))],
+  ['revisor lê o PDF do documento concedido', async () => {
+    await assertSucceeds(getDoc(doc(rev(), 'projects/p1/snapshots/s1/files/main.pdf')));
+    await assertSucceeds(getDocs(collection(rev(), 'projects/p1/snapshots/s1/files/main.pdf/chunks')));
+  }],
+  ['revisor não lê documento secundário sem concessão', async () => {
+    await assertFails(getDoc(doc(rev(), 'projects/p1/snapshots/s1/files/apendice.pdf')));
+    await assertFails(getDocs(collection(rev(), 'projects/p1/snapshots/s1/files/apendice.pdf/chunks')));
+  }],
+  ['revisor com e-mail não verificado não lê arquivo da versão', () =>
+    assertFails(getDoc(doc(as('rev', { email: 'rev@uni.br', email_verified: false }), 'projects/p1/snapshots/s1/files/main.pdf')))],
+
+  // ---------------------------------------------- arquivos em pedaços: PDF do diff
+  ['editor grava o diff com o PDF em pedaços', () =>
+    assertSucceeds(storeFile(as('bia'), 'projects/p1/diffs/d3', 'bia', 10, {
+      header: { targetSnapshotId: 's2', baseSnapshotId: 's1', documentId: 'main', createdBy: 'bia', pdf: fileInfo(10) },
+    }))],
+  ['diff com PDF sem os pedaços é negado', () =>
+    assertFails(setDoc(doc(as('bia'), 'projects/p1/diffs/d4'), {
+      targetSnapshotId: 's2', baseSnapshotId: 's1', documentId: 'main', createdBy: 'bia', pdf: fileInfo(10),
+    }))],
+  ['revisor lê o PDF do diff da versão concedida', () =>
+    assertSucceeds(getDocs(collection(rev(), 'projects/p1/diffs/d1/chunks')))],
+  ['diff gravado não aceita pedaço novo', () =>
+    assertFails(setDoc(doc(as('bia'), 'projects/p1/diffs/d1/chunks/1'), { data: zeros(10) }))],
 ]);
 
 await env.cleanup();

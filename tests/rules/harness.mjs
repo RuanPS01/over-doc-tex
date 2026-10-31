@@ -4,19 +4,16 @@ import { initializeTestEnvironment } from '@firebase/rules-unit-testing';
 const read = (file) => readFileSync(new URL(`../../${file}`, import.meta.url), 'utf8');
 
 /**
- * Ambiente de teste apontando para os emuladores definidos em firebase.json.
- * As suítes rodam em sequência no mesmo emulador, então cada uma começa com
- * Firestore e Storage vazios: sem isso, o snapshot s2 criado pela suíte do
- * Firestore fazia a do Storage tratar a versão como já congelada.
+ * Ambiente de teste apontando para o emulador definido em firebase.json. Cada
+ * suíte começa com o Firestore vazio, para não depender de dados deixados por
+ * outra execução na mesma sessão do emulador.
  */
 export async function createTestEnv() {
   const env = await initializeTestEnvironment({
     projectId: 'demo-overdoctex',
     firestore: { rules: read('firestore.rules'), host: '127.0.0.1', port: 8080 },
-    storage: { rules: read('storage.rules'), host: '127.0.0.1', port: 9199 },
   });
   await env.clearFirestore();
-  await env.clearStorage();
   return env;
 }
 

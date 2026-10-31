@@ -9,6 +9,7 @@ rules_version = '2';
 // - Membros (members[uid]) leem tudo do projeto; owner/editor escrevem.
 // - Revisores não são membros: o acesso vem de grants por e-mail verificado.
 // - Coautores são convidados por e-mail (pendingMembers) e entram sozinhos ao aceitar.
+// - Não há Cloud Storage: binários ficam aqui, em pedaços (ver "Arquivos em pedaços").
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -74,6 +75,57 @@ service cloud.firestore {
 
     function onlyChanges(keys) {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
+    }
+
+    // ------------------------------------------------------ arquivos em pedaços
+    // Um arquivo é um cabeçalho (tamanho, tipo, sha256, número de pedaços) mais a
+    // subcoleção chunks/{índice}, com até 1.000.000 bytes por pedaço. Os pedaços
+    // sobem antes e podem ser reenviados enquanto o cabeçalho não existe; o
+    // cabeçalho entra no mesmo lote do último pedaço (existsAfter) e, a partir
+    // dele, nada muda. Mesmos valores de src/lib/stored-files/chunks.ts.
+
+    function validChunkIndex(index) {
+      return index.matches('^(0|[1-9][0-9]{0,4})$');
+    }
+
+    function validChunk() {
+      return request.resource.data.keys().hasOnly(['data'])
+        && request.resource.data.data is bytes
+        && request.resource.data.data.size() > 0
+        && request.resource.data.data.size() <= 1000000;
+    }
+
+    // Coerência entre tamanho e número de pedaços sem divisão: o último pedaço
+    // tem de 1 a chunkBytes bytes; arquivo vazio não tem pedaço.
+    function validFileInfo(d, maxBytes) {
+      return d.totalBytes is int && d.totalBytes >= 0 && d.totalBytes <= maxBytes
+        && d.chunkBytes == 1000000
+        && d.chunkCount is int
+        && ((d.totalBytes == 0 && d.chunkCount == 0)
+          || (d.chunkCount >= 1
+            && (d.chunkCount - 1) * d.chunkBytes < d.totalBytes
+            && d.totalBytes <= d.chunkCount * d.chunkBytes))
+        && d.sha256 is string && d.sha256.matches('^[a-f0-9]{64}$')
+        && d.contentType is string && d.contentType.size() <= 200;
+    }
+
+    function validStoredFile(maxBytes) {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['totalBytes', 'contentType', 'sha256', 'chunkCount', 'chunkBytes', 'createdBy', 'createdAt'])
+        && validFileInfo(d, maxBytes)
+        && d.createdBy == uid()
+        && d.createdAt == request.time;
+    }
+
+    // O último pedaço precisa existir ao fim do lote que grava o cabeçalho.
+    // `headerPath` é o caminho do cabeçalho relativo a documents, como texto.
+    function lastChunkWritten(headerPath, info) {
+      return info.chunkCount == 0
+        || existsAfter(path('/databases/' + database + '/documents/' + headerPath + '/chunks/' + string(info.chunkCount - 1)));
+    }
+
+    function headerExists(headerPath) {
+      return exists(path('/databases/' + database + '/documents/' + headerPath));
     }
 
     // ------------------------------------------------------------------ users
@@ -180,6 +232,30 @@ service cloud.firestore {
         allow delete: if canEdit(pid);
       }
 
+      // Binários do projeto, endereçados pelo sha256 e deduplicados entre versões.
+      match /blobs/{hash} {
+        function blobPath() {
+          return 'projects/' + pid + '/blobs/' + hash;
+        }
+
+        allow read: if isMember(pid);
+        allow create: if canEdit(pid)
+          && hash.matches('^[a-f0-9]{64}$')
+          && validStoredFile(26214400)
+          && request.resource.data.sha256 == hash
+          && lastChunkWritten(blobPath(), request.resource.data);
+        allow update, delete: if false;
+
+        match /chunks/{index} {
+          allow read: if isMember(pid);
+          allow create, update: if canEdit(pid)
+            && validChunkIndex(index)
+            && !headerExists(blobPath())
+            && validChunk();
+          allow delete: if false;
+        }
+      }
+
       match /documents/{documentId} {
         allow read: if isMember(pid);
         allow create: if canEdit(pid);
@@ -209,6 +285,43 @@ service cloud.firestore {
             && request.resource.data.grantedBy == uid()
             && request.resource.data.documentIds is list;
           allow delete: if canEdit(pid);
+        }
+
+        // PDF, SyncTeX e texto por página de cada documento ({documentId}.pdf etc.):
+        // gravados antes do documento do snapshot; depois dele, nada entra nem muda.
+        // O revisor lê só os documentos concedidos ao e-mail dele.
+        match /files/{name} {
+          function filePath() {
+            return 'projects/' + pid + '/snapshots/' + sid + '/files/' + name;
+          }
+
+          function readable() {
+            return isMember(pid)
+              || (hasGrant(pid, sid)
+                && name.split('\\.')[0] in get(grantPath(pid, sid, myEmail())).data.documentIds);
+          }
+
+          function beforeFreeze() {
+            return !exists(/databases/$(database)/documents/projects/$(pid)/snapshots/$(sid));
+          }
+
+          allow read: if readable();
+          allow create: if canEdit(pid)
+            && name.matches('^[A-Za-z0-9_-]{1,128}[.](pdf|synctex|pages)$')
+            && beforeFreeze()
+            && validStoredFile(52428800)
+            && lastChunkWritten(filePath(), request.resource.data);
+          allow update, delete: if false;
+
+          match /chunks/{index} {
+            allow read: if readable();
+            allow create, update: if canEdit(pid)
+              && validChunkIndex(index)
+              && beforeFreeze()
+              && !headerExists(filePath())
+              && validChunk();
+            allow delete: if false;
+          }
         }
       }
 
@@ -299,12 +412,41 @@ service cloud.firestore {
         }
       }
 
-      // Cache do PDF de diff (gerado no navegador): gravado por quem edita, nunca alterado.
+      // Cache do diff (gerado no navegador): gravado por quem edita, nunca alterado.
+      // O PDF fica nos pedaços deste documento; o campo `pdf` faz papel de cabeçalho.
       match /diffs/{diffKey} {
+        function diffPath() {
+          return 'projects/' + pid + '/diffs/' + diffKey;
+        }
+
+        function validPdf(pdf) {
+          return pdf == null
+            || (pdf.keys().hasOnly(['totalBytes', 'contentType', 'sha256', 'chunkCount', 'chunkBytes'])
+              && validFileInfo(pdf, 52428800)
+              && lastChunkWritten(diffPath(), pdf));
+        }
+
         allow get: if isMember(pid) || hasGrant(pid, resource.data.targetSnapshotId);
         allow list: if isMember(pid);
-        allow create: if canEdit(pid) && request.resource.data.createdBy == uid();
+        allow create: if canEdit(pid)
+          && request.resource.data.createdBy == uid()
+          && validPdf(request.resource.data.get('pdf', null));
         allow update, delete: if false;
+
+        match /chunks/{index} {
+          function diff() {
+            return get(/databases/$(database)/documents/projects/$(pid)/diffs/$(diffKey)).data;
+          }
+
+          allow read: if isMember(pid)
+            || (hasGrant(pid, diff().targetSnapshotId)
+              && diff().documentId in get(grantPath(pid, diff().targetSnapshotId, myEmail())).data.documentIds);
+          allow create, update: if canEdit(pid)
+            && validChunkIndex(index)
+            && !headerExists(diffPath())
+            && validChunk();
+          allow delete: if false;
+        }
       }
 
       // Conversas com a IA são privadas de quem as criou.
