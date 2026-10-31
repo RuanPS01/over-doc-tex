@@ -21,6 +21,8 @@ interface PdfDocumentViewProps {
   scrollRef?: RefObject<HTMLDivElement>;
   /** Ex.: espaço para o botão de fechar do diálogo. */
   toolbarClassName?: string;
+  textLayer?: boolean;
+  onPageSizes?: (sizes: Array<{ width: number; height: number }>) => void;
 }
 
 /**
@@ -37,6 +39,8 @@ export function PdfDocumentView({
   actions,
   scrollRef,
   toolbarClassName,
+  textLayer,
+  onPageSizes,
 }: PdfDocumentViewProps) {
   const [zoomIndex, setZoomIndex] = useState(2);
   const zoom = ZOOM_STEPS[zoomIndex] ?? 100;
@@ -99,7 +103,15 @@ export function PdfDocumentView({
         {shownError ? (
           <p className="m-auto max-w-sm p-6 text-center text-sm text-destructive">{shownError}</p>
         ) : pdf ? (
-          <PdfPages data={pdf} availableWidth={availableWidth} zoom={zoom} onError={setViewerError} renderOverlay={renderOverlay} />
+          <PdfPages
+            data={pdf}
+            availableWidth={availableWidth}
+            zoom={zoom}
+            onError={setViewerError}
+            renderOverlay={renderOverlay}
+            textLayer={textLayer}
+            onPageSizes={onPageSizes}
+          />
         ) : (
           <p className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="size-4 animate-spin" aria-hidden />

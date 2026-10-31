@@ -12,22 +12,26 @@ import { FreezeError, useRequestReview, type RequestReviewResult, type RequestSt
 import { reviewPath } from '../model/review';
 import { normalizeEmail } from '@/lib/email';
 
-const STAGE_LABELS: Record<RequestStage, string> = { ...FREEZE_STAGE_LABELS, opening: 'Abrindo a revisão' };
+const STAGE_LABELS: Record<RequestStage, string> = { ...FREEZE_STAGE_LABELS, opening: 'Abrindo a revisão', diff: 'Gerando a comparação em PDF' };
 
 interface RequestReviewDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   projectId: string;
   projectName: string;
+  /** Documentos do projeto; o principal sempre vai para o revisor. */
+  documents: ReadonlyArray<{ id: string; title: string; role: 'main' | 'secondary'; rootPath: string }>;
   onIssueSelect: (issue: TexIssue) => void;
 }
 
 /** Congela a versão (se mudou), abre a revisão e convida o revisor por e-mail. */
-export function RequestReviewDialog({ open, onOpenChange, projectId, projectName, onIssueSelect }: RequestReviewDialogProps) {
+export function RequestReviewDialog({ open, onOpenChange, projectId, projectName, documents, onIssueSelect }: RequestReviewDialogProps) {
   const requestReview = useRequestReview(projectId, projectName);
   const [email, setEmail] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [secondaryIds, setSecondaryIds] = useState<string[]>([]);
+  const secondaries = documents.filter((document) => document.role === 'secondary');
   const [stage, setStage] = useState<RequestStage | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [issues, setIssues] = useState<TexIssue[]>([]);
@@ -57,6 +61,7 @@ export function RequestReviewDialog({ open, onOpenChange, projectId, projectName
         reviewerEmail,
         title: title.trim() || `Revisão de ${projectName}`,
         description,
+        documentIds: secondaryIds.filter((id) => secondaries.some((document) => document.id === id)),
         onStage: setStage,
       });
       setResult({ ...created, email: reviewerEmail });
@@ -154,6 +159,31 @@ export function RequestReviewDialog({ open, onOpenChange, projectId, projectName
                 onChange={(event) => setDescription(event.target.value)}
               />
             </label>
+            {secondaries.length > 0 && (
+              <fieldset className="flex flex-col gap-1.5 text-sm">
+                <legend className="mb-1 font-medium">Documentos que o revisor vê</legend>
+                <label className="flex items-center gap-2 text-muted-foreground">
+                  <input type="checkbox" checked disabled className="size-4 accent-primary" />
+                  {documents.find((document) => document.role === 'main')?.title ?? 'Documento principal'} (principal)
+                </label>
+                {secondaries.map((document) => (
+                  <label key={document.id} className="flex min-w-0 items-center gap-2">
+                    <input
+                      type="checkbox"
+                      disabled={isBusy}
+                      className="size-4 shrink-0 accent-primary"
+                      checked={secondaryIds.includes(document.id)}
+                      onChange={(event) =>
+                        setSecondaryIds((ids) => (event.target.checked ? [...ids, document.id] : ids.filter((id) => id !== document.id)))
+                      }
+                    />
+                    <span className="min-w-0 truncate">
+                      {document.title} <span className="text-muted-foreground">({document.rootPath})</span>
+                    </span>
+                  </label>
+                ))}
+              </fieldset>
+            )}
             {error && (
               <p role="alert" className="text-sm text-destructive">
                 {error}

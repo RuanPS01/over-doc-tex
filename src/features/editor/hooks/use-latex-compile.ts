@@ -23,6 +23,7 @@ export function useLatexCompile(projectId: string) {
           pdf: null,
           mainPath: null,
           durationMs: 0,
+          synctex: null,
           issues: [{ kind: 'error', message: NO_MAIN_FILE_MESSAGE, file: null, line: null }],
         };
       }

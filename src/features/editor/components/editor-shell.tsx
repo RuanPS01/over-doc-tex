@@ -1,4 +1,5 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
+import { useLocation, useSearch } from 'wouter';
 import { AiAssistantPanel } from '@/features/ai-assistant/components/ai-assistant-panel';
 import { useLayoutMode } from '@/hooks/use-layout-mode';
 import { useProjectFiles } from '../hooks/use-project-files';
@@ -18,8 +19,22 @@ import { MobileWorkspace } from './mobile-workspace';
  */
 export function EditorShell() {
   const layoutMode = useLayoutMode();
-  const { projectId, projectName, aiOpen, setAiOpen, activeFileId, openFile } = useEditorStore();
+  const { projectId, projectName, aiOpen, setAiOpen, activeFileId, openFile, revealLine } = useEditorStore();
   const { data: files = [] } = useProjectFiles(projectId);
+  const search = useSearch();
+  const [location, navigate] = useLocation();
+  const handledSearch = useRef<string | null>(null);
+
+  // "Abrir no código" de um comentário da revisão chega como ?arquivo=...&linha=...
+  useEffect(() => {
+    const params = new URLSearchParams(search);
+    const path = params.get('arquivo');
+    if (!path || files.length === 0 || handledSearch.current === search) return;
+    handledSearch.current = search;
+    const file = files.find((candidate) => candidate.path === path);
+    if (file) revealLine(file.id, Number(params.get('linha')) || 1);
+    navigate(location, { replace: true });
+  }, [search, files, revealLine, navigate, location]);
 
   // O arquivo inicial (id "main") só existe em projetos criados pelo app.
   useEffect(() => {

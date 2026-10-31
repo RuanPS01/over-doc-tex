@@ -10,6 +10,7 @@ import { normalizeEmail } from '@/lib/email';
 import type { ProjectInfo } from '../hooks/use-project';
 import { useProjectMembers, type InviteRole } from '../hooks/use-project-members';
 import { MAX_PROJECT_NAME, normalizeProjectName } from '../model/new-project';
+import { ProjectDocumentsSection } from './project-documents-section';
 
 const ROLE_LABELS: Record<ProjectRole, string> = { owner: 'Dono', editor: 'Edita', viewer: 'Só lê' };
 
@@ -19,10 +20,11 @@ interface ProjectSettingsDialogProps {
   project: ProjectInfo;
   currentUid: string | null;
   role: ProjectRole;
+  rootCandidates: ReadonlyArray<{ id: string; path: string }>;
 }
 
 /** Nome, descrição, membros e convites de coautoria (o dono gerencia; quem edita muda os detalhes). */
-export function ProjectSettingsDialog({ open, onOpenChange, project, currentUid, role }: ProjectSettingsDialogProps) {
+export function ProjectSettingsDialog({ open, onOpenChange, project, currentUid, role, rootCandidates }: ProjectSettingsDialogProps) {
   const members = useProjectMembers(project.id);
   const canEdit = role === 'owner' || role === 'editor';
   const isOwner = role === 'owner';
@@ -123,6 +125,8 @@ export function ProjectSettingsDialog({ open, onOpenChange, project, currentUid,
             </Button>
           )}
         </form>
+
+        <ProjectDocumentsSection projectId={project.id} projectName={project.name} canEdit={canEdit} rootCandidates={rootCandidates} />
 
         <section className="flex flex-col gap-2 border-t pt-4">
           <h3 className="text-sm font-semibold">Membros</h3>

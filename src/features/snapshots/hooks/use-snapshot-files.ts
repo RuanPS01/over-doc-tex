@@ -3,6 +3,7 @@ import { firestorePaths, snapshotFileName } from '@shared/firestore/paths';
 import type { SnapshotFileEntry } from '@shared/firestore/types';
 import { getFirebase } from '@/lib/firebase/app';
 import { readStoredFile } from '@/lib/firebase/stored-files';
+import { decodeSyncData, type SyncData } from '@/lib/latex/synctex';
 import { parsePageTextFile } from '../model/version';
 
 /**
@@ -47,5 +48,15 @@ export function useSnapshotFiles(projectId: string) {
     [projectId],
   );
 
-  return { readSources, readPdf, readPageTexts };
+  const readSyncData = useCallback(
+    async (snapshotId: string, documentId: string): Promise<SyncData> =>
+      decodeSyncData(
+        new TextDecoder().decode(
+          (await readStoredFile(getFirebase().db, firestorePaths.snapshotFile(projectId, snapshotId, snapshotFileName(documentId, 'synctex')))).data,
+        ),
+      ),
+    [projectId],
+  );
+
+  return { readSources, readPdf, readPageTexts, readSyncData };
 }

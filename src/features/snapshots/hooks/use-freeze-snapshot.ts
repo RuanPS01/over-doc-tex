@@ -11,13 +11,15 @@ import {
 } from 'firebase/firestore';
 import { useCallback } from 'react';
 import { firestorePaths, snapshotFileName } from '@shared/firestore/paths';
-import type { ProjectDoc, SnapshotDoc, SnapshotFileEntry, ThreadDoc } from '@shared/firestore/types';
+import type { ProjectDoc, SnapshotDoc, SnapshotFileEntry, SnapshotRender, ThreadDoc } from '@shared/firestore/types';
 import { useProjectSources } from '@/features/editor/hooks/use-project-sources';
+import { readProjectDocuments, withMainDocument } from '@/features/projects/hooks/use-project-documents';
 import { MAIN_DOCUMENT_ID } from '@/features/projects/model/new-project';
 import { getFirebase } from '@/lib/firebase/app';
 import { writeStoredFile } from '@/lib/firebase/stored-files';
 import { compileLatex } from '@/lib/latex/compiler';
-import { buildCompileInput, type TexIssue } from '@/lib/latex/prepare';
+import { buildCompileInput, hasDocumentClass, type TexIssue } from '@/lib/latex/prepare';
+import { encodeSyncData } from '@/lib/latex/synctex';
 import { extractPageTexts } from '@/lib/pdf/page-text';
 import { classifyFileKind, contentTypeOf } from '@/lib/project-archive/archive-paths';
 import { sha256Hex } from '@/lib/stored-files/chunks';
@@ -30,6 +32,8 @@ export interface FreezeInput {
   bump: VersionBump;
   /** Devolve a última versão, sem congelar outra, se o código não mudou desde ela. */
   reuseIfUnchanged: boolean;
+  /** Documentos que a versão reaproveitada precisa ter (um secundário criado depois dela obriga a congelar de novo). */
+  requiredDocumentIds?: readonly string[];
   onStage: (stage: FreezeStage) => void;
 }
 
@@ -61,7 +65,7 @@ export function useFreezeSnapshot(projectId: string, projectName: string) {
   const collectSources = useProjectSources(projectId);
 
   return useCallback(
-    async ({ message, bump, reuseIfUnchanged, onStage }: FreezeInput): Promise<FreezeResult> => {
+    async ({ message, bump, reuseIfUnchanged, requiredDocumentIds = [], onStage }: FreezeInput): Promise<FreezeResult> => {
       const { db, auth } = getFirebase();
       const uid = auth.currentUser?.uid;
       if (!uid) throw new FreezeError('Entre na sua conta para congelar versões.');
@@ -89,15 +93,28 @@ export function useFreezeSnapshot(projectId: string, projectName: string) {
       const latest = project.latestSnapshotId
         ? ((await getDoc(doc(db, firestorePaths.snapshot(projectId, project.latestSnapshotId)))).data() as SnapshotDoc | undefined)
         : undefined;
-      if (reuseIfUnchanged && latest && project.latestSnapshotId && latest.sourceHash === sourceHash) {
+      const hasRequired = requiredDocumentIds.every((id) => latest?.documents?.[id]);
+      if (reuseIfUnchanged && latest && project.latestSnapshotId && latest.sourceHash === sourceHash && hasRequired) {
         return { snapshotId: project.latestSnapshotId, label: latest.label, reused: true };
       }
 
+      // Cada documento (o principal e os secundários) gera um PDF próprio.
+      const documents = withMainDocument(await readProjectDocuments(projectId), projectName);
+      const isRoot = (path: string) => texts.some((file) => file.path === path && hasDocumentClass(file.content));
       onStage('compiling');
       const binaryData = new Map([...binaries].map(([path, binary]) => [path, binary.data]));
-      const compiled = await compileLatex(buildCompileInput(mainPath, texts, binaryData), mainPath, () => undefined);
-      if (!compiled.pdf) {
-        throw new FreezeError('A compilação falhou: corrija os erros antes de congelar a versão.', compiled.issues);
+      const builds = [];
+      for (const document of documents) {
+        const rootPath = document.role === 'main' ? (isRoot(document.rootPath) ? document.rootPath : mainPath) : document.rootPath;
+        if (!isRoot(rootPath)) {
+          throw new FreezeError(`O documento "${document.title}" aponta para ${rootPath}, que não existe ou não tem \\documentclass.`);
+        }
+        const compiled = await compileLatex(buildCompileInput(rootPath, texts, binaryData), rootPath, () => undefined);
+        if (!compiled.pdf) {
+          const prefix = documents.length > 1 ? `"${document.title}": ` : '';
+          throw new FreezeError(`${prefix}a compilação falhou. Corrija os erros antes de congelar a versão.`, compiled.issues);
+        }
+        builds.push({ document, rootPath, pdf: compiled.pdf, synctex: compiled.synctex });
       }
 
       onStage('uploading');
@@ -109,12 +126,27 @@ export function useFreezeSnapshot(projectId: string, projectName: string) {
         });
       }
       const snapshotRef = doc(collection(db, firestorePaths.snapshots(projectId)));
-      const pdfPath = firestorePaths.snapshotFile(projectId, snapshotRef.id, snapshotFileName(MAIN_DOCUMENT_ID, 'pdf'));
-      const pageTextPath = firestorePaths.snapshotFile(projectId, snapshotRef.id, snapshotFileName(MAIN_DOCUMENT_ID, 'pages'));
-      const pages = await extractPageTexts(compiled.pdf);
-      const pageFile: PageTextFile = { pages };
-      await writeStoredFile(db, pdfPath, compiled.pdf, { contentType: 'application/pdf', uid });
-      await writeStoredFile(db, pageTextPath, encoder.encode(JSON.stringify(pageFile)), { contentType: 'application/json', uid });
+      const renders: Record<string, SnapshotRender> = {};
+      let mainPages: string[] = [];
+      for (const { document, rootPath, pdf, synctex } of builds) {
+        const fileOf = (kind: 'pdf' | 'pages' | 'synctex') => firestorePaths.snapshotFile(projectId, snapshotRef.id, snapshotFileName(document.id, kind));
+        const pages = await extractPageTexts(pdf);
+        const pageFile: PageTextFile = { pages };
+        await writeStoredFile(db, fileOf('pdf'), pdf, { contentType: 'application/pdf', uid });
+        await writeStoredFile(db, fileOf('pages'), encoder.encode(JSON.stringify(pageFile)), { contentType: 'application/json', uid });
+        if (synctex) await writeStoredFile(db, fileOf('synctex'), encoder.encode(encodeSyncData(synctex)), { contentType: 'application/json', uid });
+        renders[document.id] = {
+          title: document.title,
+          role: document.role,
+          rootPath,
+          pdfPath: fileOf('pdf'),
+          pdfSha256: await sha256Hex(pdf),
+          pageCount: pages.length,
+          synctexPath: synctex ? fileOf('synctex') : null,
+          pageTextPath: fileOf('pages'),
+        };
+        if (document.id === MAIN_DOCUMENT_ID) mainPages = pages;
+      }
 
       onStage('freezing');
       const version = nextVersion(latest?.version ?? null, bump);
@@ -128,19 +160,8 @@ export function useFreezeSnapshot(projectId: string, projectName: string) {
         engine: project.engine,
         files: manifest,
         sourceHash,
-        documents: {
-          [MAIN_DOCUMENT_ID]: {
-            title: projectName,
-            role: 'main',
-            rootPath: mainPath,
-            pdfPath,
-            pdfSha256: await sha256Hex(compiled.pdf),
-            pageCount: pages.length,
-            synctexPath: null,
-            pageTextPath,
-          },
-        },
-        stats: { words: countWords(pages), pages: pages.length },
+        documents: renders,
+        stats: { words: countWords(mainPages), pages: mainPages.length },
         createdBy: uid,
         createdAt: serverTimestamp(),
       };

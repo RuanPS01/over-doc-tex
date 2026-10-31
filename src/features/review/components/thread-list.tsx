@@ -1,35 +1,34 @@
 import { MessageSquarePlus } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import type { ThreadSummary } from '../model/review';
-import { CommentComposer } from './comment-composer';
-import type { PendingPin } from './pin-layer';
 import { ThreadCard } from './thread-card';
 
 interface ThreadListProps {
   projectId: string;
   reviewId: string;
   threads: ThreadSummary[];
-  pending: PendingPin | null;
+  /** Painel do comentário novo (marcação pendente), acima da lista. */
+  pendingPanel: ReactNode;
   selectedThreadId: string | null;
   canWrite: boolean;
+  canOpenSource: boolean;
   onSelect: (threadId: string) => void;
-  onCreate: (body: string) => Promise<unknown>;
-  onCancelPending: () => void;
-  onReply: (threadId: string, body: string) => Promise<unknown>;
-  onStatusChange: (threadId: string, status: 'open' | 'resolved') => Promise<unknown>;
+  onOpenSource: (thread: ThreadSummary) => void;
+  onReply: (thread: ThreadSummary, body: string) => Promise<unknown>;
+  onStatusChange: (thread: ThreadSummary, status: 'open' | 'resolved') => Promise<unknown>;
 }
 
-/** Lateral (ou Sheet no celular) com o comentário novo e as threads da revisão. */
+/** Lateral (ou Sheet no celular) com o comentário novo e as threads do documento aberto. */
 export function ThreadList({
   projectId,
   reviewId,
   threads,
-  pending,
+  pendingPanel,
   selectedThreadId,
   canWrite,
+  canOpenSource,
   onSelect,
-  onCreate,
-  onCancelPending,
+  onOpenSource,
   onReply,
   onStatusChange,
 }: ThreadListProps) {
@@ -42,20 +41,15 @@ export function ThreadList({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
-      {pending && (
-        <div className="flex flex-col gap-2 rounded-lg border border-annotation-3 bg-card p-3">
-          <p className="text-xs font-medium">Novo comentário na página {pending.page}</p>
-          <CommentComposer placeholder="Escreva o comentário" submitLabel="Comentar" autoFocus onSubmit={onCreate} onCancel={onCancelPending} />
-        </div>
-      )}
+      {pendingPanel}
       <p className="text-xs text-muted-foreground">
         {threads.length === 0
           ? canWrite
-            ? 'Nenhum comentário ainda. Use "Comentar" e clique no ponto do PDF que quer comentar.'
+            ? 'Nenhum comentário ainda. Selecione um trecho do PDF, ou use Ponto ou Desenhar no topo.'
             : 'Nenhum comentário ainda.'
           : `${threads.length} ${threads.length === 1 ? 'comentário' : 'comentários'}, ${openCount} em aberto`}
       </p>
-      {threads.length === 0 && canWrite && !pending && <MessageSquarePlus className="mx-auto size-6 text-muted-foreground" aria-hidden />}
+      {threads.length === 0 && canWrite && !pendingPanel && <MessageSquarePlus className="mx-auto size-6 text-muted-foreground" aria-hidden />}
       <ol className="flex flex-col gap-2">
         {threads.map((thread, index) => (
           <ThreadCard
@@ -70,9 +64,10 @@ export function ThreadList({
             number={index + 1}
             isSelected={thread.id === selectedThreadId}
             canWrite={canWrite}
+            onOpenSource={canOpenSource ? () => onOpenSource(thread) : undefined}
             onSelect={() => onSelect(thread.id)}
-            onReply={(body) => onReply(thread.id, body)}
-            onStatusChange={(status) => onStatusChange(thread.id, status)}
+            onReply={(body) => onReply(thread, body)}
+            onStatusChange={(status) => onStatusChange(thread, status)}
           />
         ))}
       </ol>

@@ -3,6 +3,7 @@ import { arrayUnion, collection, doc, getDoc, getDocs, serverTimestamp, writeBat
 import { useCallback } from 'react';
 import { firestorePaths } from '@shared/firestore/paths';
 import type { ProjectDoc, ReviewDoc } from '@shared/firestore/types';
+import { useVisualDiff } from '@/features/diff/hooks/use-visual-diff';
 import { MAIN_DOCUMENT_ID } from '@/features/projects/model/new-project';
 import { useFreezeSnapshot, type FreezeStage } from '@/features/snapshots/hooks/use-freeze-snapshot';
 import { emailLinkUrl } from '@/lib/email';
@@ -12,12 +13,14 @@ import { reviewPath } from '../model/review';
 /** Falha de compilação ao congelar a versão da revisão (traz os erros do TeX). */
 export { FreezeError } from '@/features/snapshots/hooks/use-freeze-snapshot';
 
-export type RequestStage = FreezeStage | 'opening';
+export type RequestStage = FreezeStage | 'opening' | 'diff';
 
 export interface RequestReviewInput {
   reviewerEmail: string;
   title: string;
   description: string;
+  /** Documentos que o revisor vê; o principal sempre entra. */
+  documentIds: readonly string[];
   onStage: (stage: RequestStage) => void;
 }
 
@@ -38,10 +41,12 @@ export interface RequestReviewResult {
  */
 export function useRequestReview(projectId: string, projectName: string) {
   const freeze = useFreezeSnapshot(projectId, projectName);
+  const { betweenVersions } = useVisualDiff(projectId);
 
   return useCallback(
-    async ({ reviewerEmail, title, description, onStage }: RequestReviewInput): Promise<RequestReviewResult> => {
-      const frozen = await freeze({ message: title, bump: 'minor', reuseIfUnchanged: true, onStage });
+    async ({ reviewerEmail, title, description, documentIds, onStage }: RequestReviewInput): Promise<RequestReviewResult> => {
+      const granted = [MAIN_DOCUMENT_ID, ...documentIds.filter((id) => id !== MAIN_DOCUMENT_ID)];
+      const frozen = await freeze({ message: title, bump: 'minor', reuseIfUnchanged: true, requiredDocumentIds: granted, onStage });
 
       onStage('opening');
       const { db, auth } = getFirebase();
@@ -73,7 +78,7 @@ export function useRequestReview(projectId: string, projectName: string) {
         reviewerUid: null,
         reviewerName: null,
         status: 'invited',
-        grantedDocumentIds: [MAIN_DOCUMENT_ID],
+        grantedDocumentIds: granted,
         lastActivityAt: serverTimestamp(),
         closedAt: null,
       };
@@ -83,7 +88,7 @@ export function useRequestReview(projectId: string, projectName: string) {
       batch.set(
         doc(db, firestorePaths.snapshotGrant(projectId, frozen.snapshotId, reviewerEmail)),
         {
-          documentIds: [MAIN_DOCUMENT_ID],
+          documentIds: arrayUnion(...granted),
           reviewIds: arrayUnion(reviewRef.id),
           grantedBy: uid,
           grantedAt: serverTimestamp(),
@@ -98,6 +103,14 @@ export function useRequestReview(projectId: string, projectName: string) {
       });
       await batch.commit();
 
+      // Rodada seguinte: o diff em PDF já fica guardado para o revisor (que não lê o código).
+      if (review.baseSnapshotId) {
+        onStage('diff');
+        for (const documentId of granted) {
+          await betweenVersions(review.baseSnapshotId, frozen.snapshotId, documentId, true).catch(() => undefined);
+        }
+      }
+
       const emailSent = await sendSignInLinkToEmail(auth, reviewerEmail, {
         url: emailLinkUrl(reviewerEmail, reviewPath(projectId, reviewRef.id)),
         handleCodeInApp: true,
@@ -107,6 +120,6 @@ export function useRequestReview(projectId: string, projectName: string) {
       );
       return { reviewId: reviewRef.id, number, snapshotLabel: frozen.label, frozeNewVersion: !frozen.reused, emailSent };
     },
-    [freeze, projectId, projectName],
+    [freeze, betweenVersions, projectId, projectName],
   );
 }

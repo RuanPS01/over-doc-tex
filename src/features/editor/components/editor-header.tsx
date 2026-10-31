@@ -22,6 +22,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { NotificationBell } from '@/features/notifications/components/notification-bell';
 import type { LayoutMode } from '@/hooks/use-layout-mode';
 import { useExportProject } from '../hooks/use-export-project';
 import { useCompileStore } from '../state/compile-store';
@@ -98,6 +99,7 @@ export function EditorHeader({ projectName, layoutMode }: EditorHeaderProps) {
         <Sparkles />
       </Button>
 
+      <NotificationBell className="hidden xs:inline-flex" />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="icon" aria-label="Mais ações">

@@ -35,6 +35,8 @@ export const ROOT_PACKAGES = [
   'booktabs', 'multirow', 'float', 'placeins', 'wrapfig', 'makecell', 'threeparttable', 'colortbl', 'rotating', 'pdflscape', 'subfig',
   // Listas, código e caixas
   'enumitem', 'listings', 'fancyvrb', 'framed', 'mdframed', 'comment',
+  // Marcações do diff visual (\DIFadd e \DIFdel usam o ulem)
+  'ulem',
   // Referências, citações e índices
   'biblatex', 'csquotes', 'cleveref', 'glossaries', 'acronym', 'chngcntr', 'lastpage',
   // Matemática e unidades

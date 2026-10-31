@@ -82,6 +82,20 @@ export function buildCompileInput(
   return { source: adaptBabel(main.content), additionalFiles };
 }
 
+/**
+ * Caminho que o TeX usa (no log e no SyncTeX) convertido para o caminho no
+ * projeto. O principal aparece como /document.tex; os demais, relativos à
+ * pasta do principal. Arquivos do TeX Live devolvem nulo.
+ */
+export function projectPathFromTex(raw: string, mainPath: string): string | null {
+  // O SyncTeX do Siglum escreve os incluídos como //./cap/um.tex; o log, como ./cap/um.tex.
+  const clean = raw.replace(/^(?:\.?\/)+/, '');
+  if (clean.startsWith('texlive/') || clean.startsWith('texmf')) return null;
+  if (clean === 'document.tex') return mainPath;
+  const folder = mainPath.includes('/') ? mainPath.slice(0, mainPath.lastIndexOf('/') + 1) : '';
+  return folder + clean;
+}
+
 export interface TexIssue {
   kind: 'error' | 'missing-package' | 'warning';
   message: string;

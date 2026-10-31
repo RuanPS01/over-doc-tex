@@ -17,6 +17,7 @@ export const firestorePaths = {
   user: (uid: UserId) => `users/${uid}`,
   userAiConfig: (uid: UserId) => `users/${uid}/private/ai`,
   notifications: (uid: UserId) => `users/${uid}/notifications`,
+  notification: (uid: UserId, notificationId: string) => `users/${uid}/notifications/${notificationId}`,
   projects: () => 'projects',
   project: (projectId: ProjectId) => `projects/${projectId}`,
   files: (projectId: ProjectId) => `projects/${projectId}/files`,

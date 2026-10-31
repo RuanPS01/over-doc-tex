@@ -10,12 +10,13 @@ import { useProjectFiles } from '@/features/editor/hooks/use-project-files';
 import { EditorStoreProvider, useEditorStore } from '@/features/editor/state/editor-store';
 import { ProjectSettingsDialog } from '@/features/projects/components/project-settings-dialog';
 import { roleOf, useProject, type ProjectInfo } from '@/features/projects/hooks/use-project';
+import { useProjectDocuments, withMainDocument } from '@/features/projects/hooks/use-project-documents';
 import { useProjectMembers } from '@/features/projects/hooks/use-project-members';
 import { MAIN_FILE_ID } from '@/features/projects/model/new-project';
 import { ProjectReviewQueue } from '@/features/review/components/project-review-queue';
 import { RequestReviewDialog } from '@/features/review/components/request-review-dialog';
 import { VersionHistorySheet } from '@/features/snapshots/components/version-history-sheet';
-import type { TexIssue } from '@/lib/latex/prepare';
+import { hasDocumentClass, type TexIssue } from '@/lib/latex/prepare';
 
 const INVITE_ROLE_LABELS = { editor: 'editar', viewer: 'ler' } as const;
 
@@ -27,6 +28,10 @@ function EditorDialogs({ project, currentUid }: { project: ProjectInfo; currentU
   const { projectId, projectName, role, canEdit, dialog, openDialog, closeDialog, openFile, revealLine } = useEditorStore();
   const { data: files = [] } = useProjectFiles(projectId);
   const { status } = useAuth();
+  const { data: documents = [] } = useProjectDocuments(projectId, status !== 'demo');
+  const rootCandidates = files
+    .filter((file) => file.kind === 'tex' && file.content !== null && hasDocumentClass(file.content))
+    .map((file) => ({ id: file.id, path: file.path }));
   const setOpen = (open: boolean) => !open && closeDialog();
   const fileIdOf = (path: string | null) => files.find((file) => file.path === path)?.id;
   const handleIssue = (issue: TexIssue) => {
@@ -78,6 +83,7 @@ function EditorDialogs({ project, currentUid }: { project: ProjectInfo; currentU
           openFile(fileId);
         }}
         onOpenHistory={() => openDialog({ kind: 'history' })}
+        canEdit={canEdit}
       />
       {canEdit && (
         <RequestReviewDialog
@@ -85,10 +91,18 @@ function EditorDialogs({ project, currentUid }: { project: ProjectInfo; currentU
           onOpenChange={setOpen}
           projectId={projectId}
           projectName={projectName}
+          documents={withMainDocument(documents, projectName)}
           onIssueSelect={handleIssue}
         />
       )}
-      <ProjectSettingsDialog open={dialog?.kind === 'settings'} onOpenChange={setOpen} project={project} currentUid={currentUid} role={role} />
+      <ProjectSettingsDialog
+        open={dialog?.kind === 'settings'}
+        onOpenChange={setOpen}
+        project={project}
+        currentUid={currentUid}
+        role={role}
+        rootCandidates={rootCandidates}
+      />
     </>
   );
 }

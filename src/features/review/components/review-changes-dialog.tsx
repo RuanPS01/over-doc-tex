@@ -1,23 +1,32 @@
 import { Loader2 } from 'lucide-react';
+import { useState } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { DiffPdfViewer } from '@/features/diff/components/diff-pdf-viewer';
 import { DiffView } from '@/features/diff/components/diff-view';
+import { slugify } from '@/lib/download';
 import { diffStats } from '@/lib/diff/word-diff';
-import { usePageTextDiff } from '../hooks/use-review-files';
+import { usePageTextDiff, useReviewVisualDiff } from '../hooks/use-review-files';
+import type { ParticipantRole } from '@shared/firestore/types';
 import type { ReviewSummary } from '../model/review';
 
 interface ReviewChangesDialogProps {
   review: ReviewSummary;
+  documentId: string;
+  role: ParticipantRole;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
 /**
- * "Ver alterações" do revisor: compara o texto das páginas do PDF da versão
- * anterior com o da versão em revisão. O revisor não lê o código-fonte,
- * só o texto guardado com cada versão (.pages).
+ * "Ver alterações" da revisão: o PDF recompilado com as marcações (gerado
+ * pelo autor e guardado em diffs/{diffKey}) e, como alternativa, o texto das
+ * páginas da versão anterior comparado com o da atual (.pages).
  */
-export function ReviewChangesDialog({ review, open, onOpenChange }: ReviewChangesDialogProps) {
-  const { segments, error } = usePageTextDiff(review, open);
+export function ReviewChangesDialog({ review, documentId, role, open, onOpenChange }: ReviewChangesDialogProps) {
+  const [view, setView] = useState<'pdf' | 'text'>('pdf');
+  const { segments, error } = usePageTextDiff(review, documentId, open && view === 'text');
+  const visual = useReviewVisualDiff(review, documentId, open && view === 'pdf', role);
   const stats = segments ? diffStats(segments) : null;
 
   return (
@@ -26,9 +35,27 @@ export function ReviewChangesDialog({ review, open, onOpenChange }: ReviewChange
         <DialogHeader className="shrink-0 border-b px-4 py-3 sm:px-5">
           <DialogTitle>Alterações desde a rodada anterior</DialogTitle>
           <DialogDescription>
-            Texto do PDF da versão anterior comparado com a versão {review.snapshotLabel}: inserido em verde, removido riscado em vermelho.
+            Versão anterior comparada com a {review.snapshotLabel}: inserido em verde, removido riscado em vermelho.
           </DialogDescription>
         </DialogHeader>
+        <div className="shrink-0 border-b px-4 py-2 sm:px-5">
+          <Tabs value={view} onValueChange={(next) => setView(next as 'pdf' | 'text')}>
+            <TabsList>
+              <TabsTrigger value="pdf">PDF marcado</TabsTrigger>
+              <TabsTrigger value="text">Texto</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+        {view === 'pdf' ? (
+          <div className="min-h-0 flex-1">
+            <DiffPdfViewer
+              diff={visual.diff}
+              error={visual.error ?? (visual.missing ? 'O autor ainda não gerou a comparação em PDF desta rodada. Veja a aba Texto.' : null)}
+              loadingLabel={visual.diff ? null : role === 'author' ? 'Gerando a comparação em PDF' : 'Carregando a comparação'}
+              fileName={`${slugify(review.projectName)}-alteracoes-v${review.snapshotLabel}.pdf`}
+            />
+          </div>
+        ) : (
         <div className="min-h-0 flex-1 overflow-y-auto px-2 py-3 sm:px-4">
           {error ? (
             <p className="px-2 text-sm text-destructive">{error}</p>
@@ -49,6 +76,7 @@ export function ReviewChangesDialog({ review, open, onOpenChange }: ReviewChange
             </>
           )}
         </div>
+        )}
       </DialogContent>
     </Dialog>
   );

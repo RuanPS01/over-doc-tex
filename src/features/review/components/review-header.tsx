@@ -1,4 +1,4 @@
-import { ArrowLeft, CheckCircle2, GitCompare, MessageSquarePlus, MoreVertical, RotateCcw, TriangleAlert, XCircle } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, GitCompare, MoreVertical, RotateCcw, TriangleAlert, XCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'wouter';
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import type { ParticipantRole, ReviewStatus } from '@shared/firestore/types';
+import { NotificationBell } from '@/features/notifications/components/notification-bell';
 import { cn } from '@/lib/utils';
 import { REVIEW_STATUS_LABELS, type ReviewSummary } from '../model/review';
 
@@ -35,15 +36,12 @@ function statusActions(role: ParticipantRole, status: ReviewStatus): StatusActio
 interface ReviewHeaderProps {
   review: ReviewSummary;
   role: ParticipantRole;
-  isPlacing: boolean;
-  canWrite: boolean;
-  onTogglePlacing: () => void;
   onShowChanges: () => void;
   onStatusChange: (status: ReviewStatus) => void;
 }
 
 /** Cabeçalho travado da revisão: versão, status e ações do autor ou do revisor. */
-export function ReviewHeader({ review, role, isPlacing, canWrite, onTogglePlacing, onShowChanges, onStatusChange }: ReviewHeaderProps) {
+export function ReviewHeader({ review, role, onShowChanges, onStatusChange }: ReviewHeaderProps) {
   const actions = statusActions(role, review.status);
   const backHref = role === 'author' ? `/p/${review.projectId}` : '/';
 
@@ -69,18 +67,6 @@ export function ReviewHeader({ review, role, isPlacing, canWrite, onTogglePlacin
           Ver alterações
         </Button>
       )}
-      {canWrite && (
-        <Button
-          variant={isPlacing ? 'secondary' : 'outline'}
-          size="sm"
-          aria-pressed={isPlacing}
-          className="px-2 sm:px-3"
-          onClick={onTogglePlacing}
-        >
-          <MessageSquarePlus />
-          <span className="hidden sm:inline">{isPlacing ? 'Clique no PDF' : 'Comentar'}</span>
-        </Button>
-      )}
       {actions.map((action) => (
         <Button
           key={action.status}
@@ -93,6 +79,7 @@ export function ReviewHeader({ review, role, isPlacing, canWrite, onTogglePlacin
           {action.label}
         </Button>
       ))}
+      <NotificationBell />
       {(actions.length > 0 || review.baseSnapshotId) && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
