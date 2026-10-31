@@ -5,7 +5,9 @@
  * 2. separar preâmbulo e corpo, tirando os comentários;
  * 3. dividir o corpo em blocos balanceados (parágrafos fora de ambientes e chaves);
  * 4. alinhar os blocos (Myers) e, nos blocos alterados, comparar palavra por
- *    palavra, com comandos, chaves e matemática como unidades atômicas;
+ *    palavra, com comandos, chaves e matemática como unidades atômicas; em
+ *    comandos de texto (\emph, \section, \footnote...) que só mudaram o
+ *    argumento, o diff entra no argumento;
  * 5. emitir \DIFadd e \DIFdel no texto, \DIFaddatom e \DIFdelatom nos átomos e
  *    ambientes inteiros em DIFaddenv e DIFdelenv, neutralizando o que foi
  *    removido (\label sai, seção vira \DIFdelsection, float vira aviso).
@@ -14,7 +16,8 @@
  */
 import { editSteps } from './word-diff';
 
-export const DIFF_ENGINE_VERSION = 'diff-1.0.0';
+/** Entra na chave do cache: mudou a saída do motor, muda a versão. */
+export const DIFF_ENGINE_VERSION = 'diff-1.1.0';
 export type DiffLevel = 'word' | 'paragraph';
 
 const MAX_DEPTH = 20;
@@ -144,7 +147,17 @@ type TokenKind = 'space' | 'word' | 'punct' | 'atom';
 export interface LatexToken {
   kind: TokenKind;
   text: string;
+  /** Comando de texto com um argumento (\emph, \section...): a parte antes do argumento. */
+  head?: string;
+  /** Conteúdo do argumento, comparado palavra por palavra quando só ele muda. */
+  inner?: string;
 }
+
+/** Comandos cujo argumento é texto: mudou só o argumento, o diff entra nele (docs/07, passo 4). */
+const RECURSABLE = new Set([
+  'emph', 'textbf', 'textit', 'textsl', 'textsc', 'textsf', 'texttt', 'textrm', 'textup', 'textmd',
+  'part', 'chapter', 'section', 'subsection', 'subsubsection', 'paragraph', 'subparagraph', 'caption', 'footnote',
+]);
 
 /**
  * Tokens de um bloco para o diff por palavra. Comandos com argumentos, grupos
@@ -179,18 +192,25 @@ export function tokenizeUnit(unit: string): LatexToken[] | null {
         continue;
       }
       let j = i + 1;
+      let name = '';
       if (/[A-Za-z@]/.test(next)) {
         while (j < unit.length && /[A-Za-z@]/.test(unit[j]!)) j++;
-        const name = unit.slice(i + 1, j);
+        name = unit.slice(i + 1, j);
         if (name === 'begin' || name === 'end' || name === 'item' || name === 'verb') return null;
       } else j = i + 2;
       if (unit[j] === '*') j++;
+      const braces: number[] = [];
       while (unit[j] === '[' || unit[j] === '{') {
         const end = groupEnd(unit, j);
         if (end === -1) return null;
+        if (unit[j] === '{') braces.push(j);
         j = end;
       }
-      push('atom', unit.slice(i, j));
+      const text = unit.slice(i, j);
+      const open = braces[0];
+      if (RECURSABLE.has(name) && braces.length === 1 && open !== undefined && groupEnd(unit, open) === j) {
+        tokens.push({ kind: 'atom', text, head: unit.slice(i, open), inner: unit.slice(open + 1, j - 1) });
+      } else push('atom', text);
       i = j;
     } else if (char === '{') {
       const end = groupEnd(unit, i);
@@ -300,30 +320,42 @@ class Emitter {
 
   /** Bloco alterado palavra por palavra; falso quando não dá (o chamador marca o bloco inteiro). */
   modifiedBlock(before: string, after: string): boolean {
-    const a = tokenizeUnit(before);
-    const b = tokenizeUnit(after);
-    if (!a || !b) return false;
-    const steps = editSteps(
-      a.map((token) => (token.kind === 'space' ? ' ' : token.text)),
-      b.map((token) => (token.kind === 'space' ? ' ' : token.text)),
-    );
-    if (!steps) return false;
+    const result = this.diffTokens(tokenizeUnit(before), tokenizeUnit(after), true);
+    if (result === null) return false;
+    this.out.push(result);
+    return true;
+  }
+
+  /**
+   * Texto anotado de dois trechos tokenizados; nulo quando não dá para marcar
+   * por palavra. `withMarks` desliga o \DIFmark dentro de argumentos (títulos
+   * e legendas são argumentos móveis: a posição seria gravada duas vezes).
+   */
+  private diffTokens(a: LatexToken[] | null, b: LatexToken[] | null, withMarks: boolean): string | null {
+    if (!a || !b) return null;
+    // Comando de texto alinha pela cabeça: \emph{a} e \emph{b} são "iguais" e o diff entra no argumento.
+    const keyOf = (token: LatexToken) => (token.kind === 'space' ? ' ' : token.inner !== undefined ? `${token.head}{}` : token.text);
+    const steps = editSteps(a.map(keyOf), b.map(keyOf));
+    if (!steps) return null;
     const equal = steps.filter((step) => step === 'equal').length;
-    if (equal < (1 - REWRITE_RATIO) * Math.max(a.length, b.length)) return false;
+    if (equal < (1 - REWRITE_RATIO) * Math.max(a.length, b.length)) return null;
 
     // Segmentos por operação, absorvendo igualdades curtas entre alterações.
-    type Segment = { op: 'equal' | 'insert' | 'delete'; tokens: LatexToken[] };
+    type Segment = { op: 'equal' | 'insert' | 'delete'; tokens: LatexToken[]; olds: LatexToken[] };
     const segments: Segment[] = [];
     let i = 0;
     let j = 0;
     for (const step of steps) {
-      // Igualdades usam o token novo (o espaço do texto atual).
+      // Igualdades usam o token novo (o espaço do texto atual) e guardam o antigo para o diff do argumento.
+      const old = step === 'insert' ? undefined : a[i];
       const token = step === 'delete' ? a[i]! : b[j]!;
       if (step !== 'insert') i++;
       if (step !== 'delete') j++;
       const last = segments.at(-1);
-      if (last && last.op === step) last.tokens.push(token);
-      else segments.push({ op: step, tokens: [token] });
+      if (last && last.op === step) {
+        last.tokens.push(token);
+        if (old) last.olds.push(old);
+      } else segments.push({ op: step, tokens: [token], olds: old ? [old] : [] });
     }
     const merged: Segment[] = [];
     segments.forEach((segment, index) => {
@@ -333,7 +365,7 @@ class Emitter {
       const between = previous !== undefined && next !== undefined && previous !== 'equal' && next !== 'equal' && previous !== next;
       const isShort = segment.tokens.filter((token) => token.kind === 'word').length <= 2 && segment.tokens.every((token) => token.kind !== 'atom');
       if (segment.op === 'equal' && between && isShort) {
-        merged.push({ op: 'delete', tokens: segment.tokens }, { op: 'insert', tokens: segment.tokens });
+        merged.push({ op: 'delete', tokens: segment.olds, olds: [] }, { op: 'insert', tokens: segment.tokens, olds: [] });
       } else merged.push(segment);
     });
 
@@ -342,7 +374,17 @@ class Emitter {
     while (index < merged.length) {
       const segment = merged[index]!;
       if (segment.op === 'equal') {
-        parts.push(segment.tokens.map((token) => token.text).join(''));
+        segment.tokens.forEach((token, position) => {
+          const old = segment.olds[position];
+          if (!old || old.text === token.text || token.inner === undefined || old.inner === undefined) {
+            parts.push(token.text);
+            return;
+          }
+          // Mesmo comando, argumento diferente: marca dentro do argumento (sem \DIFmark lá dentro).
+          const mark = withMarks ? this.mark('mod', token.inner) : '';
+          const inner = this.diffTokens(tokenizeUnit(old.inner), tokenizeUnit(token.inner), false);
+          parts.push(mark, inner === null ? `${removedAtom(old.text)}\\DIFaddatom{${token.text}}` : `${token.head}{${inner}}`);
+        });
         index++;
         continue;
       }
@@ -354,11 +396,10 @@ class Emitter {
         index++;
       }
       const kind = deleted.length > 0 && inserted.length > 0 ? 'mod' : deleted.length > 0 ? 'del' : 'add';
-      parts.push(this.mark(kind, (inserted.length > 0 ? inserted : deleted).map((token) => token.text).join('')));
+      if (withMarks) parts.push(this.mark(kind, (inserted.length > 0 ? inserted : deleted).map((token) => token.text).join('')));
       parts.push(this.emitTokens(deleted, 'delete'), this.emitTokens(inserted, 'insert'));
     }
-    this.out.push(parts.join(''));
-    return true;
+    return parts.join('');
   }
 
   private emitTokens(tokens: readonly LatexToken[], op: 'insert' | 'delete'): string {

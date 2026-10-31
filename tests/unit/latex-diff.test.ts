@@ -78,3 +78,22 @@ describe('LaTeX anotado', () => {
     expect(buildDiffDocument('texto solto', doc('x'), 'word')).toBeNull();
   });
 });
+
+describe('diff dentro de argumentos', () => {
+  it('marca só a palavra alterada dentro de \\emph e de \\section, sem \\DIFmark no argumento', () => {
+    const before = doc('\\section{Resultados preliminares}\nTexto com \\emph{ênfase antiga} aqui e \\footnote{nota um}.');
+    const after = doc('\\section{Resultados finais}\nTexto com \\emph{ênfase nova} aqui e \\footnote{nota um}.');
+    const body = splitDocument(buildDiffDocument(before, after, 'word')!.source)!.body;
+    expect(body).toContain('\\section{Resultados \\DIFdel{preliminares}\\DIFadd{finais}}');
+    expect(body).toContain('\\emph{ênfase \\DIFdel{antiga}\\DIFadd{nova}}');
+    expect(body).toContain('\\footnote{nota um}');
+    expect(body).not.toMatch(/\\section\{[^}]*\\DIFmark/);
+    expect(balanced(body)).toBe(true);
+  });
+
+  it('comando diferente continua sendo trocado inteiro', () => {
+    const body = splitDocument(buildDiffDocument(doc('Um \\emph{termo} só.'), doc('Um \\textbf{termo} só.'), 'word')!.source)!.body;
+    expect(body).toContain('\\DIFdelatom{\\emph{termo}}');
+    expect(body).toContain('\\DIFaddatom{\\textbf{termo}}');
+  });
+});
