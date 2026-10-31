@@ -6,7 +6,7 @@ A IA do OverDocTeX é **sempre a do usuário**: cada pessoa configura o próprio
 
 | Decisão | Como ficou | Por quê |
 | --- | --- | --- |
-| Sem servidor | O motor roda no navegador (`src/lib/ai/`), com os SDKs oficiais em modo navegador (`dangerouslyAllowBrowser`) | O app é estático (GitHub Pages) e não paga IA por ninguém. A chave é de quem usa, então não há segredo da plataforma para proteger |
+| Sem servidor | O motor roda no navegador (`src/lib/ai/`), com os SDKs oficiais em modo navegador (`dangerouslyAllowBrowser`) | O app é estático (GitHub Pages e Firebase Hosting) e não paga IA por ninguém. A chave é de quem usa, então não há segredo da plataforma para proteger |
 | Agnóstico de provedor | Claude (Anthropic), OpenAI e Gemini (Google) atrás da mesma interface `AiProvider` | O usuário escolhe o provedor e o custo, inclusive chave gratuita do Gemini |
 | Fila de modelos com reserva | Até 5 modelos (principal mais 4 reservas). O que falha cede a vez ao próximo e pausa conforme o motivo | Um modelo sem cota, fora do ar ou lento não impede a resposta |
 | Saída estruturada com Zod | Cada provedor recebe o JSON Schema no formato nativo dele, e o texto devolvido é lido e validado com o mesmo schema Zod | O formato é imposto pelo provedor e conferido por nós; uma resposta fora do schema nunca chega à tela |

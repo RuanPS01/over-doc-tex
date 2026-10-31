@@ -6,7 +6,7 @@ O OverDocTeX é um PWA estático de edição LaTeX com revisão por versões con
 
 ```
 +--------------------------------------------------------------+
-|  PWA (React 18 + Vite + Tailwind) no GitHub Pages            |
+|  PWA (React 18 + Vite + Tailwind): GitHub Pages e Hosting    |
 |  Service Worker (offline) e Web Workers (LaTeX, diff)        |
 |                                                              |
 |  Editor | PDF | Revisão | Importação/Exportação | IA         |
@@ -31,7 +31,7 @@ O OverDocTeX é um PWA estático de edição LaTeX com revisão por versões con
 | Regras | `firestore.rules`, `storage.rules` | Toda a autorização e a coerência entre documentos gravados em lote |
 | Trabalho pesado | Web Workers no navegador | Compilação LaTeX (motor WebAssembly, planejado) e motor de diff |
 | IA | `@anthropic-ai/sdk`, `openai`, `@google/genai` no navegador | Escrita, paráfrase, estrutura, sumário, auditoria de referências |
-| Hospedagem | GitHub Pages | Arquivos estáticos; deploy pelo workflow `.github/workflows/deploy.yml` |
+| Hospedagem | GitHub Pages e Firebase Hosting | O mesmo site estático nos dois; deploy pelo workflow `.github/workflows/deploy.yml` |
 
 ## 3. Decisões arquiteturais
 
@@ -53,7 +53,7 @@ O OverDocTeX é um PWA estático de edição LaTeX com revisão por versões con
 
 **D9. Provedores de IA num registro único.** `PROVIDERS` (`src/lib/ai/providers/index.ts`) concentra rótulo, modelo padrão, catálogo, verificação de chave, listagem e criação de cada provedor. Adicionar um provedor não toca nas tarefas.
 
-**D10. Hospedagem estática no GitHub Pages.** O build publica sempre depois do deploy das regras e índices do Firebase. O subcaminho (`/<repositório>/`) vem de `BASE_PATH` e vai para o Vite, o manifesto e o roteador; um `404.html` igual ao `index.html` abre as rotas do SPA em acesso direto.
+**D10. Hospedagem estática no GitHub Pages e no Firebase Hosting.** O mesmo código publica nos dois, sempre depois do deploy das regras e índices do Firebase. O build roda duas vezes porque o caminho base muda: no Pages, o subcaminho (`/<repositório>/`) vem de `BASE_PATH` e vai para o Vite, o manifesto e o roteador, e um `404.html` igual ao `index.html` abre as rotas do SPA em acesso direto; no Hosting, o site fica na raiz (`<projeto>.web.app`) e as rotas abrem pelo rewrite para `index.html` do `firebase.json`. O Hosting tem a vantagem do domínio já autorizado no Firebase Auth e cabeçalhos de cache sob controle.
 
 ## 4. Estrutura de pastas
 
@@ -61,7 +61,7 @@ Itens marcados como *(planejado)* ainda não existem.
 
 ```
 over-doc-tex/
-├── .github/workflows/deploy.yml       CI em PRs; deploy do Firebase e do GitHub Pages na main
+├── .github/workflows/deploy.yml       CI em PRs; regras do Firebase, GitHub Pages e Firebase Hosting na main
 ├── docs/                              documentação de referência (00 a 11)
 ├── shared/firestore/
 │   ├── types.ts                       tipos de todas as coleções e âncoras

@@ -2,7 +2,7 @@
 
 Editor de documentos LaTeX em formato PWA, com revisão por versões congeladas, comentários ancorados no PDF no estilo Pull Request, pins com desenho livre, diff visual recompilado (removido em vermelho, inserido em verde) e assistente de IA contextual.
 
-O app é **100% estático** (GitHub Pages) com Firebase Auth, Firestore e Storage. Não há Cloud Functions nem servidor próprio, e a plataforma **não oferece IA própria**: cada usuário configura a sua (Claude, OpenAI ou Gemini, inclusive chave gratuita), com modelos de reserva para quando um atinge o limite.
+O app é **100% estático** (GitHub Pages e Firebase Hosting) com Firebase Auth, Firestore e Storage. Não há Cloud Functions nem servidor próprio, e a plataforma **não oferece IA própria**: cada usuário configura a sua (Claude, OpenAI ou Gemini, inclusive chave gratuita), com modelos de reserva para quando um atinge o limite.
 
 ## Estado atual
 
@@ -40,7 +40,7 @@ npm --prefix tests/rules install && npm run test:rules   # requer Java 21+
 
 ## Deploy
 
-Cada push na `main` roda o CI e, se tudo passar, publica as regras e os índices do Firebase e, em seguida, o PWA no GitHub Pages (`.github/workflows/deploy.yml`). Pull requests rodam só as verificações. A configuração única (variáveis, autenticação e papéis) está em [`docs/02-tecnologias.md`](docs/02-tecnologias.md#6-deploy-github-pages-com-firebase-antes).
+Cada push na `main` roda o CI e, se tudo passar, publica as regras e os índices do Firebase e, em seguida, o PWA em dois lugares ao mesmo tempo: GitHub Pages e Firebase Hosting (`.github/workflows/deploy.yml`). Pull requests rodam só as verificações. A configuração única (variáveis, autenticação, papéis e pré-requisitos) está em [`docs/02-tecnologias.md`](docs/02-tecnologias.md#6-deploy).
 
 O Cloud Storage exige o plano Blaze desde fevereiro de 2026 (com cotas gratuitas); Auth e Firestore funcionam no Spark.
 

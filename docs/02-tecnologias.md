@@ -8,7 +8,7 @@ Versões instaladas conforme o `package.json`. O projeto é ESM e não tem servi
 | --- | --- | --- | --- |
 | React | 18.3 | UI | Requisito do produto; `StrictMode` ligado |
 | TypeScript | 7.0 | Tipagem estrita | Compilador nativo. `baseUrl` não existe mais: `paths` são relativos ao tsconfig |
-| Vite | 8 | Dev server e build (Rolldown) | Base configurável por `BASE_PATH` (GitHub Pages) e chunks de fornecedores separados |
+| Vite | 8 | Dev server e build (Rolldown) | Base configurável por `BASE_PATH` (subcaminho no GitHub Pages, raiz no Firebase Hosting) e chunks de fornecedores separados |
 | Tailwind CSS | 3.4 | Estilo | Tokens via `hsl(var(--token) / <alpha-value>)` (`03-identidade-visual.md`) |
 | shadcn/ui (Radix UI) | Dialog 1.3, Select 2.4 e outros | Componentes acessíveis | Código copiado em `src/components/ui`, estilo "new-york" |
 | Wouter | 3 | Roteamento | `Router` com `base` igual ao subcaminho do Vite |
@@ -85,19 +85,24 @@ Não existe chave de IA da plataforma em lugar nenhum.
 | `npm run check:responsive` | Abre o build em 4 viewports e valida o contrato de 360px |
 | `npm run test:rules` | Regras nos emuladores (depois de `npm --prefix tests/rules install`; requer Java 21+) |
 
-## 6. Deploy (GitHub Pages com Firebase antes)
+## 6. Deploy
 
-O workflow `.github/workflows/deploy.yml` faz o CI e o deploy.
+O workflow `.github/workflows/deploy.yml` faz o CI e publica o mesmo site em dois lugares: GitHub Pages (`https://<dono>.github.io/<repositório>/`) e Firebase Hosting (`https://<projeto>.web.app`).
 
 | Job | Quando roda | O que faz |
 | --- | --- | --- |
 | `verify` | PR e main | Convenções, testes unitários, build e contrato de responsividade |
 | `rules-tests` | PR e main | Regras do Firestore e do Storage nos emuladores |
 | `firebase-deploy` | main e execução manual, depois de `verify` e `rules-tests` | `firebase deploy --only firestore:rules,firestore:indexes,storage` |
-| `pages-build` | main e execução manual, depois de `verify` | `npm run build:pages` com o subcaminho do Pages e a configuração pública do Firebase |
-| `pages-deploy` | depois de `firebase-deploy` **e** `pages-build` | Publica no GitHub Pages |
+| `web-build` | main e execução manual, depois de `verify` | Dois builds com a configuração pública do Firebase: `npm run build:pages` com o subcaminho do Pages (`dist/`) e `vite build` na raiz para o Hosting (`dist-hosting/`, guardado como artefato) |
+| `pages-deploy` | depois de `firebase-deploy` **e** `web-build` | Publica no GitHub Pages |
+| `hosting-deploy` | depois de `firebase-deploy` **e** `web-build` | `firebase deploy --only hosting` com o artefato do Hosting; a URL publicada aparece no ambiente `firebase-hosting` |
 
-Se o deploy do Firebase falhar, o site não é publicado: o app nunca vai ao ar contra regras antigas.
+Se o deploy das regras falhar, nenhum dos dois sites é publicado: o app nunca vai ao ar contra regras antigas. Pages e Hosting publicam em paralelo e um não bloqueia o outro.
+
+Os dois jobs do Firebase autenticam pela ação local `.github/actions/firebase-auth`, que confere a configuração e chama `google-github-actions/auth`.
+
+O cache do Hosting fica em `firebase.json`: `no-cache` para tudo (HTML, `sw.js`, manifesto), para que um deploy novo apareça na hora, e `immutable` por um ano em `/assets/**`, cujos nomes têm hash. Quando duas regras casam com o mesmo caminho, vale a última (conferido no emulador do Hosting), por isso `/assets/**` vem depois.
 
 ### Configuração única
 
@@ -125,14 +130,16 @@ Se o deploy do Firebase falhar, o site não é publicado: o app nunca vai ao ar 
    | Cloud Datastore Index Admin | `roles/datastore.indexAdmin` | Criar e remover índices e exceções de campo |
    | Cloud Storage for Firebase Viewer | `roles/firebasestorage.viewer` | Descobrir o bucket padrão (`firebasestorage.defaultBucket.get`) antes de publicar as regras do Storage |
    | Service Usage Consumer | `roles/serviceusage.serviceUsageConsumer` | Conferir se as APIs necessárias estão ativas |
+   | Firebase Hosting Admin | `roles/firebasehosting.admin` | Criar a versão do site, enviar os arquivos e publicar no Hosting (inclui `firebase.projects.get`, usado para achar o site padrão) |
 
    `Service Account User` não é necessário (só serve para deploy de Functions ou Hosting com conta de execução).
-5. **APIs ativas no projeto** (APIs e serviços > Biblioteca): Cloud Firestore API, Firebase Rules API e Cloud Storage for Firebase API. Os papéis acima não incluem ativar APIs, então o deploy falha se alguma estiver desligada.
+5. **APIs ativas no projeto** (APIs e serviços > Biblioteca): Cloud Firestore API, Firebase Rules API, Cloud Storage for Firebase API e Firebase Hosting API. Os papéis acima não incluem ativar APIs, então o deploy falha se alguma estiver desligada.
 6. **Banco do Firestore criado antes do primeiro deploy**, na região desejada (ex.: `southamerica-east1`). Se o banco não existir, o firebase-tools tenta criá-lo em `nam5` (EUA).
 7. **Cloud Storage:** plano Blaze e bucket padrão criado (Console > Storage > Começar) antes do primeiro deploy, senão o alvo `storage` falha.
-8. **Firebase Authentication:** ativar Google, e-mail e senha e **Link de e-mail**; em Settings > Authorized domains, adicionar `<dono>.github.io` (ou o domínio próprio).
+8. **Firebase Hosting:** ativado uma vez (Console > Hosting > Começar), para existir o site padrão; sem ele o deploy falha com "Could not determine the default site for the project".
+9. **Firebase Authentication:** ativar Google, e-mail e senha e **Link de e-mail**; em Settings > Authorized domains, adicionar `<dono>.github.io` (ou o domínio próprio). `<projeto>.web.app` e `<projeto>.firebaseapp.com` já vêm autorizados.
 
-O ambiente `firebase` do GitHub é criado no primeiro deploy; nele dá para exigir aprovação manual antes de publicar regras.
+Os ambientes `firebase` e `firebase-hosting` do GitHub são criados no primeiro deploy; neles dá para exigir aprovação manual antes de publicar. Guarde o secret e as variáveis no nível do repositório, não dentro de um ambiente: os dois jobs do Firebase usam ambientes diferentes.
 
 ## 7. Por que estas escolhas
 
