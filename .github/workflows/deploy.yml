@@ -1,0 +1,258 @@
+# CI e deploy.
+#
+# Pull request: verificações do código e testes das regras de segurança.
+# Push na main (ou execução manual):
+#   1. verificações e testes das regras (em paralelo);
+#   2. deploy das configurações do Firebase (regras do Firestore, índices e regras do
+#      Storage) em paralelo com o build do site, feito duas vezes: com o subcaminho do
+#      GitHub Pages e na raiz do domínio para o Firebase Hosting;
+#   3. publicação no GitHub Pages e no Firebase Hosting (em paralelo), somente depois
+#      do deploy das regras dar certo: o site nunca vai ao ar contra regras antigas.
+#
+# Não há Cloud Functions: o app é estático e a IA usa a chave de cada usuário.
+#
+# Configuração necessária: docs/02-tecnologias.md, seção "Deploy".
+
+name: CI e deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Em PR, um push novo cancela a verificação anterior; deploys na main nunca são interrompidos.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  NODE_VERSION: '22'
+  FIREBASE_TOOLS_VERSION: '15'
+
+jobs:
+  verify:
+    name: Verificações do código
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Convenções (docs/00-regras-para-ia.md)
+        run: npm run check:conventions
+
+      - name: Testes unitários (motor de IA, importação e exportação)
+        run: npm test
+
+      - name: Build do frontend (typecheck e PWA)
+        run: npm run build
+
+      - name: Instalar Playwright
+        run: |
+          npm install --no-save playwright@1
+          npx playwright install --with-deps chromium
+
+      - name: Contrato de responsividade (360px)
+        run: npm run check:responsive
+
+      - name: Guardar capturas da verificação de responsividade
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: capturas-responsividade
+          path: dist-screenshots/
+          if-no-files-found: ignore
+
+  rules-tests:
+    name: Testes das regras de segurança
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: tests/rules/package-lock.json
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Cache dos emuladores do Firebase
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ hashFiles('tests/rules/package-lock.json') }}
+
+      - name: Instalar dependências dos testes
+        run: npm ci --prefix tests/rules
+
+      - name: Regras do Firestore e do Storage nos emuladores
+        run: npm run test:rules
+
+  firebase-deploy:
+    name: Deploy das configurações do Firebase
+    needs: [verify, rules-tests]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment: firebase
+    permissions:
+      contents: read
+      id-token: write # necessário para Workload Identity Federation
+    env:
+      FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Autenticar no Firebase
+        uses: ./.github/actions/firebase-auth
+        with:
+          project-id: ${{ vars.FIREBASE_PROJECT_ID }}
+          credentials-json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          workload-identity-provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service-account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Deploy das regras, índices e Storage
+        run: |
+          npx -y "firebase-tools@${FIREBASE_TOOLS_VERSION}" deploy \
+            --only "firestore:rules,firestore:indexes,storage" \
+            --project "${FIREBASE_PROJECT_ID}" \
+            --non-interactive
+
+  web-build:
+    name: Build do site (GitHub Pages e Firebase Hosting)
+    needs: verify
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: read
+    env:
+      # Configuração pública do app web do Firebase (não é segredo).
+      VITE_FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
+      VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.FIREBASE_AUTH_DOMAIN }}
+      VITE_FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+      VITE_FIREBASE_STORAGE_BUCKET: ${{ vars.FIREBASE_STORAGE_BUCKET }}
+      VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.FIREBASE_MESSAGING_SENDER_ID }}
+      VITE_FIREBASE_APP_ID: ${{ vars.FIREBASE_APP_ID }}
+      VITE_USE_FIREBASE_EMULATORS: 'false'
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Configurar GitHub Pages
+        id: pages
+        uses: actions/configure-pages@v6
+
+      - name: Build para o GitHub Pages
+        env:
+          # "/<repositório>/" em páginas de projeto; "/" com domínio próprio.
+          BASE_PATH: ${{ steps.pages.outputs.base_path }}/
+        # build:pages também gera o 404.html que faz as rotas do SPA funcionarem no Pages.
+        run: npm run build:pages
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+
+      - name: Build para o Firebase Hosting
+        env:
+          # O Hosting serve na raiz do domínio (<projeto>.web.app). O typecheck já rodou
+          # no build anterior; aqui só o Vite, em outra pasta.
+          BASE_PATH: /
+        run: npx vite build --outDir dist-hosting
+
+      - name: Guardar o build do Hosting
+        uses: actions/upload-artifact@v7
+        with:
+          name: firebase-hosting
+          path: dist-hosting/
+          if-no-files-found: error
+          retention-days: 1
+
+  pages-deploy:
+    name: Publicar no GitHub Pages
+    needs: [firebase-deploy, web-build]
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Publicar
+        id: deployment
+        uses: actions/deploy-pages@v5
+
+  hosting-deploy:
+    name: Publicar no Firebase Hosting
+    needs: [firebase-deploy, web-build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # necessário para Workload Identity Federation
+    environment:
+      name: firebase-hosting
+      url: ${{ steps.deploy.outputs.url }}
+    env:
+      FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+    steps:
+      # firebase.json (pasta pública, rewrites e cabeçalhos) e a ação de autenticação.
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Baixar o build do Hosting
+        uses: actions/download-artifact@v8
+        with:
+          name: firebase-hosting
+          path: dist
+
+      - name: Autenticar no Firebase
+        uses: ./.github/actions/firebase-auth
+        with:
+          project-id: ${{ vars.FIREBASE_PROJECT_ID }}
+          credentials-json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          workload-identity-provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service-account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Deploy no Firebase Hosting
+        id: deploy
+        run: |
+          set -o pipefail
+          npx -y "firebase-tools@${FIREBASE_TOOLS_VERSION}" deploy \
+            --only hosting \
+            --project "${FIREBASE_PROJECT_ID}" \
+            --message "Commit ${GITHUB_SHA::7}" \
+            --non-interactive | tee hosting-deploy.log
+          # O site padrão costuma ter o id do projeto, mas pode ter sufixo: lê a URL do log.
+          url=$(grep -oE 'https://[A-Za-z0-9.-]+\.web\.app' hosting-deploy.log | tail -n 1 || true)
+          echo "url=${url:-https://${FIREBASE_PROJECT_ID}.web.app}" >> "$GITHUB_OUTPUT"
