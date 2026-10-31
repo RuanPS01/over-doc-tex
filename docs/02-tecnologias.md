@@ -40,7 +40,7 @@ Cada SDK vira um pedaço próprio do build e só é baixado quando o provedor é
 | `xzwasm` | 0.1.2 (exata) | Descompacta os pacotes `.tar.xz` do repositório próprio | MIT; o Siglum usa a global `self.xzwasm` |
 | `pdfjs-dist` | 6.4 (exata) | Desenho das páginas do PDF em canvas | Apache-2.0; carregado sob demanda, com o worker por `?url` |
 
-A `blake3-wasm`, dependência do Siglum, não empacota no Vite; um alias a troca por um módulo que falha ao carregar, e o Siglum usa o hash DJB2 dele (só serve para detectar mudanças). O repositório de pacotes extras (`public/texlive`, cerca de 120 pacotes e 3,4 MB, fora do git) é gerado por `node scripts/latex-packages.mjs`.
+A `blake3-wasm`, dependência do Siglum, não empacota no Vite; um alias a troca por um módulo que falha ao carregar, e o Siglum usa o hash DJB2 dele (só serve para detectar mudanças). O repositório de pacotes extras (`public/texlive`, cerca de 120 pacotes e 3,4 MB, fora do git, inclusive o `ulem` das marcações do diff visual) é gerado por `node scripts/latex-packages.mjs`. O cache de PDF do Siglum fica desligado (`useCache: false`): a chave dele é só o texto do principal, e um `\input` alterado devolveria o PDF antigo. O SyncTeX vem do próprio Siglum (`syncTexData`) e é lido por `src/lib/latex/synctex.ts`. O busytex não traz o bibtex: o `.bbl` é gerado por `src/lib/latex/bibliography.ts` e entregue ao compilador como `document.bbl`.
 
 ## 2. Firebase
 

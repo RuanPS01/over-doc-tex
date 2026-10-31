@@ -2,8 +2,10 @@ import { LogOut, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/features/auth/hooks/use-auth';
+import { NotificationBell } from '@/features/notifications/components/notification-bell';
 import { NewProjectDialog } from '@/features/projects/components/new-project-dialog';
 import { DemoProjectList, ProjectList } from '@/features/projects/components/project-list';
+import { MyReviewsSection } from '@/features/review/components/my-reviews-section';
 
 /** Rota /. Projetos do usuário (no modo demonstração, um projeto de exemplo). */
 export default function ProjectsPage() {
@@ -19,6 +21,7 @@ export default function ProjectsPage() {
           <Plus />
           <span className="hidden xs:inline">Novo projeto</span>
         </Button>
+        {user && <NotificationBell />}
         {user && (
           <Button size="sm" variant="ghost" aria-label="Sair da conta" title={user.email ?? undefined} onClick={() => void signOut()}>
             <LogOut />
@@ -35,7 +38,10 @@ export default function ProjectsPage() {
           <DemoProjectList />
         </>
       ) : (
-        <ProjectList onCreate={() => setCreating(true)} />
+        <>
+          <ProjectList onCreate={() => setCreating(true)} />
+          <MyReviewsSection />
+        </>
       )}
 
       <NewProjectDialog open={creating} onOpenChange={setCreating} />

@@ -25,7 +25,14 @@ Não há servidor: todo código de produto roda no navegador. O que antes seria 
 | Um hook de interface sem domínio (media query, teclado) | `src/hooks` |
 | Infraestrutura (parser, conversões, zip, download) | `src/lib/<assunto>` |
 | Lógica de IA (provedor, prompt, tarefa, contexto) | `src/lib/ai` (mapa completo em `11-servico-de-ia.md`) |
-| Compilação LaTeX (motor, preparação, log) | `src/lib/latex`; o diff, planejado, em `src/lib/diff` |
+| Compilação LaTeX (motor, preparação, log) | `src/lib/latex` |
+| Diff de texto, comparação de árvores e diff visual (LaTeX anotado e compilação) | `src/lib/diff` |
+| SyncTeX (leitura e buscas direta e reversa) | `src/lib/latex/synctex.ts` |
+| Bibliografia (.bbl a partir dos .bib) | `src/lib/latex/bibliography.ts` |
+| Reancoragem de trechos entre versões | `src/lib/pdf/reanchor.ts`; geometria do texto em `src/lib/pdf/page-text.ts` |
+| Âncoras de trecho e desenho (puro) | `src/lib/pdf/text-anchor.ts`, `src/lib/pdf/drawing.ts` |
+| Texto das páginas e carregamento do pdf.js | `src/lib/pdf` |
+| Componente que junta várias features (ex.: os diálogos do editor) | Na página da rota (`EditorDialogs` em `src/pages/editor-page.tsx`) ou por slot de props, nunca chamando hook de outra feature num componente |
 | Um pacote LaTeX que o compilador não tem | Nome do pacote do TeX Live em `ROOT_PACKAGES` de `scripts/latex-packages.mjs` (as dependências entram sozinhas) |
 | Tipo de documento do Firestore ou caminho | `shared/firestore/types.ts` e `paths.ts` |
 | Rota nova | `src/pages/<nome>-page.tsx` e uma linha em `src/app/router.tsx` |
@@ -128,13 +135,10 @@ Teste com chave real de provedor de IA só por variável de ambiente, nunca grav
 
 | Item | Detalhe | Prioridade |
 | --- | --- | --- |
-| BibTeX e Biber na compilação | O Siglum não roda; citações saem como `[?]`. Avaliar rodar o `bibtex8` do próprio binário do BusyTeX entre as passagens | Alta |
-| Navegação SyncTeX | O Siglum já gera o `.synctex`; ligar clique no PDF à linha do código e vice-versa | Média |
+| biblatex na compilação | Precisa do Biber, que não existe em WebAssembly; hoje só `\bibliography` (BibTeX) funciona, com o `.bbl` gerado em JavaScript | Média |
+| Estilos ABNT na bibliografia | `abntex2-alf` e `abntex2-num` saem como plain numérico; o formato do abntex2cite precisaria de um gerador próprio | Média |
 | Assets do Siglum hospedados por nós | Hoje motor e conjuntos vêm de `cdn.siglum.org` (projeto pequeno, de terceiros). Espelhar no Hosting exige plano pago pelo tráfego de cerca de 45 MB por pessoa | Média |
-| Camadas do pdf.js para a revisão | O visualizador desenha as páginas; faltam a camada de texto (seleção) e a de anotação | Alta |
-| Editor somente leitura para leitores | Quem tem papel `viewer` hoje digita e vê "Sem permissão para editar" no salvamento; o Monaco deveria abrir em modo leitura e esconder Importar | Média |
-| Gerenciar projetos | Renomear, arquivar e convidar coautores pela interface (as regras já permitem renomear e convidar) | Média |
-| Revisão | `ReviewPage`, snapshot no navegador, convite do revisor por link de e-mail (`sendSignInLinkToEmail`), threads, desenho e pins | Alta |
+| Arquivar projeto | Campo `archivedAt` existe, mas as regras não deixam gravá-lo; liberar para o dono e esconder da lista | Baixa |
 | Coleta de lixo de binários | Blobs e PDFs de diff sem referência ficam no banco para sempre (sobrescrever um arquivo cria outro blob). Uma ação "Limpar arquivos não usados" precisaria listar `files` e os manifestos de todos os snapshots e liberar exclusão de blob nas regras com cuidado, porque snapshots dependem deles | Média |
 | Uso da cota do Firestore | Mostrar no app quanto o projeto ocupa (soma de `totalBytes` dos cabeçalhos) e avisar perto do limite de 1 GiB | Média |
 | Provedor OpenAI com chave real | Coberto por tipos e pelo contrato, mas ainda não exercitado contra a API (Claude foi testado com API simulada e Gemini com chave real) | Média |
@@ -143,4 +147,4 @@ Teste com chave real de provedor de IA só por variável de ambiente, nunca grav
 | Ícones PNG do PWA | Gerar 192 e 512 px (e maskable) a partir de `public/icons/icon.svg` | Baixa |
 | Monaco empacotado localmente | Se a abertura offline na primeira visita virar requisito | Baixa |
 | Tailwind 4 | Migrar para configuração CSS-first quando o padrão do shadcn/ui estabilizar para o projeto | Baixa |
-| Testes unitários | Estender o Vitest para `bibtex.ts`, `model-chain.ts` isolado e o futuro motor de diff | Média |
+| Testes unitários | Estender o Vitest para `bibtex.ts` e `model-chain.ts` isolado | Média |

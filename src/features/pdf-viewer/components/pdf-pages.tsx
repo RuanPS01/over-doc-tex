@@ -1,20 +1,6 @@
-import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
-import { useEffect, useRef, useState } from 'react';
-
-type PdfJs = typeof import('pdfjs-dist');
-
-let pdfjsPromise: Promise<PdfJs> | null = null;
-
-/** O pdf.js (cerca de 1 MB com o worker) só carrega quando o primeiro PDF aparece. */
-function loadPdfjs(): Promise<PdfJs> {
-  pdfjsPromise ??= Promise.all([import('pdfjs-dist'), import('pdfjs-dist/build/pdf.worker.min.mjs?url')]).then(
-    ([pdfjs, worker]) => {
-      pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
-      return pdfjs;
-    },
-  );
-  return pdfjsPromise;
-}
+import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask, TextLayer } from 'pdfjs-dist';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { loadPdfjs } from '@/lib/pdf/pdfjs';
 
 interface PdfPageProps {
   doc: PDFDocumentProxy;
@@ -22,12 +8,17 @@ interface PdfPageProps {
   cssWidth: number;
   /** Altura sobre largura da página. */
   aspect: number;
+  overlay?: ReactNode;
+  /** Camada de texto do pdf.js (seleção de trechos na revisão). */
+  withText: boolean;
+  onDoubleClick?: (pageNumber: number, x: number, y: number) => void;
 }
 
 /** Uma página: desenhada no canvas quando chega perto da área visível. */
-function PdfPage({ doc, pageNumber, cssWidth, aspect }: PdfPageProps) {
+function PdfPage({ doc, pageNumber, cssWidth, aspect, overlay, withText, onDoubleClick }: PdfPageProps) {
   const holderRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const textRef = useRef<HTMLDivElement>(null);
   const [isNear, setIsNear] = useState(pageNumber <= 2);
 
   useEffect(() => {
@@ -68,15 +59,51 @@ function PdfPage({ doc, pageNumber, cssWidth, aspect }: PdfPageProps) {
     };
   }, [doc, pageNumber, cssWidth, isNear]);
 
+  // Spans transparentes do pdf.js sobre o canvas: o navegador seleciona o texto real da página.
+  useEffect(() => {
+    if (!withText || !isNear || cssWidth <= 0) return;
+    let layer: TextLayer | null = null;
+    let cancelled = false;
+    void Promise.all([loadPdfjs(), doc.getPage(pageNumber)])
+      .then(([pdfjs, page]) => {
+        const container = textRef.current;
+        if (cancelled || !container) return;
+        container.replaceChildren();
+        const viewport = page.getViewport({ scale: cssWidth / page.getViewport({ scale: 1 }).width });
+        container.style.setProperty('--total-scale-factor', String(viewport.scale));
+        layer = new pdfjs.TextLayer({ textContentSource: page.streamTextContent(), container, viewport });
+        // As posições dos spans são porcentagens: a camada acompanha o tamanho da página.
+        container.style.width = '100%';
+        container.style.height = '100%';
+        return layer.render();
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+      layer?.cancel();
+    };
+  }, [doc, pageNumber, cssWidth, isNear, withText]);
+
   return (
     <div
       ref={holderRef}
       role="img"
       aria-label={`Página ${pageNumber}`}
+      data-pdf-page={pageNumber}
+      onDoubleClick={
+        onDoubleClick
+          ? (event) => {
+              const box = event.currentTarget.getBoundingClientRect();
+              onDoubleClick(pageNumber, (event.clientX - box.left) / box.width, (event.clientY - box.top) / box.height);
+            }
+          : undefined
+      }
       className="relative shrink-0 bg-card shadow-md"
       style={{ width: cssWidth, height: cssWidth * aspect }}
     >
       <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
+      {withText && <div ref={textRef} className="textLayer" />}
+      {overlay}
     </div>
   );
 }
@@ -88,14 +115,24 @@ interface PdfPagesProps {
   /** Porcentagem: 100 ocupa a largura do painel (até 820 px). */
   zoom: number;
   onError: (message: string) => void;
+  /** Camada sobre cada página (marcadores da revisão), em coordenadas da página. */
+  renderOverlay?: (pageNumber: number) => ReactNode;
+  /** Liga a camada de texto (seleção de trechos). */
+  textLayer?: boolean;
+  /** Tamanho de cada página em pontos do PDF, quando o documento abre. */
+  onPageSizes?: (sizes: Array<{ width: number; height: number }>) => void;
+  /** Duplo clique numa página, com o ponto normalizado (0 a 1). */
+  onPageDoubleClick?: (pageNumber: number, x: number, y: number) => void;
 }
 
 /** Páginas do PDF compilado, desenhadas pelo pdf.js. */
-export function PdfPages({ data, availableWidth, zoom, onError }: PdfPagesProps) {
+export function PdfPages({ data, availableWidth, zoom, onError, renderOverlay, textLayer = false, onPageSizes, onPageDoubleClick }: PdfPagesProps) {
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [aspects, setAspects] = useState<number[]>([]);
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
+  const onPageSizesRef = useRef(onPageSizes);
+  onPageSizesRef.current = onPageSizes;
 
   useEffect(() => {
     let cancelled = false;
@@ -109,12 +146,12 @@ export function PdfPages({ data, availableWidth, zoom, onError }: PdfPagesProps)
           Array.from({ length: loaded.numPages }, (_, index) => loaded.getPage(index + 1)),
         );
         if (cancelled) return;
-        setAspects(
-          pages.map((page) => {
-            const viewport = page.getViewport({ scale: 1 });
-            return viewport.height / viewport.width;
-          }),
-        );
+        const sizes = pages.map((page) => {
+          const viewport = page.getViewport({ scale: 1 });
+          return { width: viewport.width, height: viewport.height };
+        });
+        setAspects(sizes.map((size) => size.height / size.width));
+        onPageSizesRef.current?.(sizes);
         setDoc(loaded);
       })
       .catch((error: unknown) => {
@@ -134,7 +171,16 @@ export function PdfPages({ data, availableWidth, zoom, onError }: PdfPagesProps)
   return (
     <div className="mx-auto flex w-max flex-col items-center gap-4">
       {aspects.map((aspect, index) => (
-        <PdfPage key={index} doc={doc} pageNumber={index + 1} cssWidth={cssWidth} aspect={aspect} />
+        <PdfPage
+          key={index}
+          doc={doc}
+          pageNumber={index + 1}
+          cssWidth={cssWidth}
+          aspect={aspect}
+          overlay={renderOverlay?.(index + 1)}
+          withText={textLayer}
+          onDoubleClick={onPageDoubleClick}
+        />
       ))}
     </div>
   );

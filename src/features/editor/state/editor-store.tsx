@@ -1,6 +1,14 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
+import type { ProjectRole } from '@shared/firestore/types';
 
 export type EditorPane = 'code' | 'pdf';
+
+/** Diálogos e painéis do cabeçalho; um por vez. */
+export type EditorDialog =
+  | { kind: 'history' }
+  | { kind: 'changes'; /** Versão usada como base; nulo escolhe a mais recente. */ baseSnapshotId: string | null }
+  | { kind: 'request-review' }
+  | { kind: 'settings' };
 
 /** Pedido para o editor de código mostrar uma linha (vem da lista de erros da compilação). */
 export interface RevealRequest {
@@ -13,6 +21,9 @@ export interface RevealRequest {
 interface EditorStore {
   projectId: string;
   projectName: string;
+  role: ProjectRole;
+  /** Dono e editores alteram arquivos, congelam versões e pedem revisão. */
+  canEdit: boolean;
   activeFileId: string;
   /** Painel visível no celular em retrato (no desktop os dois aparecem). */
   activePane: EditorPane;
@@ -20,12 +31,15 @@ interface EditorStore {
   aiOpen: boolean;
   importOpen: boolean;
   revealRequest: RevealRequest | null;
+  dialog: EditorDialog | null;
   openFile: (fileId: string) => void;
   revealLine: (fileId: string, line: number) => void;
   setActivePane: (pane: EditorPane) => void;
   setFileTreeOpen: (open: boolean) => void;
   setAiOpen: (open: boolean) => void;
   setImportOpen: (open: boolean) => void;
+  openDialog: (dialog: EditorDialog) => void;
+  closeDialog: () => void;
 }
 
 const EditorStoreContext = createContext<EditorStore | null>(null);
@@ -34,11 +48,13 @@ const EditorStoreContext = createContext<EditorStore | null>(null);
 export function EditorStoreProvider({
   projectId,
   projectName,
+  role,
   initialFileId,
   children,
 }: {
   projectId: string;
   projectName: string;
+  role: ProjectRole;
   initialFileId: string;
   children: ReactNode;
 }) {
@@ -48,17 +64,21 @@ export function EditorStoreProvider({
   const [aiOpen, setAiOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [revealRequest, setRevealRequest] = useState<RevealRequest | null>(null);
+  const [dialog, setDialog] = useState<EditorDialog | null>(null);
 
   const value = useMemo<EditorStore>(
     () => ({
       projectId,
       projectName,
+      role,
+      canEdit: role === 'owner' || role === 'editor',
       activeFileId,
       activePane,
       fileTreeOpen,
       aiOpen,
       importOpen,
       revealRequest,
+      dialog,
       openFile: (fileId) => {
         setActiveFileId(fileId);
         setActivePane('code');
@@ -73,8 +93,10 @@ export function EditorStoreProvider({
       setFileTreeOpen,
       setAiOpen,
       setImportOpen,
+      openDialog: setDialog,
+      closeDialog: () => setDialog(null),
     }),
-    [projectId, projectName, activeFileId, activePane, fileTreeOpen, aiOpen, importOpen, revealRequest],
+    [projectId, projectName, role, activeFileId, activePane, fileTreeOpen, aiOpen, importOpen, revealRequest, dialog],
   );
 
   return <EditorStoreContext.Provider value={value}>{children}</EditorStoreContext.Provider>;

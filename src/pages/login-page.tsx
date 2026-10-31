@@ -1,3 +1,4 @@
+import { Mail } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
 import { useLocation, useSearch } from 'wouter';
 import { Button } from '@/components/ui/button';
@@ -15,6 +16,8 @@ const AUTH_ERRORS: Record<string, string> = {
   'auth/unauthorized-domain':
     'Este endereço não está autorizado no Firebase Authentication. Adicione o domínio em Authentication > Settings > Authorized domains.',
   'auth/operation-not-allowed': 'Este método de login não está ativado no Firebase Authentication.',
+  'auth/invalid-action-code': 'O link de acesso expirou ou já foi usado. Peça um novo.',
+  'auth/expired-action-code': 'O link de acesso expirou. Peça um novo.',
 };
 
 function messageFor(error: unknown): string {
@@ -30,13 +33,17 @@ function safeNext(search: string): string {
 
 /** Rota /login: Google ou e-mail e senha (Firebase Authentication). */
 export default function LoginPage() {
-  const { signInWithGoogle, signInWithEmail, signUpWithEmail, status } = useAuth();
+  const { signInWithGoogle, signInWithEmail, signUpWithEmail, sendEmailLink, isEmailLink, completeEmailLink, status } = useAuth();
   const [, navigate] = useLocation();
-  const next = safeNext(useSearch());
+  const search = useSearch();
+  const next = safeNext(search);
+  // Chegou pelo link de acesso enviado por e-mail (convite de revisão ou "Entrar sem senha").
+  const [isCompletingLink] = useState(() => isEmailLink());
   const [mode, setMode] = useState<'sign-in' | 'sign-up'>('sign-in');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(() => new URLSearchParams(search).get('email') ?? '');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
 
   // Quem já tem sessão não precisa ver o formulário.
@@ -62,8 +69,52 @@ export default function LoginPage() {
     void run(() => (mode === 'sign-up' ? signUpWithEmail(email, password) : signInWithEmail(email, password)));
   };
 
+  const handleSendLink = async () => {
+    setError(null);
+    setNotice(null);
+    if (!email.trim()) {
+      setError('Informe o e-mail para receber o link de acesso.');
+      return;
+    }
+    setIsBusy(true);
+    try {
+      await sendEmailLink(email.trim().toLowerCase(), next);
+      setNotice(`Enviamos um link de acesso para ${email.trim()}. Abra o e-mail e toque no link para entrar.`);
+    } catch (caught) {
+      setError(messageFor(caught));
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
   const isDemo = status === 'demo';
   const isSignUp = mode === 'sign-up';
+
+  if (isCompletingLink) {
+    return (
+      <div className="flex min-h-viewport items-center justify-center px-4">
+        <form
+          className="flex w-full max-w-sm flex-col gap-4 rounded-xl border bg-card p-6 shadow-sm"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void run(() => completeEmailLink(email.trim().toLowerCase()));
+          }}
+        >
+          <h1 className="text-lg font-semibold">Entrar com o link de acesso</h1>
+          <p className="text-sm text-muted-foreground">Confirme o e-mail que recebeu o link.</p>
+          <Input type="email" required autoComplete="email" placeholder="E-mail" value={email} onChange={(event) => setEmail(event.target.value)} />
+          <Button type="submit" disabled={isBusy}>
+            Entrar
+          </Button>
+          {error && (
+            <p className="text-sm text-destructive" role="alert">
+              {error}
+            </p>
+          )}
+        </form>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-viewport items-center justify-center px-4">
@@ -99,9 +150,20 @@ export default function LoginPage() {
             {isSignUp ? 'Criar conta' : 'Entrar com e-mail'}
           </Button>
         </form>
+        {!isSignUp && (
+          <Button variant="outline" disabled={isDemo || isBusy} onClick={() => void handleSendLink()}>
+            <Mail />
+            Receber link de acesso por e-mail
+          </Button>
+        )}
         {error && (
           <p className="text-sm text-destructive" role="alert">
             {error}
+          </p>
+        )}
+        {notice && (
+          <p className="text-sm text-muted-foreground" role="status">
+            {notice}
           </p>
         )}
         <Button

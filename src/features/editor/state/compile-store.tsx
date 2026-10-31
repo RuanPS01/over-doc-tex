@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { useLayoutMode } from '@/hooks/use-layout-mode';
 import type { CompileStage } from '@/lib/latex/compiler';
 import type { TexIssue } from '@/lib/latex/prepare';
+import { pdfAt, type SyncData } from '@/lib/latex/synctex';
 import { useLatexCompile, type ProjectCompileOutcome } from '../hooks/use-latex-compile';
 import { useEditorStore } from './editor-store';
 
@@ -10,6 +11,12 @@ interface CompileStore {
   stage: CompileStage | null;
   /** Último PDF gerado com sucesso: continua na tela quando a compilação seguinte falha. */
   pdf: Uint8Array | null;
+  /** SyncTeX desse PDF, para ir do PDF ao código e de volta. */
+  synctex: SyncData | null;
+  /** Ponto do PDF a mostrar (busca direta do SyncTeX), em pontos do PDF. */
+  pdfFocus: { page: number; yPt: number; nonce: number } | null;
+  /** Mostra no PDF o trecho gerado pela linha do código; falso se o SyncTeX não achou. */
+  showInPdf: (path: string, line: number) => boolean;
   /** Resultado da última compilação (sucesso ou falha). */
   last: ProjectCompileOutcome | null;
   compile: () => void;
@@ -28,6 +35,8 @@ export function CompileStoreProvider({ children }: { children: ReactNode }) {
   const [isCompiling, setIsCompiling] = useState(false);
   const [stage, setStage] = useState<CompileStage | null>(null);
   const [pdf, setPdf] = useState<Uint8Array | null>(null);
+  const [synctex, setSynctex] = useState<SyncData | null>(null);
+  const [pdfFocus, setPdfFocus] = useState<CompileStore['pdfFocus']>(null);
   const [last, setLast] = useState<ProjectCompileOutcome | null>(null);
   const busy = useRef(false);
   // O arquivo aberto vira o principal se tiver \documentclass.
@@ -43,6 +52,7 @@ export function CompileStoreProvider({ children }: { children: ReactNode }) {
         setLast(outcome);
         if (outcome.pdf) {
           setPdf(outcome.pdf);
+          setSynctex(outcome.synctex);
           // No celular em retrato só um painel aparece: mostra o resultado.
           if (layoutMode === 'mobile-portrait') setActivePane('pdf');
         }
@@ -53,6 +63,7 @@ export function CompileStoreProvider({ children }: { children: ReactNode }) {
           pdf: null,
           mainPath: null,
           durationMs: 0,
+          synctex: null,
           issues: [{ kind: 'error', message: `Não foi possível iniciar o compilador: ${String(error)}`, file: null, line: null } satisfies TexIssue],
         });
       })
@@ -76,9 +87,20 @@ export function CompileStoreProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, [compile]);
 
+  const showInPdf = useCallback(
+    (path: string, line: number) => {
+      const found = synctex ? pdfAt(synctex, path, line) : null;
+      if (!found) return false;
+      setPdfFocus((previous) => ({ page: found.page, yPt: found.y, nonce: (previous?.nonce ?? 0) + 1 }));
+      if (layoutMode === 'mobile-portrait') setActivePane('pdf');
+      return true;
+    },
+    [synctex, layoutMode, setActivePane],
+  );
+
   const value = useMemo<CompileStore>(
-    () => ({ isCompiling, stage, pdf, last, compile }),
-    [isCompiling, stage, pdf, last, compile],
+    () => ({ isCompiling, stage, pdf, synctex, pdfFocus, showInPdf, last, compile }),
+    [isCompiling, stage, pdf, synctex, pdfFocus, showInPdf, last, compile],
   );
   return <CompileStoreContext.Provider value={value}>{children}</CompileStoreContext.Provider>;
 }

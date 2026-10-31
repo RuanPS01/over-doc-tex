@@ -10,7 +10,8 @@
  */
 import siglumWorkerUrl from 'siglum-worker?url';
 import type { SiglumCompiler } from '@siglum/engine';
-import { mainLineOffset, parseTexLog, type CompileInput, type TexIssue } from './prepare';
+import { mainLineOffset, parseTexLog, projectPathFromTex, type CompileInput, type TexIssue } from './prepare';
+import { parseSynctex, type SyncData } from './synctex';
 
 const SIGLUM_CDN = 'https://cdn.siglum.org/tl2025';
 
@@ -21,6 +22,8 @@ export interface LatexCompileResult {
   pdf: Uint8Array | null;
   issues: TexIssue[];
   durationMs: number;
+  /** Mapa PDF e código; nulo se o TeX não gerou o SyncTeX. */
+  synctex: SyncData | null;
 }
 
 let compilerPromise: Promise<SiglumCompiler> | null = null;
@@ -85,13 +88,24 @@ export function compileLatex(
       logLines = [];
       workerNotes = [];
       onStage('compiling');
-      const result = await compiler.compile(input.source, { engine: 'pdflatex', additionalFiles: input.additionalFiles });
-      const issues = parseTexLog(logLines, mainPath, mainLineOffset(input.source, workerNotes));
+      // useCache: false porque o cache do Siglum usa só o texto do principal como chave: mudar um
+      // arquivo de \input devolveria o PDF antigo (e sem SyncTeX).
+      const result = await compiler.compile(input.source, { engine: 'pdflatex', additionalFiles: input.additionalFiles, useCache: false });
+      const lineOffset = mainLineOffset(input.source, workerNotes);
+      const issues = parseTexLog(logLines, mainPath, lineOffset);
       const pdf = result.success && result.pdf ? new Uint8Array(result.pdf) : null;
+      const rawSynctex = (result as { syncTexData?: string | null }).syncTexData ?? null;
+      const synctex =
+        pdf && rawSynctex
+          ? parseSynctex(rawSynctex, {
+              toProjectPath: (raw) => projectPathFromTex(raw, mainPath),
+              lineOffset: (path) => (path === mainPath ? lineOffset : 0),
+            })
+          : null;
       if (!pdf && !issues.some((issue) => issue.kind !== 'warning')) {
         issues.unshift({ kind: 'error', message: result.error ?? 'A compilação falhou sem mensagem do TeX.', file: null, line: null });
       }
-      return { ok: pdf !== null, pdf, issues, durationMs: Math.round(performance.now() - started) };
+      return { ok: pdf !== null, pdf, issues, durationMs: Math.round(performance.now() - started), synctex };
     } finally {
       stageListener = null;
     }

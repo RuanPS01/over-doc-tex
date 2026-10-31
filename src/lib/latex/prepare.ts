@@ -1,7 +1,9 @@
 /**
  * Preparação do projeto para o compilador (puro, sem I/O): qual arquivo é o
- * principal, quais arquivos vão junto e como ler os erros do log do TeX.
+ * principal, quais arquivos vão junto (inclusive o .bbl gerado) e como ler os
+ * erros do log do TeX.
  */
+import { buildBbl } from './bibliography';
 
 export interface ProjectTextFile {
   path: string;
@@ -79,7 +81,29 @@ export function buildCompileInput(
     if (file.path !== mainPath) additionalFiles[relativeToMain(file.path, mainPath)] = file.content;
   }
   for (const [path, data] of binaries) additionalFiles[relativeToMain(path, mainPath)] = data;
-  return { source: adaptBabel(main.content), additionalFiles };
+  let source = adaptBabel(main.content);
+  // O compilador não tem bibtex: o .bbl vem pronto (o principal roda como document.tex).
+  const bibliography = buildBbl(new Map(texts.map((file) => [file.path, file.content])), mainPath);
+  if (bibliography) {
+    additionalFiles['document.bbl'] = bibliography.bbl;
+    // O Siglum decide as passagens olhando só o principal; sem \cite nele, faria uma só e as citações ficariam [?].
+    if (!/\\(cite|bibliography)/.test(main.content)) source += '\n% \\bibliography{} (OverDocTeX: citações em arquivos de \\input)\n';
+  }
+  return { source, additionalFiles };
+}
+
+/**
+ * Caminho que o TeX usa (no log e no SyncTeX) convertido para o caminho no
+ * projeto. O principal aparece como /document.tex; os demais, relativos à
+ * pasta do principal. Arquivos do TeX Live devolvem nulo.
+ */
+export function projectPathFromTex(raw: string, mainPath: string): string | null {
+  // O SyncTeX do Siglum escreve os incluídos como //./cap/um.tex; o log, como ./cap/um.tex.
+  const clean = raw.replace(/^(?:\.?\/)+/, '');
+  if (clean.startsWith('texlive/') || clean.startsWith('texmf')) return null;
+  if (clean === 'document.tex') return mainPath;
+  const folder = mainPath.includes('/') ? mainPath.slice(0, mainPath.lastIndexOf('/') + 1) : '';
+  return folder + clean;
 }
 
 export interface TexIssue {
@@ -125,6 +149,10 @@ export function parseTexLog(lines: readonly string[], mainPath: string, lineOffs
   const innermost = () => [...stack].reverse().find((entry) => entry !== null) ?? mainPath;
   const innermostProject = () => [...stack].reverse().find((entry) => entry !== null && entry !== TEXLIVE) ?? mainPath;
 
+  // Citação e referência indefinidas na primeira passagem são normais (o .aux ainda não existe):
+  // só contam os avisos da última passagem do TeX.
+  const lastPass = lines.reduce((found, line, index) => (/^This is (pdf|Xe|LuaHB)?TeX,/.test(line) ? index : found), 0);
+
   for (let index = 0; index < lines.length; index++) {
     const line = lines[index]!;
 
@@ -147,7 +175,7 @@ export function parseTexLog(lines: readonly string[], mainPath: string, lineOffs
       const message = line.slice(2).replace(/^(LaTeX|Package \w+) Error:\s*/, '').trim();
       if (!/Emergency stop|Fatal error occurred/.test(message)) issues.push({ kind: 'error', message, file, line: lineNumber });
     } else {
-      const warning = line.match(/LaTeX Warning: (Citation|Reference) `([^']+)' .*undefined/);
+      const warning = index >= lastPass ? line.match(/LaTeX Warning: (Citation|Reference) `([^']+)' .*undefined/) : null;
       if (warning) {
         issues.push({ kind: 'warning', message: `${warning[1] === 'Citation' ? 'Citação' : 'Referência'} ${warning[2]} indefinida`, file: innermostProject(), line: null });
       }

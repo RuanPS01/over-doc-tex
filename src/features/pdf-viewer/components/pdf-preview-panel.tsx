@@ -21,6 +21,11 @@ export interface PdfPreviewPanelProps {
   issues: TexIssue[];
   onCompile: () => void;
   onIssueSelect: (issue: TexIssue) => void;
+  /** SyncTeX: duplo clique no PDF (ponto normalizado) leva ao código. */
+  onPageDoubleClick?: (pageNumber: number, x: number, y: number) => void;
+  onPageSizes?: (sizes: Array<{ width: number; height: number }>) => void;
+  /** Posição a mostrar (vinda do código pelo SyncTeX); `nonce` repete o mesmo ponto. */
+  focus?: { page: number; y: number; nonce: number } | null;
 }
 
 const ISSUE_ICONS = { error: CircleX, 'missing-package': CircleX, warning: AlertTriangle } as const;
@@ -39,6 +44,9 @@ export function PdfPreviewPanel({
   issues,
   onCompile,
   onIssueSelect,
+  onPageDoubleClick,
+  onPageSizes,
+  focus,
 }: PdfPreviewPanelProps) {
   const [zoomIndex, setZoomIndex] = useState(2);
   const zoom = ZOOM_STEPS[zoomIndex] ?? 100;
@@ -59,6 +67,19 @@ export function PdfPreviewPanel({
   }, []);
 
   useEffect(() => setViewerError(null), [pdf]);
+
+  // Rola até o ponto pedido e marca a linha por um instante.
+  const [marker, setMarker] = useState<{ page: number; y: number } | null>(null);
+  useEffect(() => {
+    if (!focus) return;
+    const area = scrollRef.current;
+    const page = area?.querySelector<HTMLElement>(`[data-pdf-page="${focus.page}"]`);
+    if (!area || !page) return;
+    area.scrollTo({ top: page.offsetTop + focus.y * page.offsetHeight - area.clientHeight / 3, behavior: 'smooth' });
+    setMarker({ page: focus.page, y: focus.y });
+    const timer = setTimeout(() => setMarker(null), 2000);
+    return () => clearTimeout(timer);
+  }, [focus]);
   // Erros novos abrem a lista de novo.
   useEffect(() => setIssuesOpen(true), [issues]);
 
@@ -111,7 +132,23 @@ export function PdfPreviewPanel({
 
       <div ref={scrollRef} className="relative min-h-0 flex-1 overflow-auto p-3 sm:p-4">
         {pdf && !viewerError ? (
-          <PdfPages data={pdf} availableWidth={availableWidth} zoom={zoom} onError={setViewerError} />
+          <PdfPages
+            data={pdf}
+            availableWidth={availableWidth}
+            zoom={zoom}
+            onError={setViewerError}
+            onPageSizes={onPageSizes}
+            onPageDoubleClick={onPageDoubleClick}
+            renderOverlay={(page) =>
+              marker?.page === page ? (
+                <span
+                  aria-hidden
+                  style={{ top: `${marker.y * 100}%` }}
+                  className="pointer-events-none absolute inset-x-2 h-5 -translate-y-1/2 animate-pulse rounded bg-annotation-1/40"
+                />
+              ) : null
+            }
+          />
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center text-sm text-muted-foreground">
             {viewerError ? (

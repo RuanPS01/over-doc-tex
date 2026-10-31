@@ -1,4 +1,4 @@
-import type { DocumentDoc, FileDoc, ProjectDoc } from '@shared/firestore/types';
+import type { DocumentDoc, FileDoc, MemberProfile, ProjectDoc } from '@shared/firestore/types';
 
 /** O documento principal e o arquivo inicial têm ids fixos, então o editor sabe o que abrir. */
 export const MAIN_DOCUMENT_ID = 'main';
@@ -67,6 +67,8 @@ export interface NewProjectDocs {
  */
 export function buildNewProject(input: {
   uid: string;
+  /** Nome e e-mail de quem cria, para a lista de membros. */
+  profile?: MemberProfile;
   name: string;
   content: string;
   contentHash: string;
@@ -81,6 +83,7 @@ export function buildNewProject(input: {
       members: { [input.uid]: 'owner' },
       memberIds: [input.uid],
       pendingMembers: {},
+      memberProfiles: input.profile ? { [input.uid]: input.profile } : {},
       engine: 'pdflatex',
       mainDocumentId: MAIN_DOCUMENT_ID,
       latestSnapshotId: null,
@@ -115,4 +118,10 @@ export function buildNewProject(input: {
       updatedBy: input.uid,
     },
   };
+}
+
+/** Nome e e-mail exibidos na lista de membros. */
+export function memberProfileOf(user: { displayName: string | null; email: string | null }): MemberProfile {
+  const email = (user.email ?? '').toLowerCase();
+  return { name: user.displayName?.trim() || email.split('@')[0] || 'Sem nome', email };
 }

@@ -189,21 +189,40 @@ service cloud.firestore {
           && next().counters.snapshots == resource.data.counters.snapshots;
       }
 
+      function profiles(doc) {
+        return doc.get('memberProfiles', {});
+      }
+
       // O dono gerencia membros e convites; o dono continua dono e convite nunca é de dono.
+      // Ao remover alguém, a entrada dele em memberProfiles pode sair junto.
       function managingMembers() {
         return isOwner(pid)
-          && onlyChanges(['members', 'memberIds', 'pendingMembers', 'updatedAt'])
+          && onlyChanges(['members', 'memberIds', 'pendingMembers', 'memberProfiles', 'updatedAt'])
+          && profiles(next()).diff(profiles(resource.data)).addedKeys().size() == 0
+          && profiles(next()).diff(profiles(resource.data)).changedKeys().size() == 0
+          && profiles(next()).keys().hasOnly(next().memberIds)
           && next().members[resource.data.ownerId] == 'owner'
           && next().members.values().hasOnly(['owner', 'editor', 'viewer'])
           && next().memberIds.toSet() == next().members.keys().toSet()
           && pending(next()).values().hasOnly(['editor', 'viewer']);
       }
 
+      // memberProfiles mostra nome e e-mail dos membros (users/{uid} é privado):
+      // cada um só grava a própria entrada.
+      function onlyOwnProfile() {
+        return profiles(next()).diff(profiles(resource.data)).affectedKeys().hasOnly([uid()]);
+      }
+
+      function updatingOwnProfile() {
+        return isMember(pid) && onlyChanges(['memberProfiles']) && onlyOwnProfile();
+      }
+
       // O convidado aceita sozinho: entra com o papel do convite e o convite some.
       function claimingInvite() {
         let role = invitedRole();
         return role != null
-          && onlyChanges(['members', 'memberIds', 'pendingMembers', 'updatedAt'])
+          && onlyChanges(['members', 'memberIds', 'pendingMembers', 'memberProfiles', 'updatedAt'])
+          && onlyOwnProfile()
           && next().members.diff(resource.data.members).affectedKeys().hasOnly([uid()])
           && next().members[uid()] == role
           && next().memberIds.toSet() == resource.data.memberIds.toSet().union([uid()].toSet())
@@ -221,7 +240,7 @@ service cloud.firestore {
         && next().memberIds == [uid()]
         && pending(next()).size() == 0
         && next().counters == {'snapshots': 0, 'reviews': 0};
-      allow update: if editingDetails() || freezingSnapshot() || openingReview() || managingMembers() || claimingInvite();
+      allow update: if editingDetails() || freezingSnapshot() || openingReview() || managingMembers() || claimingInvite() || updatingOwnProfile();
       allow delete: if false;
 
       match /files/{fileId} {
@@ -365,7 +384,8 @@ service cloud.firestore {
               && d.kind in ['text', 'pin']
               && d.anchor.type == d.kind
               && d.anchor.page is int && d.anchor.page >= 1
-              && d.status == 'open'
+              // Thread levada da rodada anterior pode nascer "desatualizada" (trecho não encontrado).
+              && (d.status == 'open' || (d.status == 'outdated' && d.get('carriedFromThreadId', null) is string))
               && d.resolution == null
               && d.commentCount in [0, 1]
               && d.participantIds == [uid()];

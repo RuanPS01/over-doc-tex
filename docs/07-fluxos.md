@@ -2,13 +2,16 @@
 
 Cada cenário descreve o que o usuário vê e a mecânica interna. Não há servidor: tudo roda no navegador, e as gravações com mais de um documento vão num lote (`writeBatch`) que as regras conferem por inteiro (`06-banco-de-dados.md`, seção 4). Os passos marcados como *implementado* já existem no código; os demais são a especificação a seguir.
 
-## Cenário A: autoria e solicitação de revisão (snapshot)
+## Cenário A: autoria e solicitação de revisão (snapshot) (implementado)
 
 ### O que o usuário vê
 
 1. O autor escreve no Monaco e vê o PDF ao lado (no celular, alterna entre Código e PDF).
-2. Clica em "Solicitar revisão", escolhe os documentos (o principal vem marcado), informa o e-mail do revisor e uma mensagem.
-3. Vê o progresso "Congelando versão 1.0" e, ao final, a revisão #1 na fila. Pode continuar editando: o que muda daqui em diante pertence à próxima versão.
+2. Em "Versões", congela uma versão quando quiser (com descrição opcional; ajuste 1.1 ou principal 2.0), abre o PDF guardado, compara com o rascunho e baixa o código daquela versão em .zip.
+3. Clica em "Solicitar revisão", informa o e-mail do revisor, um título, uma mensagem e marca os documentos secundários que ele vê (o principal sempre vai). Documentos secundários são cadastrados em "Configurações do projeto" (outro .tex com \documentclass, como um apêndice).
+4. Vê o progresso ("Compilando a versão", "Guardando o código e o PDF", "Congelando", "Abrindo a revisão" e, numa rodada seguinte, "Gerando a comparação em PDF") e, ao final, a revisão #1 com o link para copiar, "Enviar pelo meu e-mail" e "Abrir a revisão". Se o código não mudou desde a última versão e ela tem os documentos pedidos, a revisão usa essa versão. Pode continuar editando: o que muda daqui em diante pertence à próxima versão.
+
+**Como o app grava:** cada documento (principal e secundários) é compilado e guarda `{documentId}.pdf`, `.pages` (texto por página) e `.synctex` (formato compacto, abaixo). Falha de compilação mostra os erros do TeX com arquivo e linha (o clique leva à linha) e nada é gravado. O cache de PDF do próprio Siglum fica desligado: ele usa só o texto do principal como chave e devolveria um PDF antigo quando só um arquivo de `\input` mudou.
 
 ### Mecânica interna (no navegador)
 
@@ -23,19 +26,31 @@ Cada cenário descreve o que o usuário vê e a mecânica interna. Não há serv
 | 7 | Envia o convite ao revisor (ver abaixo) |
 | 8 | Em falha de compilação, mostra o log e nada é gravado no Firestore; os arquivos do passo 4 podem ser reenviados na próxima tentativa |
 
-### Convite do revisor
+### Convite do revisor (implementado)
 
-1. O app do autor chama `sendSignInLinkToEmail` do Firebase Auth para o e-mail do revisor, com o link de retorno `/p/{projectId}/reviews/{reviewId}`. O próprio Firebase envia o e-mail (é preciso ativar "Link de e-mail" nos provedores de login). Como alternativa, o app oferece um link `mailto:` com o mesmo endereço.
+1. O app do autor chama `sendSignInLinkToEmail` do Firebase Auth para o e-mail do revisor; o link volta para `/login?next=/p/{projectId}/reviews/{reviewId}&email=...`, onde o revisor confirma o e-mail e entra. O próprio Firebase envia o e-mail (é preciso ativar "Link de e-mail" no provedor E-mail/senha e autorizar o domínio do site em Authentication). Se o envio falhar, a tela avisa e oferece o link para copiar e um `mailto:` com o mesmo endereço.
 2. O revisor abre o link e entra (o link já confirma o e-mail; Google também serve, se for o mesmo endereço).
 3. As regras liberam snapshot e revisão porque o e-mail verificado dele bate com o grant e com `reviewerEmail`. Na primeira abertura, o app grava `reviewerUid`, `reviewerName` e `status: in_review`.
 4. Rodadas seguintes para o mesmo revisor repetem o lote 2 com o mesmo e-mail.
 
-### Convite de coautoria
+### Convite de coautoria (implementado)
 
-1. O dono grava `pendingMembers[email] = 'editor' | 'viewer'` no projeto.
-2. O convidado entra com esse e-mail verificado; as regras deixam ele ver o projeto e se adicionar a `members` e `memberIds` com o papel do convite, apagando a entrada de `pendingMembers` no mesmo pedido.
+1. Em "Configurações do projeto", o dono informa o e-mail e o papel ("Edita" ou "Só lê"); o app grava `pendingMembers[email]` e mostra o link do projeto para enviar.
+2. O convidado abre o link e entra com esse e-mail verificado (Google ou link de acesso por e-mail). O editor mostra "Convite para ..." com "Aceitar convite"; ao aceitar, ele se adiciona a `members` e `memberIds` com o papel do convite, apaga a entrada de `pendingMembers` e grava o próprio nome em `memberProfiles`, tudo no mesmo pedido.
+3. O dono muda o papel ou remove membros na mesma tela; quem edita muda nome e descrição do projeto.
 
-## Cenário B: revisão estilo Pull Request e resolução
+## Cenário B: revisão estilo Pull Request e resolução (implementado)
+
+**Como está no app:** na barra do PDF ficam as ferramentas "Selecionar texto" (padrão), "Ponto" e "Desenhar", e um seletor de documento quando a revisão concede mais de um.
+
+- **Trecho:** ao soltar a seleção dentro da camada de texto de uma página, aparece "Comentar trecho"; a âncora `TextAnchor` guarda os retângulos (juntados por linha), a citação com até 32 caracteres de contexto e a posição no texto da página (`.pages`). O trecho fica destacado no PDF.
+- **Ponto:** um clique na página cria o pin (`drawing: null`).
+- **Desenho:** cada traço (ponteiro, mouse ou toque) é simplificado (Ramer-Douglas-Peucker, epsilon 0,002) e entra no comentário pendente; o painel tem cor (tokens `annotation-*`) e "Desfazer traço"; o pin fica no canto superior direito do desenho; limite de 2.000 pontos.
+- **Linha do código:** na criação, o SyncTeX da versão dá `sourceHint` (arquivo e linha); o autor usa "Abrir no código".
+- **Notificações:** cada ação grava `users/{uid}/notifications` para o outro lado (comentário novo, resposta, resolvido ou reaberto, revisor abriu, aprovou ou pediu alterações, revisão encerrada). O sino (lista, contagem, marcar como lidas) abre a revisão.
+- Respostas sobem o contador da thread no mesmo lote; autor e revisor resolvem (o autor com `fixed_next_version`, o revisor com `answered`) ou reabrem; ao congelar a versão seguinte, quem congela carimba `fixedInSnapshotId` e a thread aparece como "Corrigida".
+
+- **Rodada seguinte:** ao pedir nova revisão ao mesmo revisor, as threads ainda abertas da rodada anterior vêm junto (`carriedFromThreadId`), reancoradas na versão nova como em "Reancoragem" abaixo (trecho com os retângulos refeitos pelo pdf.js a partir do texto das páginas; pin movido pela linha do código no SyncTeX). Trecho não encontrado vira `outdated` ("Desatualizada") com a citação original. A conversa antiga aparece no cartão, em "Rodada anterior", e as respostas novas seguem abaixo.
 
 ### Comentário em trecho de texto
 
@@ -65,7 +80,21 @@ Cada cenário descreve o que o usuário vê e a mecânica interna. Não há serv
 
 Na ordem: (1) `position` com conferência de `quote.exact`; (2) busca de `exact` com `prefix` e `suffix` na mesma página e nas duas vizinhas, com tolerância a pequenas diferenças; (3) sem correspondência, a thread vira `outdated` e mostra a citação original.
 
-## Cenário C: diff visual e recompilação
+## Cenário C: diff visual e recompilação (implementado, com as diferenças abaixo)
+
+**Como está no app:**
+
+- **Na revisão ("Ver alterações"):** abas "PDF marcado" e "Texto". O PDF vem do cache `diffs/{diffKey}`, que o autor gera ao pedir a rodada seguinte (etapa "Gerando a comparação em PDF") ou ao abrir a aba; o revisor só lê o cache, porque não lê o código. A aba Texto compara o texto das páginas (`.pages`) da versão anterior do mesmo revisor com o da atual, já normalizado (palavras hifenizadas juntadas, uma frase por linha) para o reflow não aparecer como alteração.
+- **No editor ("Ver alterações"):** abas "Código" (diff por palavra, arquivo por arquivo, também contra o rascunho) e "PDF marcado" (entre versões, com cache; contra o rascunho, gerado na hora e sem cache).
+- **Barra do PDF marcado:** contadores de palavras, "Anterior" e "Próxima alteração", e marcas na margem de cada alteração.
+
+**Diferenças em relação ao algoritmo abaixo** (código em `src/lib/diff/latex-diff.ts` e `visual-diff.ts`):
+
+- Roda na thread principal (o texto é leve); só a compilação vai para o worker do Siglum.
+- Comandos de texto com um argumento (`\emph`, `\textbf`, `\section`, `\caption`, `\footnote`...) que só mudaram o argumento recebem o diff dentro dele, sem `\DIFmark` no argumento (o marcador fica antes do comando). Os demais comandos (`\cite{...}`), grupos entre chaves e matemática são átomos: mudou, o átomo inteiro é marcado.
+- Blocos com ambiente (`itemize`, `figure`, `tabular`...) são comparados inteiros e vão em `DIFaddenv` ou `DIFdelenv`.
+- A posição de cada alteração vem de `\DIFmark{n}` como destino nomeado do pdfTeX (`\pdfdest`), lido pelo pdf.js, em vez do `zref` no `.aux` (o Siglum não devolve o `.aux`).
+- O preâmbulo carrega `xcolor` e `ulem` só se o documento ainda não carregou; no nível `paragraph` não usa o `ulem` (só cor). O `ulem` vem do repositório de pacotes do site.
 
 ### O que o usuário vê
 
@@ -237,6 +266,12 @@ O motor roda no navegador, sem servidor. A especificação completa (provedores,
 
 Verificado de ponta a ponta contra os emuladores de Auth e Firestore, com as regras reais: um binário de 2,5 MB virou 3 pedaços com cabeçalho correto, a segunda importação do mesmo conteúdo não regravou nada e a exportação devolveu o arquivo idêntico (mesmo sha256).
 
+## Arquivos do rascunho (implementado)
+
+1. "Novo arquivo" na barra da árvore pede o caminho (pastas entram no caminho: `capitulos/introducao.tex`) e cria um arquivo de texto vazio, já aberto no editor. Imagens e PDFs entram por Importar.
+2. O menu de cada arquivo tem "Renomear ou mover" (o texto da tela vai junto, então nada digitado se perde) e "Excluir" (com confirmação; as versões congeladas continuam com o arquivo).
+3. Quem só lê vê o código em modo somente leitura, sem Novo arquivo, Importar, Solicitar revisão nem congelar.
+
 ## Criar e abrir um projeto (implementado)
 
 1. Sem sessão, `/` leva a `/login?next=%2F`; depois de entrar (Google ou e-mail e senha, com opção de criar conta), o app volta para a rota pedida.
@@ -254,10 +289,12 @@ Verificado de ponta a ponta contra os emuladores de Auth e Firestore: redirecion
    - imagens e outros binários vêm dos arquivos em pedaços do Firestore e ficam em memória na sessão;
    - o principal é o arquivo aberto, se tiver `\documentclass`; senão o `main.tex` da raiz; senão o `.tex` com `\documentclass` de caminho mais curto. Os demais caminhos ficam relativos à pasta dele.
 3. Antes de entregar ao TeX, as opções do babel `brazil` e `portuges` viram `brazilian` e `portuguese` com `provide=*` (o compilador não traz o `brazil.ldf`; o idioma carrega pelos arquivos de localidade). O `.tex` do usuário não muda.
-4. O Siglum (`src/lib/latex/compiler.ts`) compila com pdfTeX no worker. Na primeira vez baixa o motor e os conjuntos de pacotes da CDN (cerca de 45 MB, depois em cache); pacotes fora deles vêm de `public/texlive`. Ele roda mais de uma passagem quando há sumário ou referências.
+4. O Siglum (`src/lib/latex/compiler.ts`) compila com pdfTeX no worker e devolve também o SyncTeX: duplo clique no PDF leva o editor à linha que gerou o trecho, e "Mostrar no PDF" (na barra do editor) rola o PDF até a linha do cursor e a marca por um instante. Na primeira vez baixa o motor e os conjuntos de pacotes da CDN (cerca de 45 MB, depois em cache); pacotes fora deles vêm de `public/texlive`. Ele roda mais de uma passagem quando há sumário ou referências.
 5. O PDF fica só no navegador e aparece no `PdfPreviewPanel` (pdf.js). Uma falha mantém o último PDF bom na tela. Não vai para o banco: cada pessoa compila no próprio navegador, e gravar cada compilação gastaria a cota.
 6. Os erros do log viram uma lista com arquivo e linha (`parseTexLog`); o clique abre o arquivo e põe o cursor na linha. A linha do principal é corrigida quando o Siglum entrega só o trecho depois de `\begin{document}` ao TeX (preâmbulo em formato de cache) ou insere linhas (microtype).
 
-Limitações atuais: BibTeX e Biber não rodam (citações saem como `[?]`, com aviso); pacotes que exigem `--shell-escape` (minted) não funcionam; pacotes que não estão no Siglum nem no repositório próprio aparecem como "não disponível no compilador".
+**Bibliografia (BibTeX):** o compilador não tem o bibtex, então `src/lib/latex/bibliography.ts` monta o `.bbl` antes de compilar: lê `\bibliography` e `\bibliographystyle`, as citações na ordem em que aparecem (seguindo `\input`, com `\nocite{*}`) e os `.bib` (com `@string` e `#`), e formata como os estilos plain, abbrv, alpha e unsrt, ou autor-ano com natbib (e estilos `*nat`). O TeX lê o arquivo como `document.bbl`, e citações indefinidas só viram aviso se continuarem assim na última passagem. Outros estilos caem em plain; estilos ABNT saem numéricos.
+
+Limitações atuais: biblatex precisa do Biber e não roda (citações saem como `[?]`, com aviso); pacotes que exigem `--shell-escape` (minted) não funcionam; pacotes que não estão no Siglum nem no repositório próprio aparecem como "não disponível no compilador".
 
 Verificado no navegador: o projeto de exemplo compila em cerca de 5 s na primeira vez; um erro inserido na linha 10 aparece como `main.tex:10` e o clique leva à linha; no celular o PDF abre sozinho depois de compilar. Contra os emuladores, um projeto importado com imagem PNG (arquivo em pedaços), `booktabs` e `setspace` (do repositório próprio) e `[brazil]{babel}` compila sem erros.
