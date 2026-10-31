@@ -14,7 +14,9 @@ Este repositório contém a fundação do produto:
 - **Assistente de IA no navegador** com a chave do usuário: diálogo "Usar a minha própria IA" com fila de até 5 modelos, lista de modelos consultada ao vivo no provedor, RAG lexical (BM25), saídas estruturadas validadas com Zod e verificação real de links das referências.
 - **Importação e exportação**: projeto inteiro em .zip; importação de .zip, arquivos avulsos ou pastas do dispositivo, para a raiz ou uma pasta interna, sobrescrevendo ou mantendo os dois arquivos (`nome-1`).
 
-Compilação LaTeX em WebAssembly, snapshots, revisão e diff estão especificados em `docs/07-fluxos.md` e são as próximas entregas.
+- **Compilação LaTeX no navegador** com o Siglum (pdfTeX do TeX Live 2025 em WebAssembly), sem servidor: PDF desenhado com pdf.js, erros com arquivo e linha, pacotes extras servidos pelo próprio site (`node scripts/latex-packages.mjs`).
+
+Snapshots, revisão e diff estão especificados em `docs/07-fluxos.md` e são as próximas entregas.
 
 ## Começando
 

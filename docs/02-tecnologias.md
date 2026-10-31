@@ -32,12 +32,15 @@ Versões instaladas conforme o `package.json`. O projeto é ESM e não tem servi
 
 Cada SDK vira um pedaço próprio do build e só é baixado quando o provedor é usado. Detalhes, modelos padrão e regras da fila de reserva em `11-servico-de-ia.md`.
 
-### Planejado
+### Compilação e PDF
 
-| Tecnologia | Uso |
-| --- | --- |
-| Motor LaTeX em WebAssembly (avaliar SwiftLaTeX e BusyTeX) | Compilação no navegador, em Web Worker |
-| pdfjs-dist | Renderização do PDF com camadas de texto e de anotação |
+| Tecnologia | Versão | Uso | Observações |
+| --- | --- | --- | --- |
+| `@siglum/engine` | 0.1.4 (exata) | Compilação LaTeX no navegador (pdfTeX, TeX Live 2025, WebAssembly) | MIT. Motor e conjuntos de pacotes vêm de `cdn.siglum.org/tl2025`; versão fixa porque os arquivos da CDN precisam casar com ela. O worker é servido pelo alias `siglum-worker` do `vite.config.ts` |
+| `xzwasm` | 0.1.2 (exata) | Descompacta os pacotes `.tar.xz` do repositório próprio | MIT; o Siglum usa a global `self.xzwasm` |
+| `pdfjs-dist` | 6.4 (exata) | Desenho das páginas do PDF em canvas | Apache-2.0; carregado sob demanda, com o worker por `?url` |
+
+A `blake3-wasm`, dependência do Siglum, não empacota no Vite; um alias a troca por um módulo que falha ao carregar, e o Siglum usa o hash DJB2 dele (só serve para detectar mudanças). O repositório de pacotes extras (`public/texlive`, cerca de 120 pacotes e 3,4 MB, fora do git) é gerado por `node scripts/latex-packages.mjs`.
 
 ## 2. Firebase
 
@@ -84,6 +87,7 @@ Não existe chave de IA da plataforma em lugar nenhum.
 | `npm run check:conventions` | Proibições de `00-regras-para-ia.md` |
 | `npm run check:responsive` | Abre o build em 4 viewports e valida o contrato de 360px |
 | `npm run test:rules` | Regras nos emuladores (depois de `npm --prefix tests/rules install`; requer Java 21+) |
+| `node scripts/latex-packages.mjs` | Gera o repositório de pacotes LaTeX em `public/texlive` (necessário para compilar documentos com pacotes fora do Siglum; atrás de proxy, `NODE_USE_ENV_PROXY=1`) |
 
 ## 6. Deploy
 
@@ -94,7 +98,7 @@ O workflow `.github/workflows/deploy.yml` faz o CI e publica o mesmo site em doi
 | `verify` | PR e main | Convenções, testes unitários, build e contrato de responsividade |
 | `rules-tests` | PR e main | Regras do Firestore no emulador |
 | `firebase-deploy` | main e execução manual, depois de `verify` e `rules-tests` | `firebase deploy --only firestore:rules,firestore:indexes` |
-| `web-build` | main e execução manual, depois de `verify` | Dois builds com a configuração pública do Firebase: `npm run build:pages` com o subcaminho do Pages (`dist/`) e `vite build` na raiz para o Hosting (`dist-hosting/`, guardado como artefato) |
+| `web-build` | main e execução manual, depois de `verify` | Gera o repositório de pacotes LaTeX (com cache) e faz dois builds com a configuração pública do Firebase: `npm run build:pages` com o subcaminho do Pages (`dist/`) e `vite build` na raiz para o Hosting (`dist-hosting/`, guardado como artefato) |
 | `pages-deploy` | depois de `firebase-deploy` **e** `web-build` | Publica no GitHub Pages |
 | `hosting-deploy` | depois de `firebase-deploy` **e** `web-build` | `firebase deploy --only hosting` com o artefato do Hosting, no site de `FIREBASE_HOSTING_SITE` (o workflow grava `hosting.site` no `firebase.json` antes do deploy); a URL publicada aparece no ambiente `firebase-hosting` |
 
@@ -143,6 +147,7 @@ Os ambientes `firebase` e `firebase-hosting` do GitHub são criados no primeiro 
 
 - **Sem servidor:** a IA é paga por cada usuário com a própria chave, e o resto cabe nas regras do Firebase. Sem Functions, o app inteiro é estático.
 - **Binários no Firestore em vez do Cloud Storage:** mantém tudo no plano Spark e sob as mesmas regras; o custo é a cota de 1 GiB e uma leitura por pedaço de 1 MB.
+- **Siglum para compilar:** TeX Live 2025 completo no motor, licença MIT, roda no navegador sem servidor e sem COOP/COEP (o login com Google por popup continua funcionando). Pacotes que faltam vêm de arquivos estáticos do próprio site no formato do TeX Live, então não há proxy para manter.
 - **Tailwind 3.4 em vez de 4:** o padrão clássico de tokens do shadcn/ui é estável e bem documentado; a migração está no backlog.
 - **Monaco do CDN:** bundle inicial menor; o Workbox guarda o Monaco com `CacheFirst` para uso offline depois da primeira visita.
 - **fflate em vez de JSZip:** mais rápido e menor, com filtro por entrada que permite recusar o zip antes de descompactar.

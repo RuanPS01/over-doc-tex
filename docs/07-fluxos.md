@@ -246,9 +246,18 @@ Verificado de ponta a ponta contra os emuladores de Auth e Firestore, com as reg
 
 Verificado de ponta a ponta contra os emuladores de Auth e Firestore: redirecionamento para o login, criação de conta, lista vazia, criação do projeto, edição salva (revisão 2 no banco), texto mantido depois de recarregar, projeto na lista, aviso de projeto inexistente e saída da conta.
 
-## Fluxo de compilação de trabalho (rascunho)
+## Fluxo de compilação de trabalho (implementado)
 
 1. O salvamento automático (`useFileAutosave`, implementado) grava `files/{id}` com o texto, o tamanho, o sha256 e `revision + 1`, 800 ms depois da última tecla; também grava o que estiver pendente ao sair do editor ou fechar a aba. Vale a última gravação (não há edição simultânea em tempo real). Texto acima de 512 KB não é aceito pelas regras, e o editor avisa.
-2. "Compilar" (ou Ctrl+S) entrega a árvore ao motor WebAssembly no Web Worker.
-3. Ao terminar, o PDF fica só no navegador (memória e cache local) e o app grava o resumo em `documents/{id}.lastBuild`. O PDF de trabalho não vai para o banco: cada pessoa compila no próprio navegador, e gravar cada compilação gastaria a cota.
-4. O `PdfPreviewPanel` mostra o PDF; erros exibem o log com link para a linha.
+2. "Compilar", Ctrl+S ou Ctrl+Enter (Cmd no Mac) dispara `useLatexCompile`:
+   - o texto de cada arquivo vem do modelo aberto no Monaco (o que está na tela, mesmo antes do salvamento) ou do cache dos arquivos;
+   - imagens e outros binários vêm dos arquivos em pedaços do Firestore e ficam em memória na sessão;
+   - o principal é o arquivo aberto, se tiver `\documentclass`; senão o `main.tex` da raiz; senão o `.tex` com `\documentclass` de caminho mais curto. Os demais caminhos ficam relativos à pasta dele.
+3. Antes de entregar ao TeX, as opções do babel `brazil` e `portuges` viram `brazilian` e `portuguese` com `provide=*` (o compilador não traz o `brazil.ldf`; o idioma carrega pelos arquivos de localidade). O `.tex` do usuário não muda.
+4. O Siglum (`src/lib/latex/compiler.ts`) compila com pdfTeX no worker. Na primeira vez baixa o motor e os conjuntos de pacotes da CDN (cerca de 45 MB, depois em cache); pacotes fora deles vêm de `public/texlive`. Ele roda mais de uma passagem quando há sumário ou referências.
+5. O PDF fica só no navegador e aparece no `PdfPreviewPanel` (pdf.js). Uma falha mantém o último PDF bom na tela. Não vai para o banco: cada pessoa compila no próprio navegador, e gravar cada compilação gastaria a cota.
+6. Os erros do log viram uma lista com arquivo e linha (`parseTexLog`); o clique abre o arquivo e põe o cursor na linha. A linha do principal é corrigida quando o Siglum entrega só o trecho depois de `\begin{document}` ao TeX (preâmbulo em formato de cache) ou insere linhas (microtype).
+
+Limitações atuais: BibTeX e Biber não rodam (citações saem como `[?]`, com aviso); pacotes que exigem `--shell-escape` (minted) não funcionam; pacotes que não estão no Siglum nem no repositório próprio aparecem como "não disponível no compilador".
+
+Verificado no navegador: o projeto de exemplo compila em cerca de 5 s na primeira vez; um erro inserido na linha 10 aparece como `main.tex:10` e o clique leva à linha; no celular o PDF abre sozinho depois de compilar. Contra os emuladores, um projeto importado com imagem PNG (arquivo em pedaços), `booktabs` e `setspace` (do repositório próprio) e `[brazil]{babel}` compila sem erros.
