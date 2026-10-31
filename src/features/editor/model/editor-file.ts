@@ -15,6 +15,20 @@ export function toEditorFile(id: string, doc: FileDoc): EditorFile {
   return { id, path: doc.path, name: doc.name, kind: doc.kind, content: doc.content, blobPath: doc.blobPath };
 }
 
+/**
+ * Arquivo a abrir quando o ativo não existe (projeto importado, arquivo
+ * apagado): o main.tex da raiz, senão o primeiro .tex, senão o primeiro texto.
+ */
+export function pickFallbackFile(files: readonly EditorFile[]): EditorFile | null {
+  const editable = files.filter((file) => file.content !== null);
+  return (
+    editable.find((file) => file.path === 'main.tex') ??
+    editable.find((file) => file.kind === 'tex') ??
+    editable[0] ??
+    null
+  );
+}
+
 /** Projeto de exemplo usado no modo demonstração (sem Firebase configurado). */
 export const DEMO_FILES: EditorFile[] = [
   {

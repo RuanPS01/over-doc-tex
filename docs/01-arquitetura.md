@@ -73,10 +73,11 @@ over-doc-tex/
 │   ├── app/                           providers, roteador (com o subcaminho do Pages)
 │   ├── pages/                         uma página por rota; só compõe features
 │   ├── features/
-│   │   ├── auth/                      AuthProvider e useAuth
+│   │   ├── auth/                      AuthProvider, RequireAuth e useAuth
+│   │   ├── projects/                  lista e criação de projetos, useProject
 │   │   ├── editor/
 │   │   │   ├── components/            casca, cabeçalho, workspaces, árvore, Monaco, ImportDialog
-│   │   │   ├── hooks/                 useProjectFiles, useProjectArchive, useExportProject
+│   │   │   ├── hooks/                 useProjectFiles, useFileAutosave, useProjectArchive, useExportProject
 │   │   │   ├── model/                 modelo de visão e dados de demonstração
 │   │   │   └── state/                 estado de interface do editor
 │   │   ├── pdf-viewer/                PdfPreviewPanel

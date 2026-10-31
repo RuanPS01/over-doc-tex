@@ -20,12 +20,17 @@ export function useProjectFiles(projectId: string) {
 
   useEffect(() => {
     if (!isFirebaseConfigured) return;
-    return onSnapshot(filesQuery(projectId), (snapshot) => {
-      queryClient.setQueryData<EditorFile[]>(
-        queryKeys.files(projectId),
-        snapshot.docs.map((doc) => toEditorFile(doc.id, doc.data() as FileDoc)),
-      );
-    });
+    return onSnapshot(
+      filesQuery(projectId),
+      (snapshot) => {
+        queryClient.setQueryData<EditorFile[]>(
+          queryKeys.files(projectId),
+          snapshot.docs.map((doc) => toEditorFile(doc.id, doc.data() as FileDoc)),
+        );
+      },
+      // A carga inicial (getDocs) já expõe o erro; aqui só evita o erro não tratado no console.
+      () => undefined,
+    );
   }, [projectId, queryClient]);
 
   return useQuery({

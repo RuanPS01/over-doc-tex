@@ -1,6 +1,8 @@
+import { useEffect } from 'react';
 import { AiAssistantPanel } from '@/features/ai-assistant/components/ai-assistant-panel';
 import { useLayoutMode } from '@/hooks/use-layout-mode';
 import { useProjectFiles } from '../hooks/use-project-files';
+import { pickFallbackFile } from '../model/editor-file';
 import { useEditorStore } from '../state/editor-store';
 import { DesktopWorkspace } from './desktop-workspace';
 import { EditorHeader } from './editor-header';
@@ -15,8 +17,15 @@ import { MobileWorkspace } from './mobile-workspace';
  */
 export function EditorShell() {
   const layoutMode = useLayoutMode();
-  const { projectId, projectName, aiOpen, setAiOpen } = useEditorStore();
+  const { projectId, projectName, aiOpen, setAiOpen, activeFileId, openFile } = useEditorStore();
   const { data: files = [] } = useProjectFiles(projectId);
+
+  // O arquivo inicial (id "main") só existe em projetos criados pelo app.
+  useEffect(() => {
+    if (files.length === 0 || files.some((file) => file.id === activeFileId)) return;
+    const fallback = pickFallbackFile(files);
+    if (fallback) openFile(fallback.id);
+  }, [files, activeFileId, openFile]);
 
   return (
     <div className="flex h-viewport flex-col overflow-hidden bg-background">

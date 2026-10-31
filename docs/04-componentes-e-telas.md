@@ -4,14 +4,16 @@
 
 | Rota | Página | Quem acessa | Estado |
 | --- | --- | --- | --- |
-| `/login` | `LoginPage` | Visitante | Implementada |
-| `/` | `ProjectsPage` | Membro | Implementada (lista de exemplo) |
-| `/p/:projectId` | `EditorPage` | Membro | Layout responsivo implementado |
+| `/login` | `LoginPage` | Visitante | Implementada: Google, e-mail e senha, criar conta, volta para `?next=` |
+| `/` | `ProjectsPage` | Usuário com sessão | Implementada: projetos de que é membro, em tempo real, e "Novo projeto" |
+| `/p/:projectId` | `EditorPage` | Membro | Implementada: layout responsivo, salvamento automático, aviso de projeto inexistente ou sem acesso |
 | `/p/:projectId/reviews/:reviewId` | `ReviewPage` | Membro e revisor com grant | Esqueleto |
 | `/invite/:token` | `InviteAcceptPage` | Revisor convidado | Planejada |
 | `/reviews` | `MyReviewsPage` (consulta `collectionGroup('reviews')`) | Revisor | Planejada |
 
 Todas as páginas são carregadas com `React.lazy` em `src/app/router.tsx`. O Monaco só é baixado quando o editor abre.
+
+`/`, `/p/:projectId` e a revisão passam por `RequireAuth`: sem sessão (com o Firebase configurado), vão para `/login?next=<rota>` e voltam depois do login. No modo demonstração, entram direto e a lista mostra o projeto de exemplo.
 
 ## 2. Componentização da tela principal (EditorPage)
 
@@ -135,6 +137,7 @@ Pontos de atenção:
 | Componente | Notas |
 | --- | --- |
 | `MarkdownContent` | Único ponto com `dangerouslySetInnerHTML`; recebe Markdown, sanitiza com DOMPurify |
+| `FullPageStatus` | Tela inteira de espera, aviso ou erro (abrindo sessão, abrindo projeto, projeto não encontrado) |
 
 ### Domínio (`src/features/*/components`)
 
@@ -143,7 +146,8 @@ Pontos de atenção:
 | `editor` | `EditorShell`, `EditorHeader`, `DesktopWorkspace`, `MobileWorkspace`, `PaneSwitcher`, `FileTreePanel`, `FileTreeSheet`, `CodeEditorPanel`, `ImportDialog` |
 | `pdf-viewer` | `PdfPreviewPanel` (planejado: `PdfViewer`, `PdfPage` e camadas) |
 | `ai-assistant` | `AiAssistantPanel`, `AiSettingsDialog`, `ModelEntryCard`, `AiMessage`, `AiComposer`, `StructuredResultView` |
-| `auth` | `AuthProvider` |
+| `auth` | `AuthProvider`, `RequireAuth` |
+| `projects` | `ProjectList`, `DemoProjectList`, `NewProjectDialog` |
 | `review` (planejado) | `ReviewShell`, `ReviewToolbar`, `SelectionPopover`, `ThreadSidebar`, `ThreadSheet`, `ThreadCard`, `CommentComposer` |
 | `snapshots` (planejado) | `VersionHistorySheet`, `RequestReviewDialog` |
 | `diff` (planejado) | `DiffBar`, `DiffStatusBadge` |
@@ -152,7 +156,11 @@ Pontos de atenção:
 
 | Hook | Feature | O que faz |
 | --- | --- | --- |
+| `useProjects` | projects | Projetos do usuário em tempo real (`memberIds array-contains uid`, `updatedAt desc`) |
+| `useCreateProject` | projects | Cria o projeto (dono), o documento principal e o `main.tex` (ids fixos `main`) |
+| `useProject` | projects | Projeto aberto no editor; nulo quando não existe ou a conta não é membro |
 | `useProjectFiles` | editor | Arquivos do projeto em tempo real (ou de demonstração) |
+| `useFileAutosave` | editor | Salva o texto 800 ms depois da última tecla e mostra Salvando, Salvo ou o erro |
 | `useProjectArchive` | editor | Exporta o .zip e aplica o plano de importação (Firestore, com binários em pedaços, ou cache no modo demonstração) |
 | `useExportProject` | editor | Exportação do projeto aberto, usada pela árvore e pelo menu |
 | `useAiConfig` | ai-assistant | Configuração da IA na conta (`users/{uid}/private/ai`) ou no navegador |
