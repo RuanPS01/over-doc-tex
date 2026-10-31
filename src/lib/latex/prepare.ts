@@ -34,7 +34,7 @@ export function pickMainFile(files: readonly ProjectTextFile[], preferredPath?: 
   return shortest?.path ?? null;
 }
 
-/** Idiomas cujo .ldf não vem no compilador: carregados pelos arquivos de localidade do babel. */
+/** Idiomas cujo .ldf não vem nos conjuntos do Siglum: carregados pelos arquivos de localidade do babel. */
 const BABEL_ALIASES: Record<string, string> = {
   brazil: 'brazilian',
   brazilian: 'brazilian',
@@ -43,10 +43,12 @@ const BABEL_ALIASES: Record<string, string> = {
 };
 
 /**
- * O compilador não traz o babel-portuges (brazil.ldf). Só na compilação, as
- * opções do babel trocam os nomes antigos pelos de localidade e ganham
- * provide=*, que carrega o idioma pelos arquivos .ini. O .tex do usuário não
- * muda e continua compatível com outros editores.
+ * Os conjuntos do Siglum não trazem o babel-portuges (brazil.ldf). Só na
+ * compilação, o \usepackage{babel} do próprio documento troca os nomes antigos
+ * pelos de localidade e ganha provide=*, que carrega o idioma pelos arquivos
+ * .ini (funciona até sem o repositório do site). O babel carregado por uma
+ * classe, como o abnTeX2, não passa por aqui: recebe o .ldf de
+ * babelLanguagePackages. O .tex do usuário não muda.
  */
 export function adaptBabel(source: string): string {
   return source.replace(/\\usepackage\s*\[([^\]]*)\]\s*\{babel\}/g, (match, rawOptions: string) => {
@@ -58,6 +60,70 @@ export function adaptBabel(source: string): string {
   });
 }
 
+/** Idiomas do babel cujo .ldf não vem no compilador, com o pacote do TeX Live que o traz (public/texlive). */
+const BABEL_LANGUAGE_PACKAGES: Record<string, string> = {
+  brazil: 'babel-portuges',
+  brazilian: 'babel-portuges',
+  portuges: 'babel-portuges',
+  portuguese: 'babel-portuges',
+  french: 'babel-french',
+  francais: 'babel-french',
+  acadian: 'babel-french',
+  spanish: 'babel-spanish',
+  spanishmx: 'babel-spanish',
+};
+
+/** Classes que carregam o babel com um idioma fixo (o abnTeX2 pede [brazil]). */
+const CLASS_LANGUAGES: Record<string, string> = { abntex2: 'brazil' };
+
+/**
+ * Pacotes de idioma que o documento vai pedir ao babel (opções da classe, do
+ * \usepackage{babel} e o idioma fixo de classes como o abnTeX2). O Siglum não
+ * guarda o .ldf desses pacotes; o compilador manda os arquivos junto com o
+ * documento (ver texlive-files.ts).
+ */
+export function babelLanguagePackages(source: string): string[] {
+  const text = stripComments(source);
+  const languages = new Set<string>();
+  const documentClass = /\\documentclass\s*(?:\[([^\]]*)\])?\s*\{([^}]+)\}/.exec(text);
+  const options = [documentClass?.[1] ?? ''];
+  for (const match of text.matchAll(/\\(?:usepackage|RequirePackage)\s*\[([^\]]*)\]\s*\{[^}]*\bbabel\b[^}]*\}/g)) options.push(match[1]!);
+  for (const match of text.matchAll(/\\babelprovide\s*(?:\[[^\]]*\])?\s*\{([^}]+)\}/g)) options.push(match[1]!);
+  for (const list of options) for (const option of list.split(',')) languages.add(option.trim());
+  const fixed = documentClass ? CLASS_LANGUAGES[documentClass[2]!.trim()] : undefined;
+  if (fixed) languages.add(fixed);
+  return [...new Set([...languages].flatMap((language) => (BABEL_LANGUAGE_PACKAGES[language] ? [BABEL_LANGUAGE_PACKAGES[language]] : [])))];
+}
+
+/**
+ * Refaz o .brf do backref a partir do .aux. Entre uma passagem e outra o
+ * Siglum guarda só .aux, .toc, .lof, .lot, .out e .bbl; o backref lê as
+ * páginas de cada citação no .brf da passagem anterior, que se perde, e toda
+ * referência sairia "Nenhuma citação no texto". As mesmas linhas estão no .aux
+ * como \@writefile{brf}{...}; no começo do \begin{document}, antes de o LaTeX
+ * reabrir o .aux para escrita, elas viram o .brf. Uma linha só, colada ao
+ * \begin{document}, para não mudar a numeração das linhas.
+ */
+const BACKREF_FROM_AUX = [
+  '\\ExplSyntaxOn',
+  '\\ior_new:N \\g__overdoctex_aux_ior \\iow_new:N \\g__overdoctex_brf_iow',
+  '\\cs_new_protected:Npn \\__overdoctex_brf_from_aux: { \\file_if_exist:nT { \\c_sys_jobname_str .aux } {',
+  '\\iow_open:Nn \\g__overdoctex_brf_iow { \\c_sys_jobname_str .brf } \\ior_open:Nn \\g__overdoctex_aux_ior { \\c_sys_jobname_str .aux }',
+  '\\ior_str_map_inline:Nn \\g__overdoctex_aux_ior { \\str_if_eq:eeT { \\str_range:nnn {##1} {1} {17} }',
+  '{ \\c_backslash_str @writefile \\c_left_brace_str brf \\c_right_brace_str \\c_left_brace_str }',
+  '{ \\iow_now:Ne \\g__overdoctex_brf_iow { \\str_range:nnn {##1} {18} {-2} } } }',
+  '\\ior_close:N \\g__overdoctex_aux_ior \\iow_close:N \\g__overdoctex_brf_iow } }',
+  '\\AddToHook{begindocument/before}{\\__overdoctex_brf_from_aux:}',
+  '\\ExplSyntaxOff',
+].join(' ');
+
+/** Documento com backref (pacote ou opção backref/pagebackref do hyperref) ganha a reconstrução do .brf. */
+export function withBackrefFromAux(source: string): string {
+  const begin = /\\begin\s*\{document\}/.exec(source);
+  if (!begin || !/\bbackref\b|\bpagebackref\b/.test(stripComments(source.slice(0, begin.index)))) return source;
+  return `${source.slice(0, begin.index)}${BACKREF_FROM_AUX}${source.slice(begin.index)}`;
+}
+
 /** Caminho visto a partir da pasta do arquivo principal (o compilador roda nela). */
 export function relativeToMain(path: string, mainPath: string): string {
   const folder = mainPath.includes('/') ? mainPath.slice(0, mainPath.lastIndexOf('/') + 1) : '';
@@ -67,6 +133,8 @@ export function relativeToMain(path: string, mainPath: string): string {
 export interface CompileInput {
   source: string;
   additionalFiles: Record<string, string | Uint8Array>;
+  /** Pacotes do repositório do site cujos arquivos soltos (ex.: .ldf) vão junto com o documento. */
+  texlivePackages: string[];
 }
 
 export function buildCompileInput(
@@ -81,7 +149,7 @@ export function buildCompileInput(
     if (file.path !== mainPath) additionalFiles[relativeToMain(file.path, mainPath)] = file.content;
   }
   for (const [path, data] of binaries) additionalFiles[relativeToMain(path, mainPath)] = data;
-  let source = adaptBabel(main.content);
+  let source = withBackrefFromAux(adaptBabel(main.content));
   // O compilador não tem bibtex: o .bbl vem pronto (o principal roda como document.tex).
   const bibliography = buildBbl(new Map(texts.map((file) => [file.path, file.content])), mainPath);
   if (bibliography) {
@@ -89,7 +157,14 @@ export function buildCompileInput(
     // O Siglum decide as passagens olhando só o principal; sem \cite nele, faria uma só e as citações ficariam [?].
     if (!/\\(cite|bibliography)/.test(main.content)) source += '\n% \\bibliography{} (OverDocTeX: citações em arquivos de \\input)\n';
   }
-  return { source, additionalFiles };
+  // Pacotes com arquivos soltos no site (ex.: .ldf): idiomas do babel e pacotes pedidos no
+  // principal ou em outros arquivos do projeto (preâmbulo separado, .sty próprio).
+  const sources = [main.content, ...texts.filter((file) => file.path !== mainPath && /\.(tex|sty|cls)$/.test(file.path)).map((file) => file.content)];
+  const usedPackages = sources.flatMap((text) =>
+    [...stripComments(text).matchAll(/\\(?:usepackage|RequirePackage)\s*(?:\[[^\]]*\])?\s*\{([^}]+)\}/g)].flatMap((match) => match[1]!.split(',').map((name) => name.trim())),
+  );
+  const texlivePackages = [...new Set([...babelLanguagePackages(sources.join('\n')), ...usedPackages.filter(Boolean)])];
+  return { source, additionalFiles, texlivePackages };
 }
 
 /**

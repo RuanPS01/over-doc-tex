@@ -41,7 +41,7 @@ describe('BibTeX no navegador', () => {
 
   it('acha citações em ordem, bancos e estilo', () => {
     const info = scanCitations('\\cite{b,a} \\citep[cap. 2]{c} \\nocite{a} \\citeonline{d}\\bibliographystyle{unsrt}\\bibliography{x,y}');
-    expect(info).toEqual({ keys: ['b', 'a', 'c', 'd'], databases: ['x', 'y'], style: 'unsrt', usesNatbib: false });
+    expect(info).toEqual({ keys: ['b', 'a', 'c', 'd'], databases: ['x', 'y'], style: 'unsrt', usesNatbib: false, abntex2cite: null, citeOptions: [] });
   });
 
   it('monta o .bbl do plain: ordenado por autor, numérico, com as citações dos \\input', () => {

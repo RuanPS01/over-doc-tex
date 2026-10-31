@@ -12,6 +12,7 @@ import siglumWorkerUrl from 'siglum-worker?url';
 import type { SiglumCompiler } from '@siglum/engine';
 import { mainLineOffset, parseTexLog, projectPathFromTex, type CompileInput, type TexIssue } from './prepare';
 import { parseSynctex, type SyncData } from './synctex';
+import { fetchLooseFiles, texliveRevision } from './texlive-files';
 
 const SIGLUM_CDN = 'https://cdn.siglum.org/tl2025';
 
@@ -32,6 +33,9 @@ let logLines: string[] = [];
 /** Mensagens do próprio worker (não do TeX), que dizem se o texto foi alterado. */
 let workerNotes: string[] = [];
 let stageListener: ((stage: CompileStage) => void) | null = null;
+/** Nova tentativa anunciada pelo Siglum; o log recomeça na primeira linha do TeX dela. */
+let retryPending = false;
+let retryNotesFrom = 0;
 
 async function loadCompiler(): Promise<SiglumCompiler> {
   const [{ SiglumCompiler: Compiler }, xzwasm] = await Promise.all([import('@siglum/engine'), import('xzwasm')]);
@@ -48,8 +52,23 @@ async function loadCompiler(): Promise<SiglumCompiler> {
     verbose: true,
     onLog: (message) => {
       const text = String(message);
-      if (text.startsWith('[TeX] ')) logLines.push(text.slice(6));
-      else workerNotes.push(text);
+      if (text.startsWith('[TeX] ')) {
+        // O Siglum tenta de novo depois de buscar um pacote que faltava; os erros das tentativas
+        // anteriores ("File `x' not found") deixam de valer quando a nova tentativa começa. Se a
+        // busca falha, ele desiste sem rodar o TeX e o log da última tentativa fica como está.
+        if (retryPending) {
+          logLines = [];
+          workerNotes = workerNotes.slice(retryNotesFrom);
+          retryPending = false;
+        }
+        logLines.push(text.slice(6));
+      } else {
+        if (/^\[RETRY\] missingFiles=(?!none)/.test(text)) {
+          retryPending = true;
+          retryNotesFrom = workerNotes.length;
+        }
+        workerNotes.push(text);
+      }
     },
     onProgress: (stage) => {
       if (stage === 'loading' || stage === 'mount') stageListener?.('packages');
@@ -57,8 +76,35 @@ async function loadCompiler(): Promise<SiglumCompiler> {
     },
   });
   await compiler.init();
+  await refreshPackageCache(compiler);
   compilerReady = true;
   return compiler;
+}
+
+const REVISION_KEY = 'overdoctex.texlive-revision';
+
+/**
+ * O Siglum guarda no navegador cada pacote que buscou, inclusive os que não
+ * achou. Quando o repositório do site muda (pacote novo ou trocado), esse
+ * cache esconderia a mudança: limpa uma vez e os pacotes voltam a ser buscados.
+ */
+async function refreshPackageCache(compiler: SiglumCompiler): Promise<void> {
+  const revision = await texliveRevision();
+  if (!revision) return;
+  let stored: string | null = null;
+  try {
+    stored = window.localStorage.getItem(REVISION_KEY);
+  } catch {
+    // Armazenamento bloqueado: limpar toda vez seria caro; segue com o cache como está.
+    return;
+  }
+  if (stored === revision) return;
+  await compiler.clearCache();
+  try {
+    window.localStorage.setItem(REVISION_KEY, revision);
+  } catch {
+    // Sem onde guardar: na próxima aba limpa de novo, o que só custa baixar os pacotes outra vez.
+  }
 }
 
 /** Baixa e inicia o motor uma vez por aba; falha libera nova tentativa. */
@@ -84,13 +130,16 @@ export function compileLatex(
     // Só a primeira compilação da aba baixa o motor (depois ele fica em memória e em cache).
     if (!compilerReady) onStage('engine');
     try {
-      const compiler = await getCompiler();
+      const [compiler, looseFiles] = await Promise.all([getCompiler(), fetchLooseFiles(input.texlivePackages)]);
+      // Arquivos do projeto ganham dos soltos de mesmo nome.
+      const additionalFiles = { ...looseFiles, ...input.additionalFiles };
       logLines = [];
       workerNotes = [];
+      retryPending = false;
       onStage('compiling');
       // useCache: false porque o cache do Siglum usa só o texto do principal como chave: mudar um
       // arquivo de \input devolveria o PDF antigo (e sem SyncTeX).
-      const result = await compiler.compile(input.source, { engine: 'pdflatex', additionalFiles: input.additionalFiles, useCache: false });
+      const result = await compiler.compile(input.source, { engine: 'pdflatex', additionalFiles, useCache: false });
       const lineOffset = mainLineOffset(input.source, workerNotes);
       const issues = parseTexLog(logLines, mainPath, lineOffset);
       const pdf = result.success && result.pdf ? new Uint8Array(result.pdf) : null;
