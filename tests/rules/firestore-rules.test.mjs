@@ -231,6 +231,12 @@ await runScenarios('Firestore', [
         quote: { exact: 'trecho', prefix: 'um ', suffix: ' aqui' }, position: { start: 3, end: 9 },
       },
     })))],
+  ['thread levada da rodada anterior nasce desatualizada', () =>
+    assertSucceeds(setDoc(doc(as('bia'), 'projects/p1/reviews/r1/threads/t7'), pinThread({
+      createdBy: 'bia', createdByRole: 'reviewer', participantIds: ['bia'], status: 'outdated', carriedFromThreadId: 't0',
+    })))],
+  ['thread nova não nasce desatualizada', () =>
+    assertFails(setDoc(doc(rev(), 'projects/p1/reviews/r1/threads/t8'), pinThread({ status: 'outdated' })))],
   ['thread em documento não concedido na revisão é negada', () =>
     assertFails(setDoc(doc(rev(), 'projects/p1/reviews/r1/threads/t6'), pinThread({ documentId: 'apendice' })))],
   ['thread em documento não concedido é negada', () =>

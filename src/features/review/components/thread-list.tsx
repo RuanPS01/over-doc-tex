@@ -6,6 +6,7 @@ import { ThreadCard } from './thread-card';
 interface ThreadListProps {
   projectId: string;
   reviewId: string;
+  previousReviewId: string | null;
   threads: ThreadSummary[];
   /** Painel do comentário novo (marcação pendente), acima da lista. */
   pendingPanel: ReactNode;
@@ -22,6 +23,7 @@ interface ThreadListProps {
 export function ThreadList({
   projectId,
   reviewId,
+  previousReviewId,
   threads,
   pendingPanel,
   selectedThreadId,
@@ -61,6 +63,7 @@ export function ThreadList({
             projectId={projectId}
             reviewId={reviewId}
             thread={thread}
+            previousReviewId={previousReviewId}
             number={index + 1}
             isSelected={thread.id === selectedThreadId}
             canWrite={canWrite}

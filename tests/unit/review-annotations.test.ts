@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { decodeSyncData, encodeSyncData, parseSynctex, pdfAt, sourceAt } from '@/lib/latex/synctex';
 import { projectPathFromTex } from '@/lib/latex/prepare';
 import { boundsOf, buildDrawing, flattenStroke, MAX_DRAWING_POINTS, pinPointFor, simplify } from '@/lib/pdf/drawing';
+import { reanchorQuote } from '@/lib/pdf/reanchor';
 import { buildQuote, normalizeRects } from '@/lib/pdf/text-anchor';
 
 // 1 bp = 65781.76 sp; a página começa a 1 pol. (4736286 sp) da borda.
@@ -42,6 +43,11 @@ describe('SyncTeX', () => {
     expect(data.files).toEqual(['tese/main.tex', 'tese/cap/um.tex']);
     expect(data.pages).toHaveLength(2);
     expect(data.pages[0]!.every((record) => record.line !== 99)).toBe(true);
+  });
+
+  it('clique entre linhas usa a linha mais próxima, não uma caixa vertical grande', () => {
+    expect(sourceAt(data, 1, 200, 124)).toEqual({ path: 'tese/main.tex', line: 14 });
+    expect(data.pages[0]!.some((record) => record.height > 600)).toBe(false);
   });
 
   it('busca reversa: o ponto clicado vira arquivo e linha', () => {
@@ -103,5 +109,34 @@ describe('desenho livre', () => {
     const huge = { ...stroke, points: Array.from({ length: (MAX_DRAWING_POINTS + 1) * 2 }, () => 0.5) };
     expect(buildDrawing([huge])).toBeNull();
     expect(buildDrawing([])).toBeNull();
+  });
+});
+
+describe('reancoragem entre versões', () => {
+  const anchorFor = (pages: string[], page: number, exact: string) => ({ page, ...buildQuote(pages[page - 1]!, exact)! });
+
+  it('mantém a posição quando o texto ali não mudou', () => {
+    const pages = ['Título\nA revisão de documentos ainda depende de e-mail.'];
+    const anchor = anchorFor(pages, 1, 'depende de e-mail');
+    expect(reanchorQuote(pages, anchor)).toEqual({ page: 1, start: anchor.position.start, end: anchor.position.end });
+  });
+
+  it('acha a citação deslocada, inclusive na página seguinte, pelo contexto', () => {
+    const before = ['Intro. O termo chave aparece aqui. Outro termo chave depois.'];
+    const anchor = anchorFor(before, 1, 'termo chave depois');
+    const after = ['Parágrafo novo que empurrou tudo.', 'Intro. O termo chave aparece aqui. Outro termo chave depois.'];
+    const match = reanchorQuote(after, anchor)!;
+    expect(match.page).toBe(2);
+    expect(after[1]!.slice(match.start, match.end)).toBe('termo chave depois');
+  });
+
+  it('tolera palavra trocada no meio e desiste quando o trecho sumiu', () => {
+    const before = ['A revisão de documentos científicos ainda depende de trocas de arquivos.'];
+    const anchor = anchorFor(before, 1, 'A revisão de documentos científicos ainda depende de trocas de arquivos');
+    const after = ['A revisão de documentos acadêmicos ainda depende de trocas de arquivos.'];
+    expect(after[0]!.slice(reanchorQuote(after, anchor)!.start, reanchorQuote(after, anchor)!.end)).toBe(
+      'A revisão de documentos acadêmicos ainda depende de trocas de arquivos',
+    );
+    expect(reanchorQuote(['Texto completamente diferente.'], anchor)).toBeNull();
   });
 });

@@ -384,7 +384,8 @@ service cloud.firestore {
               && d.kind in ['text', 'pin']
               && d.anchor.type == d.kind
               && d.anchor.page is int && d.anchor.page >= 1
-              && d.status == 'open'
+              // Thread levada da rodada anterior pode nascer "desatualizada" (trecho não encontrado).
+              && (d.status == 'open' || (d.status == 'outdated' && d.get('carriedFromThreadId', null) is string))
               && d.resolution == null
               && d.commentCount in [0, 1]
               && d.participantIds == [uid()];

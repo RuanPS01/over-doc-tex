@@ -75,7 +75,9 @@ export function parseSynctex(text: string, { toProjectPath, lineOffset }: ParseO
       const tag = tags.get(Number(match[2]));
       if (!tag) continue;
       const kind = match[1]!;
-      const isBox = kind === 'h' || kind === '(' || kind === '[' || kind === 'v';
+      // Caixas verticais (páginas, listas inteiras) contêm tudo e só atrapalham a busca.
+      if (kind === '[' || kind === 'v') continue;
+      const isBox = kind === 'h' || kind === '(';
       const s = scale();
       current.push({
         file: tag.index,
@@ -92,13 +94,21 @@ export function parseSynctex(text: string, { toProjectPath, lineOffset }: ParseO
   return { files, pages: pages.map(dedupe) };
 }
 
-/** Pontos seguidos da mesma linha na mesma altura não acrescentam nada à busca. */
+/** Distância mínima, na mesma linha, entre pontos guardados do mesmo arquivo e linha do código. */
+const POINT_SPACING = 20;
+
+/**
+ * Pontos seguidos da mesma origem na mesma altura: guarda um a cada 20 pt,
+ * o bastante para achar a palavra clicada sem guardar cada letra.
+ */
 function dedupe(records: SyncRecord[]): SyncRecord[] {
   const out: SyncRecord[] = [];
+  let kept: SyncRecord | null = null;
   for (const record of records) {
-    const last = out.at(-1);
-    if (last && record.width === 0 && last.width === 0 && last.file === record.file && last.line === record.line && Math.abs(last.y - record.y) < 0.5) continue;
+    const sameRun = kept && record.width === 0 && kept.width === 0 && kept.file === record.file && kept.line === record.line && Math.abs(kept.y - record.y) < 0.5;
+    if (sameRun && Math.abs(record.x - kept!.x) < POINT_SPACING) continue;
     out.push(record);
+    if (record.width === 0) kept = record;
   }
   return out;
 }
@@ -111,21 +121,25 @@ function dedupe(records: SyncRecord[]): SyncRecord[] {
  */
 export function sourceAt(data: SyncData, page: number, x: number, y: number): { path: string; line: number } | null {
   const records = data.pages[page - 1] ?? [];
+  const boxes = records.filter((record) => record.width > 0);
+  // A linha clicada: a menor caixa que contém o ponto; entre duas linhas, a mais próxima na vertical.
   let box: SyncRecord | null = null;
-  let boxArea = Number.POSITIVE_INFINITY;
-  for (const record of records) {
-    if (record.width <= 0) continue;
-    const inside = x >= record.x && x <= record.x + record.width && y >= record.y - record.height && y <= record.y + record.depth;
-    const area = record.width * (record.height + record.depth);
-    if (inside && area < boxArea) {
+  let boxScore = Number.POSITIVE_INFINITY;
+  for (const record of boxes) {
+    const top = record.y - record.height;
+    const bottom = record.y + record.depth;
+    const dy = y < top ? top - y : y > bottom ? y - bottom : 0;
+    const dx = x < record.x ? record.x - x : x > record.x + record.width ? x - record.x - record.width : 0;
+    const score = (dx + dy) * 1000 + record.width * (record.height + record.depth) / 1000;
+    if (score < boxScore) {
       box = record;
-      boxArea = area;
+      boxScore = score;
     }
   }
-  const points = records.filter((record) => record.width === 0);
   let best: SyncRecord | null = null;
   let bestDistance = Number.POSITIVE_INFINITY;
-  for (const record of points) {
+  for (const record of records) {
+    if (record.width !== 0) continue;
     if (box && (record.y < box.y - box.height - 0.5 || record.y > box.y + box.depth + 0.5)) continue;
     const distance = box ? Math.abs(record.x - x) : Math.abs(record.x - x) + Math.abs(record.y - y) * 2;
     if (distance < bestDistance) {
@@ -134,16 +148,6 @@ export function sourceAt(data: SyncData, page: number, x: number, y: number): { 
     }
   }
   best ??= box;
-  if (!best) {
-    for (const record of records) {
-      const dx = x < record.x ? record.x - x : x > record.x + record.width ? x - record.x - record.width : 0;
-      const distance = dx + Math.abs(y - record.y) * 2;
-      if (distance < bestDistance) {
-        best = record;
-        bestDistance = distance;
-      }
-    }
-  }
   return best ? { path: data.files[best.file]!, line: best.line } : null;
 }
 

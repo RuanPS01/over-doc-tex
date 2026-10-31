@@ -9,11 +9,12 @@ import { useFreezeSnapshot, type FreezeStage } from '@/features/snapshots/hooks/
 import { emailLinkUrl } from '@/lib/email';
 import { getFirebase } from '@/lib/firebase/app';
 import { reviewPath } from '../model/review';
+import { useCarryThreads } from './use-carry-threads';
 
 /** Falha de compilação ao congelar a versão da revisão (traz os erros do TeX). */
 export { FreezeError } from '@/features/snapshots/hooks/use-freeze-snapshot';
 
-export type RequestStage = FreezeStage | 'opening' | 'diff';
+export type RequestStage = FreezeStage | 'opening' | 'diff' | 'carry';
 
 export interface RequestReviewInput {
   reviewerEmail: string;
@@ -32,6 +33,8 @@ export interface RequestReviewResult {
   frozeNewVersion: boolean;
   /** O Firebase enviou o link de acesso ao revisor (exige "Link de e-mail" ativo no Authentication). */
   emailSent: boolean;
+  /** Threads abertas da rodada anterior levadas para esta. */
+  carriedThreads: number;
 }
 
 /**
@@ -42,6 +45,7 @@ export interface RequestReviewResult {
 export function useRequestReview(projectId: string, projectName: string) {
   const freeze = useFreezeSnapshot(projectId, projectName);
   const { betweenVersions } = useVisualDiff(projectId);
+  const carryThreads = useCarryThreads(projectId);
 
   return useCallback(
     async ({ reviewerEmail, title, description, documentIds, onStage }: RequestReviewInput): Promise<RequestReviewResult> => {
@@ -111,6 +115,13 @@ export function useRequestReview(projectId: string, projectName: string) {
         }
       }
 
+      // Threads ainda abertas da rodada anterior do mesmo revisor vêm junto, reancoradas na versão nova.
+      let carriedThreads = 0;
+      if (review.previousReviewId) {
+        onStage('carry');
+        carriedThreads = await carryThreads(review.previousReviewId, { id: reviewRef.id, snapshotId: frozen.snapshotId, grantedDocumentIds: granted }).catch(() => 0);
+      }
+
       const emailSent = await sendSignInLinkToEmail(auth, reviewerEmail, {
         url: emailLinkUrl(reviewerEmail, reviewPath(projectId, reviewRef.id)),
         handleCodeInApp: true,
@@ -118,8 +129,8 @@ export function useRequestReview(projectId: string, projectName: string) {
         () => true,
         () => false,
       );
-      return { reviewId: reviewRef.id, number, snapshotLabel: frozen.label, frozeNewVersion: !frozen.reused, emailSent };
+      return { reviewId: reviewRef.id, number, snapshotLabel: frozen.label, frozeNewVersion: !frozen.reused, emailSent, carriedThreads };
     },
-    [freeze, betweenVersions, projectId, projectName],
+    [freeze, betweenVersions, carryThreads, projectId, projectName],
   );
 }

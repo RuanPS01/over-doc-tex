@@ -12,7 +12,7 @@ import { FreezeError, useRequestReview, type RequestReviewResult, type RequestSt
 import { reviewPath } from '../model/review';
 import { normalizeEmail } from '@/lib/email';
 
-const STAGE_LABELS: Record<RequestStage, string> = { ...FREEZE_STAGE_LABELS, opening: 'Abrindo a revisão', diff: 'Gerando a comparação em PDF' };
+const STAGE_LABELS: Record<RequestStage, string> = { ...FREEZE_STAGE_LABELS, opening: 'Abrindo a revisão', diff: 'Gerando a comparação em PDF', carry: 'Levando os comentários abertos' };
 
 interface RequestReviewDialogProps {
   open: boolean;
@@ -98,6 +98,13 @@ export function RequestReviewDialog({ open, onOpenChange, projectId, projectName
         {result ? (
           <div className="flex flex-col gap-3 text-sm">
             {result.frozeNewVersion && <p>A versão {result.snapshotLabel} foi congelada para esta revisão.</p>}
+            {result.carriedThreads > 0 && (
+              <p>
+                {result.carriedThreads === 1
+                  ? '1 comentário ainda aberto da rodada anterior veio junto.'
+                  : `${result.carriedThreads} comentários ainda abertos da rodada anterior vieram junto.`}
+              </p>
+            )}
             <p className={result.emailSent ? undefined : 'rounded-md border border-warning/50 bg-warning/10 p-2'}>
               {result.emailSent
                 ? 'O convite com o link de acesso foi enviado por e-mail.'

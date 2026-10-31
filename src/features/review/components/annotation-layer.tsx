@@ -103,6 +103,8 @@ export function AnnotationLayer({ page, threads, pending, tool, selectedThreadId
       onPointerCancel={finishStroke}
     >
       {threads.map(({ thread, number }) => {
+        // Trecho que não foi reencontrado na versão nova não tem lugar nesta página.
+        if (thread.status === 'outdated') return null;
         const isResolved = thread.status === 'resolved';
         const isSelected = thread.id === selectedThreadId;
         const badge = cn(

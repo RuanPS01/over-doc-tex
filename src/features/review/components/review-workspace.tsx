@@ -122,13 +122,16 @@ export function ReviewWorkspace({ review, role }: ReviewWorkspaceProps) {
 
   const submitPending = async (body: string) => {
     if (!pending) return;
+    const submitted = pending;
+    // A ferramenta volta na hora: esperar o servidor desfaria uma ferramenta escolhida nesse meio-tempo.
+    if (submitted.kind !== 'text') setTool('select');
     let annotation: NewAnnotation;
-    if (pending.kind === 'text') annotation = { kind: 'text', anchor: pending.anchor };
-    else if (pending.kind === 'pin') annotation = { kind: 'pin', page: pending.page, point: pending.point, drawing: null };
+    if (submitted.kind === 'text') annotation = { kind: 'text', anchor: submitted.anchor };
+    else if (submitted.kind === 'pin') annotation = { kind: 'pin', page: submitted.page, point: submitted.point, drawing: null };
     else {
-      const drawing = buildDrawing(pending.strokes);
+      const drawing = buildDrawing(submitted.strokes);
       if (!drawing) throw new Error('Desenho vazio ou grande demais.');
-      annotation = { kind: 'pin', page: pending.page, point: pinPointFor(drawing.bounds), drawing };
+      annotation = { kind: 'pin', page: submitted.page, point: pinPointFor(drawing.bounds), drawing };
     }
     // Trecho: o meio da primeira linha selecionada (o topo do retângulo cai na linha de cima).
     const firstRect = annotation.kind === 'text' ? annotation.anchor.rects[0] : undefined;
@@ -139,9 +142,9 @@ export function ReviewWorkspace({ review, role }: ReviewWorkspaceProps) {
           ? { page: annotation.anchor.page, x: firstRect.x + Math.min(0.02, firstRect.width / 2), y: firstRect.y + firstRect.height / 2 }
           : anchorPoint({ anchor: annotation.anchor });
     const threadId = await actions.createThread(documentId, annotation, body, sourceHintAt(reference.page, reference.x, reference.y));
-    setPending(null);
-    setTool('select');
-    if (threadId) setSelectedThreadId(threadId);
+    // Só limpa se a pessoa não começou outra marcação enquanto gravava.
+    setPending((current) => (current === submitted ? null : current));
+    if (threadId) setSelectedThreadId((current) => current ?? threadId);
   };
 
   const openSource = (thread: ThreadSummary) => {
@@ -175,6 +178,7 @@ export function ReviewWorkspace({ review, role }: ReviewWorkspaceProps) {
     <ThreadList
       projectId={review.projectId}
       reviewId={review.id}
+      previousReviewId={review.previousReviewId}
       threads={threads}
       pendingPanel={pendingPanel}
       selectedThreadId={selectedThreadId}

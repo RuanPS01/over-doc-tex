@@ -10,6 +10,25 @@ export function collapseSpaces(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
 }
 
+/** Expressão que acha a citação no texto da página com qualquer espaço ou quebra de linha entre as palavras. */
+export function quotePattern(exact: string, flags = 'u'): RegExp {
+  return new RegExp(
+    collapseSpaces(exact)
+      .split(' ')
+      .map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+      .join('\\s*'),
+    flags,
+  );
+}
+
+/** Contexto guardado (prefixo e sufixo) a partir de uma posição no texto da página. */
+export function contextAt(pageText: string, start: number, end: number): { prefix: string; suffix: string } {
+  return {
+    prefix: collapseSpaces(pageText.slice(Math.max(0, start - CONTEXT_CHARS * 2), start)).slice(-CONTEXT_CHARS),
+    suffix: collapseSpaces(pageText.slice(end, end + CONTEXT_CHARS * 2)).slice(0, CONTEXT_CHARS),
+  };
+}
+
 /**
  * Acha a citação no texto da página (o mesmo do `.pages` da versão) e devolve
  * citação, contexto e posição. Espaços e quebras de linha não precisam bater:
@@ -18,25 +37,11 @@ export function collapseSpaces(text: string): string {
 export function buildQuote(pageText: string, selected: string): Pick<TextAnchor, 'quote' | 'position'> | null {
   const exact = collapseSpaces(selected).slice(0, MAX_QUOTE_CHARS);
   if (!exact) return null;
-  const pattern = new RegExp(
-    exact
-      .split(' ')
-      .map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-      .join('\\s*'),
-    'u',
-  );
-  const match = pattern.exec(pageText);
+  const match = quotePattern(exact).exec(pageText);
   if (!match) return { quote: { exact, prefix: '', suffix: '' }, position: { start: 0, end: 0 } };
   const start = match.index;
   const end = start + match[0].length;
-  return {
-    quote: {
-      exact,
-      prefix: collapseSpaces(pageText.slice(Math.max(0, start - CONTEXT_CHARS * 2), start)).slice(-CONTEXT_CHARS),
-      suffix: collapseSpaces(pageText.slice(end, end + CONTEXT_CHARS * 2)).slice(0, CONTEXT_CHARS),
-    },
-    position: { start, end },
-  };
+  return { quote: { exact, ...contextAt(pageText, start, end) }, position: { start, end } };
 }
 
 const round = (value: number) => Math.round(Math.min(1, Math.max(0, value)) * 10_000) / 10_000;
