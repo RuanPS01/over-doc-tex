@@ -1,7 +1,7 @@
-import { PdfPreviewPanel } from '@/features/pdf-viewer/components/pdf-preview-panel';
 import { cn } from '@/lib/utils';
 import { useEditorStore } from '../state/editor-store';
 import { CodeEditorPanel } from './code-editor-panel';
+import { PdfPane } from './pdf-pane';
 import { PaneSwitcher } from './pane-switcher';
 
 interface MobileWorkspaceProps {
@@ -25,7 +25,7 @@ export function MobileWorkspace({ orientation }: MobileWorkspaceProps) {
           <CodeEditorPanel />
         </div>
         <div className="min-h-0 min-w-0">
-          <PdfPreviewPanel />
+          <PdfPane />
         </div>
       </div>
     );
@@ -39,7 +39,7 @@ export function MobileWorkspace({ orientation }: MobileWorkspaceProps) {
           <CodeEditorPanel />
         </div>
         <div className={cn('absolute inset-0', activePane !== 'pdf' && 'hidden')}>
-          <PdfPreviewPanel />
+          <PdfPane />
         </div>
       </div>
     </div>

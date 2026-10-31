@@ -23,10 +23,11 @@ Todas as páginas são carregadas com `React.lazy` em `src/app/router.tsx`. O Mo
 EditorPage                               pages/editor-page.tsx
 └── EditorStoreProvider                  features/editor/state/editor-store.tsx
     └── EditorShell                      .h-viewport flex-col overflow-hidden
+      └── CompileStoreProvider           estado da compilação; Ctrl+S e Ctrl+Enter compilam
         ├── EditorHeader                 cabeçalho travado (h-header)
         │   ├── botão Arquivos           só fora do desktop, abre FileTreeSheet
         │   ├── título do projeto        min-w-0 flex-1 truncate
-        │   ├── Compilar                 sempre visível (só ícone abaixo de sm)
+        │   ├── Compilar                 sempre visível (só ícone abaixo de sm); vira Compilando com indicador
         │   ├── Solicitar revisão        visível a partir de sm
         │   ├── Versões, Ver alterações  visíveis a partir de lg
         │   ├── Assistente de IA         botão alternável
@@ -36,11 +37,11 @@ EditorPage                               pages/editor-page.tsx
         │   │   └── ResizablePanelGroup  layout salvo em localStorage
         │   │       ├── FileTreePanel    com Importar e Exportar (.zip) na barra
         │   │       ├── CodeEditorPanel  Monaco
-        │   │       └── PdfPreviewPanel
+        │   │       └── PdfPane          liga o PdfPreviewPanel ao estado da compilação
         │   └── MobileWorkspace          layoutMode = mobile-portrait | mobile-landscape
         │       ├── PaneSwitcher         abas Código | PDF (só em retrato)
         │       ├── CodeEditorPanel      montado sempre, oculto com `hidden`
-        │       └── PdfPreviewPanel      montado sempre, oculto com `hidden`
+        │       └── PdfPane              montado sempre, oculto com `hidden`; compilar com sucesso mostra o PDF
         ├── FileTreeSheet                Sheet lateral (fora do desktop)
         ├── ImportDialog                 .zip, arquivos ou pasta; destino e política de conflito
         └── AiAssistantPanel             painel flutuante (desktop) ou Sheet inferior (celular)
@@ -65,7 +66,9 @@ EditorPage                               pages/editor-page.tsx
 | `MobileWorkspace` | Um painel por vez ou duas colunas curtas | nenhum | store |
 | `FileTreePanel` | Árvore indentada a partir dos caminhos | nenhum | `useProjectFiles` |
 | `CodeEditorPanel` | Monaco com LaTeX e tema dos tokens | modelos do Monaco (por `path`) | `useProjectFiles`, store |
-| `PdfPreviewPanel` | Páginas do PDF e zoom | zoom | (planejado) `useLatestBuild` |
+| `CompileStoreProvider` | Compilar o projeto e guardar o resultado | compilando, etapa, último PDF bom, último resultado | `useLatexCompile` |
+| `PdfPane` | Passar estado e ações da compilação ao visualizador | nenhum | `useCompileStore`, `useProjectFiles` |
+| `PdfPreviewPanel` | Páginas do PDF (pdf.js), zoom, download, andamento e lista de erros com arquivo e linha | zoom, lista aberta | props |
 | `AiAssistantPanel` | Conter o chat no formato certo para o layout | conversa (`useAiStream`), diálogo de configuração aberto | `useAiConfig`; `files`, `open` e `onOpenChange` vêm do `EditorShell` por props |
 | `AiSettingsDialog` | Editar e validar a fila de modelos | rascunho da fila, erros por item | `useAiConfig` |
 | `ImportDialog` | Ler a origem, montar e aplicar o plano de importação | origem lida, destino, política de conflito | `useProjectFiles`, `useProjectArchive` |
@@ -143,8 +146,8 @@ Pontos de atenção:
 
 | Feature | Componentes |
 | --- | --- |
-| `editor` | `EditorShell`, `EditorHeader`, `DesktopWorkspace`, `MobileWorkspace`, `PaneSwitcher`, `FileTreePanel`, `FileTreeSheet`, `CodeEditorPanel`, `ImportDialog` |
-| `pdf-viewer` | `PdfPreviewPanel` (planejado: `PdfViewer`, `PdfPage` e camadas) |
+| `editor` | `EditorShell`, `EditorHeader`, `DesktopWorkspace`, `MobileWorkspace`, `PaneSwitcher`, `FileTreePanel`, `FileTreeSheet`, `CodeEditorPanel`, `PdfPane`, `ImportDialog` |
+| `pdf-viewer` | `PdfPreviewPanel`, `PdfPages` (pdf.js, páginas desenhadas perto da área visível); planejado: camadas de texto e anotação da revisão |
 | `ai-assistant` | `AiAssistantPanel`, `AiSettingsDialog`, `ModelEntryCard`, `AiMessage`, `AiComposer`, `StructuredResultView` |
 | `auth` | `AuthProvider`, `RequireAuth` |
 | `projects` | `ProjectList`, `DemoProjectList`, `NewProjectDialog` |
@@ -161,6 +164,7 @@ Pontos de atenção:
 | `useProject` | projects | Projeto aberto no editor; nulo quando não existe ou a conta não é membro |
 | `useProjectFiles` | editor | Arquivos do projeto em tempo real (ou de demonstração) |
 | `useFileAutosave` | editor | Salva o texto 800 ms depois da última tecla e mostra Salvando, Salvo ou o erro |
+| `useLatexCompile` | editor | Junta o texto (do Monaco, se aberto, ou do cache) e os binários (arquivos em pedaços) e compila com o Siglum |
 | `useProjectArchive` | editor | Exporta o .zip e aplica o plano de importação (Firestore, com binários em pedaços, ou cache no modo demonstração) |
 | `useExportProject` | editor | Exportação do projeto aberto, usada pela árvore e pelo menu |
 | `useAiConfig` | ai-assistant | Configuração da IA na conta (`users/{uid}/private/ai`) ou no navegador |

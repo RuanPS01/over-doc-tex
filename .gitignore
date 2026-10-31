@@ -13,3 +13,5 @@ ui-debug.log
 .DS_Store
 coverage/
 dist-screenshots/
+# Repositório de pacotes LaTeX gerado por scripts/latex-packages.mjs
+public/texlive/

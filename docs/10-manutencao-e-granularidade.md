@@ -25,7 +25,8 @@ Não há servidor: todo código de produto roda no navegador. O que antes seria 
 | Um hook de interface sem domínio (media query, teclado) | `src/hooks` |
 | Infraestrutura (parser, conversões, zip, download) | `src/lib/<assunto>` |
 | Lógica de IA (provedor, prompt, tarefa, contexto) | `src/lib/ai` (mapa completo em `11-servico-de-ia.md`) |
-| Trabalho pesado que não pode travar a interface (compilação, diff) | Web Worker em `src/lib/latex` ou `src/lib/diff` (planejado) |
+| Compilação LaTeX (motor, preparação, log) | `src/lib/latex`; o diff, planejado, em `src/lib/diff` |
+| Um pacote LaTeX que o compilador não tem | Nome do pacote do TeX Live em `ROOT_PACKAGES` de `scripts/latex-packages.mjs` (as dependências entram sozinhas) |
 | Tipo de documento do Firestore ou caminho | `shared/firestore/types.ts` e `paths.ts` |
 | Rota nova | `src/pages/<nome>-page.tsx` e uma linha em `src/app/router.tsx` |
 | Uma operação que envolve vários documentos | Um `writeBatch` no hook, e a validação cruzada (`getAfter`, `existsAfter`) em `firestore.rules` |
@@ -127,8 +128,10 @@ Teste com chave real de provedor de IA só por variável de ambiente, nunca grav
 
 | Item | Detalhe | Prioridade |
 | --- | --- | --- |
-| Motor LaTeX em WebAssembly | Avaliar SwiftLaTeX e BusyTeX; compilar em Web Worker com SyncTeX, conforme `07-fluxos.md` | Alta |
-| Visualizador pdf.js | Substituir os marcadores de página do `PdfPreviewPanel` por páginas reais com camadas de texto e anotação | Alta |
+| BibTeX e Biber na compilação | O Siglum não roda; citações saem como `[?]`. Avaliar rodar o `bibtex8` do próprio binário do BusyTeX entre as passagens | Alta |
+| Navegação SyncTeX | O Siglum já gera o `.synctex`; ligar clique no PDF à linha do código e vice-versa | Média |
+| Assets do Siglum hospedados por nós | Hoje motor e conjuntos vêm de `cdn.siglum.org` (projeto pequeno, de terceiros). Espelhar no Hosting exige plano pago pelo tráfego de cerca de 45 MB por pessoa | Média |
+| Camadas do pdf.js para a revisão | O visualizador desenha as páginas; faltam a camada de texto (seleção) e a de anotação | Alta |
 | Editor somente leitura para leitores | Quem tem papel `viewer` hoje digita e vê "Sem permissão para editar" no salvamento; o Monaco deveria abrir em modo leitura e esconder Importar | Média |
 | Gerenciar projetos | Renomear, arquivar e convidar coautores pela interface (as regras já permitem renomear e convidar) | Média |
 | Revisão | `ReviewPage`, snapshot no navegador, convite do revisor por link de e-mail (`sendSignInLinkToEmail`), threads, desenho e pins | Alta |

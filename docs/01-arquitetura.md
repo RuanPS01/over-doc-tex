@@ -29,7 +29,7 @@ O OverDocTeX é um PWA estático de edição LaTeX com revisão por versões con
 | Dados em tempo real | Firestore (SDK web com cache persistente) | Projetos, arquivos, versões, revisões, threads, configuração de IA |
 | Arquivos | Firestore, em pedaços de até 1.000.000 bytes | Conteúdo por hash, PDFs de versão e de diff (`06-banco-de-dados.md`, seção 3) |
 | Regras | `firestore.rules` | Toda a autorização e a coerência entre documentos gravados em lote, inclusive dos binários |
-| Trabalho pesado | Web Workers no navegador | Compilação LaTeX (motor WebAssembly, planejado) e motor de diff |
+| Trabalho pesado | Web Workers no navegador | Compilação LaTeX (Siglum, TeX Live 2025 em WebAssembly) e, planejado, o motor de diff |
 | IA | `@anthropic-ai/sdk`, `openai`, `@google/genai` no navegador | Escrita, paráfrase, estrutura, sumário, auditoria de referências |
 | Hospedagem | GitHub Pages e Firebase Hosting | O mesmo site estático nos dois; deploy pelo workflow `.github/workflows/deploy.yml` |
 
@@ -39,7 +39,7 @@ O OverDocTeX é um PWA estático de edição LaTeX com revisão por versões con
 
 **D2. Sem servidor.** Tudo que antes seria uma Cloud Function é feito pelo app e conferido pelas regras: o snapshot só nasce no mesmo lote que avança o contador do projeto exatamente 1; a revisão só nasce junto com o grant do revisor; contadores de comentários só sobem de 1 em 1. Assim o projeto roda com GitHub Pages mais Firebase, sem nada para manter em execução.
 
-**D3. Compilação e diff no navegador.** O LaTeX é compilado por um motor WebAssembly num Web Worker (planejado: avaliar SwiftLaTeX e BusyTeX), e o diff usa o mesmo algoritmo de `07-fluxos.md`, também num Worker. O preço é a primeira compilação mais lenta e um conjunto de pacotes LaTeX menor que um TeX Live completo.
+**D3. Compilação e diff no navegador.** O LaTeX é compilado pelo Siglum (`@siglum/engine`, MIT): pdfTeX do TeX Live 2025 em WebAssembly, num Web Worker. O motor (cerca de 30 MB) e os conjuntos de pacotes vêm da CDN do Siglum na primeira compilação e ficam em cache no navegador; o código do documento nunca sai do navegador. Pacotes que não estão nesses conjuntos vêm de um repositório estático do próprio site (`public/texlive`, arquivos `.tar.xz` do TeX Live 2025 gerados por `scripts/latex-packages.mjs`), no formato que o Siglum espera de um proxy, então não há servidor. Não exige isolamento entre origens (COOP/COEP): sem `SharedArrayBuffer` o Siglum copia os dados entre página e worker, um pouco mais devagar, e o login com Google por popup continua funcionando. Descartados: SwiftLaTeX (AGPL, parado desde 2023 e com servidores fora do ar) e texlive.net (manda o documento a terceiros e não libera CORS). O diff usará o mesmo motor, conforme `07-fluxos.md`. O preço é a primeira compilação mais lenta e um conjunto de pacotes menor que um TeX Live completo.
 
 **D4. O revisor não é membro do projeto.** O acesso vem de grants por **e-mail verificado** (`snapshots/{sid}/grants/{email}`), criados pelo autor no mesmo lote da revisão. O revisor vê só os snapshots e documentos liberados, nunca o rascunho. Coautores entram por convite de e-mail (`pendingMembers`) e se adicionam sozinhos ao aceitar.
 
@@ -80,7 +80,7 @@ over-doc-tex/
 │   │   │   ├── hooks/                 useProjectFiles, useFileAutosave, useProjectArchive, useExportProject
 │   │   │   ├── model/                 modelo de visão e dados de demonstração
 │   │   │   └── state/                 estado de interface do editor
-│   │   ├── pdf-viewer/                PdfPreviewPanel
+│   │   ├── pdf-viewer/                PdfPreviewPanel e PdfPages (pdf.js)
 │   │   ├── ai-assistant/
 │   │   │   ├── components/            painel, diálogo "Usar a minha própria IA", cartão de modelo
 │   │   │   └── hooks/                 useAiConfig, useAiStream, useProviderModels
@@ -98,7 +98,7 @@ over-doc-tex/
 │   │   ├── firebase/                  inicialização preguiçosa, emuladores e leitura/gravação dos pedaços
 │   │   ├── markdown/                  marked + DOMPurify
 │   │   ├── monaco/                    linguagem LaTeX e tema derivado dos tokens
-│   │   ├── latex/                     (planejado) motor WebAssembly em Web Worker
+│   │   ├── latex/                     compilação (Siglum), preparação do projeto e leitura do log
 │   │   ├── diff/                      (planejado) lexer, alinhamento, emissor
 │   │   ├── download.ts, query-keys.ts, utils.ts
 │   └── styles/globals.css             tokens e utilitários (.h-viewport)

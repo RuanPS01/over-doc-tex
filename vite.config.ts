@@ -65,9 +65,20 @@ export default defineConfig({
     },
   },
   resolve: {
-    alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url)),
-      '@shared': fileURLToPath(new URL('./shared', import.meta.url)),
-    },
+    alias: [
+      { find: '@shared', replacement: fileURLToPath(new URL('./shared', import.meta.url)) },
+      { find: '@', replacement: fileURLToPath(new URL('./src', import.meta.url)) },
+      // Worker do compilador LaTeX: o pacote não o exporta, e o Siglum precisa da URL dele.
+      // Expressão regular para casar também o sufixo ?url.
+      {
+        find: /^siglum-worker(\?url)?$/,
+        replacement: `${fileURLToPath(new URL('./node_modules/@siglum/engine/src/worker.js', import.meta.url))}$1`,
+      },
+      // A blake3-wasm não empacota; sem ela o Siglum usa um hash próprio (ver o arquivo).
+      {
+        find: /^blake3-wasm\/browser\.js$/,
+        replacement: fileURLToPath(new URL('./src/lib/latex/blake3-unavailable.ts', import.meta.url)),
+      },
+    ],
   },
 });

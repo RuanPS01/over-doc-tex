@@ -3,6 +3,7 @@ import { AiAssistantPanel } from '@/features/ai-assistant/components/ai-assistan
 import { useLayoutMode } from '@/hooks/use-layout-mode';
 import { useProjectFiles } from '../hooks/use-project-files';
 import { pickFallbackFile } from '../model/editor-file';
+import { CompileStoreProvider } from '../state/compile-store';
 import { useEditorStore } from '../state/editor-store';
 import { DesktopWorkspace } from './desktop-workspace';
 import { EditorHeader } from './editor-header';
@@ -28,20 +29,22 @@ export function EditorShell() {
   }, [files, activeFileId, openFile]);
 
   return (
-    <div className="flex h-viewport flex-col overflow-hidden bg-background">
-      <EditorHeader projectName={projectName} layoutMode={layoutMode} />
+    <CompileStoreProvider>
+      <div className="flex h-viewport flex-col overflow-hidden bg-background">
+        <EditorHeader projectName={projectName} layoutMode={layoutMode} />
 
-      <main className="relative min-h-0 flex-1 overflow-hidden">
-        {layoutMode === 'desktop' ? (
-          <DesktopWorkspace />
-        ) : (
-          <MobileWorkspace orientation={layoutMode === 'mobile-landscape' ? 'landscape' : 'portrait'} />
-        )}
-      </main>
+        <main className="relative min-h-0 flex-1 overflow-hidden">
+          {layoutMode === 'desktop' ? (
+            <DesktopWorkspace />
+          ) : (
+            <MobileWorkspace orientation={layoutMode === 'mobile-landscape' ? 'landscape' : 'portrait'} />
+          )}
+        </main>
 
-      {layoutMode !== 'desktop' && <FileTreeSheet />}
-      <ImportDialog />
-      <AiAssistantPanel layoutMode={layoutMode} open={aiOpen} onOpenChange={setAiOpen} files={files} />
-    </div>
+        {layoutMode !== 'desktop' && <FileTreeSheet />}
+        <ImportDialog />
+        <AiAssistantPanel layoutMode={layoutMode} open={aiOpen} onOpenChange={setAiOpen} files={files} />
+      </div>
+    </CompileStoreProvider>
   );
 }

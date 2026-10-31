@@ -72,7 +72,9 @@ export default function LoginPage() {
         {isDemo && (
           <p className="text-sm text-muted-foreground">Firebase não configurado: login indisponível no modo demonstração.</p>
         )}
-        <Button variant="outline" disabled={isDemo || isBusy} onClick={() => void run(signInWithGoogle)}>
+        {/* Diretrizes do Google: "G" nas cores oficiais, a 10px do texto. */}
+        <Button variant="outline" className="gap-2.5" disabled={isDemo || isBusy} onClick={() => void run(signInWithGoogle)}>
+          <img src={`${import.meta.env.BASE_URL}icons/google-g.svg`} alt="" width={18} height={18} className="size-[18px] shrink-0" />
           Continuar com Google
         </Button>
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
