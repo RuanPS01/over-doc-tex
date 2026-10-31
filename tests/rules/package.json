@@ -2,9 +2,9 @@
   "name": "over-doc-tex-rules-tests",
   "private": true,
   "type": "module",
-  "description": "Testes das regras do Firestore e do Storage nos emuladores (requer Java 21+).",
+  "description": "Testes das regras do Firestore no emulador (requer Java 21+).",
   "scripts": {
-    "test": "firebase emulators:exec --config ../../firebase.json --only firestore,storage --project demo-overdoctex \"node firestore-rules.test.mjs && node storage-rules.test.mjs\""
+    "test": "firebase emulators:exec --config ../../firebase.json --only firestore --project demo-overdoctex \"node firestore-rules.test.mjs\""
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.2",

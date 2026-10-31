@@ -48,8 +48,8 @@ export default defineConfig({
     }),
   ],
   build: {
-    // O SDK do Firebase (auth + firestore + storage) ocupa ~650 kB sozinho.
-    // Carregar Storage e Firestore sob demanda está em docs/10-manutencao-e-granularidade.md.
+    // O SDK do Firebase (auth + firestore) é o maior pedaço de fornecedor.
+    // Carregar o Firestore sob demanda está em docs/10-manutencao-e-granularidade.md.
     chunkSizeWarningLimit: 700,
     rolldownOptions: {
       output: {

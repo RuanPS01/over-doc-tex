@@ -27,7 +27,7 @@ Consultar não é opcional: quase toda necessidade de "componente novo" já tem 
 Casos que sempre exigem atualização:
 
 - criou, renomeou ou removeu página, componente reutilizável ou hook (`04`);
-- mudou coleção, campo ou regra de segurança (`06`, `firestore.rules`, `storage.rules`, testes em `tests/rules/`);
+- mudou coleção, campo ou regra de segurança (`06`, `firestore.rules`, testes em `tests/rules/`);
 - mudou token visual (`03`);
 - criou um padrão de layout responsivo reaproveitável (`08`);
 - adicionou ou removeu dependência (`02`);
@@ -62,7 +62,7 @@ O hífen simples é permitido. Ícones de seta (`ArrowLeft`) são permitidos: a 
 | Rolagem horizontal no `body` | Contrato de 360px | `min-w-0`, `truncate`, `grid-cols-1`, menus |
 | `dangerouslySetInnerHTML` fora de `src/components/common/markdown-content.tsx` | XSS (e a chave de IA do usuário está no navegador) | `MarkdownContent`, que sanitiza com DOMPurify |
 | SDK do Firebase em páginas ou componentes visuais | Acoplamento | Hooks em `src/features/<domínio>/hooks/` |
-| Caminho do Firestore/Storage montado fora de `shared/firestore/paths.ts` | Divergência | `firestorePaths` e `storagePaths` |
+| Caminho do Firestore montado fora de `shared/firestore/paths.ts` | Divergência | `firestorePaths` |
 | Gravar snapshot, revisão ou contador fora do lote previsto em `07-fluxos.md` | As regras recusam, e o dado fica incoerente | Lotes (`writeBatch`) com todos os documentos que as regras conferem juntos |
 | Chave de API embutida no build, em `.env` público ou em log | A plataforma não tem IA própria; chaves são só dos usuários | `users/{uid}/private/ai` ou o navegador do próprio usuário (`11-servico-de-ia.md`) |
 | Aceitar status de link ou dado factual vindo do texto do modelo | Alucinação | Status vem da ferramenta do provedor; o modelo só julga semântica |

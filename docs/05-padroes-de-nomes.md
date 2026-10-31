@@ -34,7 +34,7 @@
 
 Não usar `enum`, `namespace` nem `any`.
 
-## 4. Firestore e Storage
+## 4. Firestore
 
 | Elemento | Padrão | Exemplo |
 | --- | --- | --- |
@@ -42,10 +42,10 @@ Não usar `enum`, `namespace` nem `any`.
 | Campos | `camelCase` | `reviewerUid`, `lastActivityAt` |
 | Datas | sufixo `At` (Timestamp) | `createdAt`, `resolvedAt` |
 | Referências | sufixo `Id` ou `Ids` | `snapshotId`, `memberIds` |
-| Caminhos do Storage | `kebab-case` ou ids, extensões reais | `projects/{id}/snapshots/{sid}/{documentId}.pdf` |
+| Arquivos em pedaços | cabeçalho com id significativo e subcoleção `chunks/{índice}` ("0", "1"...) | `blobs/{sha256}`, `snapshots/{sid}/files/main.pdf/chunks/0` |
 | IDs determinísticos | hash hexadecimal | `diffKey`, `invites/{sha256(token)}` |
 
-Todo caminho é montado por `firestorePaths` ou `storagePaths` (`shared/firestore/paths.ts`).
+Todo caminho é montado por `firestorePaths` e `snapshotFileName` (`shared/firestore/paths.ts`).
 
 ## 5. React Query
 

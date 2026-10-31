@@ -90,6 +90,11 @@
       "collectionGroup": "threads",
       "fieldPath": "anchor",
       "indexes": []
+    },
+    {
+      "collectionGroup": "chunks",
+      "fieldPath": "data",
+      "indexes": []
     }
   ]
 }

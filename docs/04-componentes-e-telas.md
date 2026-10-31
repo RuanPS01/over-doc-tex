@@ -153,7 +153,7 @@ Pontos de atenção:
 | Hook | Feature | O que faz |
 | --- | --- | --- |
 | `useProjectFiles` | editor | Arquivos do projeto em tempo real (ou de demonstração) |
-| `useProjectArchive` | editor | Exporta o .zip e aplica o plano de importação (Firestore e Storage, ou cache no modo demonstração) |
+| `useProjectArchive` | editor | Exporta o .zip e aplica o plano de importação (Firestore, com binários em pedaços, ou cache no modo demonstração) |
 | `useExportProject` | editor | Exportação do projeto aberto, usada pela árvore e pelo menu |
 | `useAiConfig` | ai-assistant | Configuração da IA na conta (`users/{uid}/private/ai`) ou no navegador |
 | `useAiStream` | ai-assistant | Conversa com a fila de modelos, deltas por quadro, troca de modelo |

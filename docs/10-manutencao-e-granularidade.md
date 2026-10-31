@@ -50,14 +50,25 @@ Passo a passo em `11-servico-de-ia.md` (seção 11.10). Em resumo: um arquivo `s
 ### 3.3 Adicionar uma coleção ou campo
 
 1. Tipo em `shared/firestore/types.ts` e caminho em `shared/firestore/paths.ts`.
-2. Regra em `firestore.rules` (e em `storage.rules`, se houver arquivo). Como não há servidor, a regra é a única validação: confira dono, tipos, campos imutáveis e, em operações de vários documentos, a consistência do lote.
+2. Regra em `firestore.rules`. Como não há servidor, a regra é a única validação: confira dono, tipos, campos imutáveis e, em operações de vários documentos, a consistência do lote.
 3. Índices compostos em `firestore.indexes.json`; desligar índice de campos grandes em `fieldOverrides`.
 4. Cenários em `tests/rules/firestore-rules.test.mjs` (permitido e negado).
 5. Documentação em `06-banco-de-dados.md`.
 
 Tudo no mesmo commit.
 
-### 3.4 Adicionar uma tela
+### 3.4 Guardar um binário novo
+
+Não há Cloud Storage: use `writeStoredFile` (cabeçalho próprio) ou `writeChunks` (quando o cabeçalho é um documento que já tem outros campos, como o diff), de `src/lib/firebase/stored-files.ts`, e leia com `readStoredFile` ou `readChunks`. Para um lugar novo:
+
+1. Caminho em `shared/firestore/paths.ts`.
+2. Em `firestore.rules`, um `match` para o cabeçalho (com `validStoredFile` ou `validFileInfo`, `lastChunkWritten` e o teto em bytes) e outro para `chunks/{index}` (com `validChunkIndex`, `validChunk` e `!headerExists`).
+3. Cenários de cabeçalho sem o último pedaço, tamanho incoerente e gravação depois de finalizar em `tests/rules/firestore-rules.test.mjs`.
+4. Tabela da seção 3 de `06-banco-de-dados.md`, com o teto e o custo na cota.
+
+Lembre que tudo divide a cota de 1 GiB: prefira não guardar o que pode ser regerado no navegador.
+
+### 3.5 Adicionar uma tela
 
 1. Escrever primeiro o layout de 360px; depois `sm:` e `lg:`.
 2. Página em `src/pages`, lazy em `router.tsx`.
@@ -66,13 +77,13 @@ Tudo no mesmo commit.
 5. Incluir a rota em `scripts/check-responsive.mjs` e rodar `npm run check:responsive`.
 6. Registrar em `04-componentes-e-telas.md`.
 
-### 3.5 Mudar a importação ou a exportação
+### 3.6 Mudar a importação ou a exportação
 
 As regras puras (caminhos, plano, limites) ficam em `src/lib/project-archive` e têm testes em `tests/unit/project-archive.test.ts`. Toda entrada de zip passa por `normalizeArchivePath`, que recusa caminho absoluto e `..`; não leia nomes de entrada sem passar por ela. Limites novos entram em `IMPORT_LIMITS` e são conferidos antes de descompactar.
 
-### 3.6 Mudar o motor de diff
+### 3.7 Mudar o motor de diff
 
-Toda mudança que altere o LaTeX gerado incrementa a versão do motor. Como a versão faz parte do `diffKey`, PDFs antigos não são reaproveitados por engano; os anteriores expiram pela regra de ciclo de vida do bucket.
+Toda mudança que altere o LaTeX gerado incrementa a versão do motor. Como a versão faz parte do `diffKey`, PDFs antigos não são reaproveitados por engano. Os anteriores continuam no banco até existir a coleta de lixo (backlog), então não troque a versão do motor sem necessidade: cada troca regera os diffs e ocupa cota.
 
 ## 4. Verificações
 
@@ -89,9 +100,9 @@ O workflow `.github/workflows/deploy.yml` roda todas essas verificações em cad
 
 Os testes de regras ficam em um pacote separado (`tests/rules/`) porque `@firebase/rules-unit-testing` exige o SDK Firebase 12, enquanto o app usa o 13.
 
-Cada suíte de regras começa com os emuladores vazios (`createTestEnv` limpa Firestore e Storage). Não grave dados fora dela nem dependa da ordem das suítes: elas rodam em sequência na mesma sessão do emulador.
+A suíte de regras começa com o Firestore vazio (`createTestEnv` limpa o banco). Não dependa de dados deixados por outra execução na mesma sessão do emulador.
 
-Atrás de proxy HTTP (máquinas corporativas, contêineres de agentes), o firebase-tools manda até as chamadas internas entre emuladores pelo proxy, e as regras do Storage que consultam o Firestore passam a receber "documento inexistente". Rode sem as variáveis de proxy: `env -u HTTPS_PROXY -u HTTP_PROXY -u JAVA_TOOL_OPTIONS npm run test:rules`.
+Atrás de proxy HTTP (máquinas corporativas, contêineres de agentes), o firebase-tools manda até as chamadas internas entre emuladores pelo proxy e elas falham. Rode sem as variáveis de proxy: `env -u HTTPS_PROXY -u HTTP_PROXY -u JAVA_TOOL_OPTIONS npm run test:rules`.
 
 Teste com chave real de provedor de IA só por variável de ambiente, nunca gravada em arquivo, commit ou documento (nem mascarada).
 
@@ -119,10 +130,11 @@ Teste com chave real de provedor de IA só por variável de ambiente, nunca grav
 | Motor LaTeX em WebAssembly | Avaliar SwiftLaTeX e BusyTeX; compilar em Web Worker com SyncTeX, conforme `07-fluxos.md` | Alta |
 | Visualizador pdf.js | Substituir os marcadores de página do `PdfPreviewPanel` por páginas reais com camadas de texto e anotação | Alta |
 | Revisão | `ReviewPage`, snapshot no navegador, convite do revisor por link de e-mail (`sendSignInLinkToEmail`), threads, desenho e pins | Alta |
-| Importação contra um projeto Firebase real | O caminho com Firestore e Storage de `useProjectArchive` foi verificado só por tipos; o modo demonstração foi testado de ponta a ponta | Alta |
+| Coleta de lixo de binários | Blobs e PDFs de diff sem referência ficam no banco para sempre (sobrescrever um arquivo cria outro blob). Uma ação "Limpar arquivos não usados" precisaria listar `files` e os manifestos de todos os snapshots e liberar exclusão de blob nas regras com cuidado, porque snapshots dependem deles | Média |
+| Uso da cota do Firestore | Mostrar no app quanto o projeto ocupa (soma de `totalBytes` dos cabeçalhos) e avisar perto do limite de 1 GiB | Média |
 | Provedor OpenAI com chave real | Coberto por tipos e pelo contrato, mas ainda não exercitado contra a API (Claude foi testado com API simulada e Gemini com chave real) | Média |
 | Histórico das conversas de IA | Hoje a conversa vive na memória da aba; persistir em `projects/{projectId}/aiConversations` (caminho e tipo já existem) | Média |
-| Tamanho do SDK Firebase | Chunk de cerca de 650 kB; carregar Storage e Firestore sob demanda | Média |
+| Tamanho do SDK Firebase | Chunk grande; carregar o Firestore sob demanda | Média |
 | Ícones PNG do PWA | Gerar 192 e 512 px (e maskable) a partir de `public/icons/icon.svg` | Baixa |
 | Monaco empacotado localmente | Se a abertura offline na primeira visita virar requisito | Baixa |
 | Tailwind 4 | Migrar para configuração CSS-first quando o padrão do shadcn/ui estabilizar para o projeto | Baixa |

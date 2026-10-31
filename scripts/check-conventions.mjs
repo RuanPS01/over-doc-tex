@@ -69,7 +69,7 @@ check(
 check(
   code,
   /[`'"]projects\//,
-  'caminho do Firestore/Storage fora de shared/firestore/paths.ts',
+  'caminho do Firestore fora de shared/firestore/paths.ts',
   (path) => path === 'shared/firestore/paths.ts',
   { codeOnly: true },
 );

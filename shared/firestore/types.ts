@@ -12,22 +12,35 @@
  *   users/{uid}/notifications/{notificationId}
  *   projects/{projectId}
  *   projects/{projectId}/files/{fileId}
+ *   projects/{projectId}/blobs/{sha256}                         (binário, imutável)
+ *   projects/{projectId}/blobs/{sha256}/chunks/{index}
  *   projects/{projectId}/documents/{documentId}
  *   projects/{projectId}/snapshots/{snapshotId}                 (imutável)
  *   projects/{projectId}/snapshots/{snapshotId}/grants/{email}  (acesso do revisor)
+ *   projects/{projectId}/snapshots/{snapshotId}/files/{name}    (PDF, SyncTeX, texto por página)
+ *   projects/{projectId}/snapshots/{snapshotId}/files/{name}/chunks/{index}
  *   projects/{projectId}/reviews/{reviewId}
  *   projects/{projectId}/reviews/{reviewId}/threads/{threadId}
  *   projects/{projectId}/reviews/{reviewId}/threads/{threadId}/comments/{commentId}
  *   projects/{projectId}/diffs/{diffKey}
+ *   projects/{projectId}/diffs/{diffKey}/chunks/{index}         (PDF do diff)
  *   projects/{projectId}/aiConversations/{conversationId}
  *   projects/{projectId}/aiConversations/{conversationId}/messages/{messageId}
  *   projects/{projectId}/referenceChecks/{checkId}
+ *
+ * Não há Cloud Storage: binários ficam no Firestore em pedaços de até
+ * 1.000.000 bytes (StoredFileDoc e FileChunkDoc, abaixo).
  */
 
 /** Timestamp compatível com os SDKs web e Admin. */
 export interface TimestampLike {
   toDate(): Date;
   toMillis(): number;
+}
+
+/** Campo binário (Bytes no SDK web). */
+export interface BytesLike {
+  toUint8Array(): Uint8Array;
 }
 
 // Identificadores nomeados apenas para legibilidade das assinaturas.
@@ -149,7 +162,7 @@ export interface FileDoc {
   kind: FileKind;
   /** Conteúdo inline para arquivos de texto até 512 KiB (limite do documento: 1 MiB). */
   content: string | null;
-  /** Binários e textos grandes: "projects/{projectId}/blobs/{sha256}" no Storage. */
+  /** Binários e textos grandes: "projects/{projectId}/blobs/{sha256}" (arquivo em pedaços). */
   blobPath: string | null;
   /** sha256 hexadecimal do conteúdo; nulo para pastas. */
   contentHash: string | null;
@@ -158,6 +171,34 @@ export interface FileDoc {
   revision: number;
   updatedAt: TimestampLike;
   updatedBy: UserId;
+}
+
+// ---------------------------------------------------------------------------
+// Arquivos em pedaços (binários guardados no Firestore)
+// ---------------------------------------------------------------------------
+
+/** Descrição de um arquivo guardado em pedaços; os mesmos limites de firestore.rules. */
+export interface StoredFileInfo {
+  totalBytes: number;
+  contentType: string;
+  /** sha256 hexadecimal do conteúdo inteiro, conferido ao remontar. */
+  sha256: string;
+  chunkCount: number;
+  /** Sempre 1.000.000; o último pedaço pode ser menor. */
+  chunkBytes: number;
+}
+
+// projects/{projectId}/blobs/{sha256} e projects/{projectId}/snapshots/{sid}/files/{name}
+// Cabeçalho gravado por último, no mesmo lote do último pedaço. Existir o
+// cabeçalho significa que o arquivo está completo; depois disso nada muda.
+export interface StoredFileDoc extends StoredFileInfo {
+  createdBy: UserId;
+  createdAt: TimestampLike;
+}
+
+// {arquivo}/chunks/{index}, com index = "0", "1", ...
+export interface FileChunkDoc {
+  data: BytesLike;
 }
 
 // projects/{projectId}/documents/{documentId}
@@ -171,11 +212,13 @@ export interface DocumentDoc {
   /** Nulo herda o motor do projeto. */
   engine: LatexEngine | null;
   order: number;
-  /** Última compilação de trabalho (feita no navegador e gravada pelo app). */
+  /**
+   * Resumo da última compilação de trabalho. O PDF dela não é gravado no banco:
+   * cada pessoa compila no próprio navegador, e guardar cada compilação gastaria
+   * a cota de 1 GiB do Firestore.
+   */
   lastBuild: {
     status: BuildStatus;
-    pdfPath: string | null;
-    logPath: string | null;
     sourceHash: string;
     durationMs: number | null;
     finishedAt: TimestampLike | null;
@@ -200,19 +243,19 @@ export interface SnapshotRender {
   title: string;
   role: DocumentRole;
   rootPath: string;
-  /** "projects/{projectId}/snapshots/{snapshotId}/{documentId}.pdf" */
+  /** "projects/{projectId}/snapshots/{snapshotId}/files/{documentId}.pdf" (arquivo em pedaços). */
   pdfPath: string;
   pdfSha256: string;
   pageCount: number;
-  /** Dados SyncTeX para mapear PDF e código-fonte. */
+  /** Dados SyncTeX para mapear PDF e código-fonte: ".../files/{documentId}.synctex". */
   synctexPath: string | null;
-  /** JSON com o texto extraído por página, usado para ancorar e reancorar comentários. */
+  /** JSON com o texto extraído por página, para ancorar comentários: ".../files/{documentId}.pages". */
   pageTextPath: string | null;
 }
 
 // projects/{projectId}/snapshots/{snapshotId}
 // Escrito UMA vez pelo app de quem congela, no mesmo lote que avança
-// `counters.snapshots`, depois de enviar PDFs e blobs. As regras negam
+// `counters.snapshots`, depois de gravar os blobs e os arquivos da versão. As regras negam
 // qualquer update/delete: o snapshot é imutável.
 export interface SnapshotDoc {
   /** Rótulo legível, ex.: "1.0", "1.1". */
@@ -406,7 +449,8 @@ export interface DiffDoc {
   engineVersion: string;
   /** Nível alcançado na escada de degradação (ver docs/07-fluxos.md). */
   granularity: DiffGranularity;
-  pdfPath: string | null;
+  /** PDF do diff, em pedaços na subcoleção chunks deste documento; nulo se não compilou. */
+  pdf: StoredFileInfo | null;
   stats: { insertedWords: number; deletedWords: number; changedBlocks: number };
   /** Limitado a 500 marcadores para respeitar o tamanho máximo do documento. */
   changes: DiffChangeMarker[];

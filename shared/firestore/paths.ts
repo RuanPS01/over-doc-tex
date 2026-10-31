@@ -1,5 +1,6 @@
 /**
- * Construtores de caminhos do Firestore e do Storage.
+ * Construtores de caminhos do Firestore. Binários também moram no Firestore,
+ * divididos em pedaços (ver src/lib/stored-files/chunks.ts).
  * Nenhum caminho deve ser montado com template string fora deste arquivo.
  */
 import type {
@@ -26,6 +27,12 @@ export const firestorePaths = {
   snapshots: (projectId: ProjectId) => `projects/${projectId}/snapshots`,
   snapshot: (projectId: ProjectId, snapshotId: SnapshotId) =>
     `projects/${projectId}/snapshots/${snapshotId}`,
+  /**
+   * Arquivos gerados no congelamento ({documentId}.pdf, .synctex, .pages):
+   * gravados antes do documento do snapshot e imutáveis depois.
+   */
+  snapshotFile: (projectId: ProjectId, snapshotId: SnapshotId, fileName: string) =>
+    `projects/${projectId}/snapshots/${snapshotId}/files/${fileName}`,
   /** O id do grant é o e-mail do revisor em minúsculas. */
   snapshotGrant: (projectId: ProjectId, snapshotId: SnapshotId, email: string) =>
     `projects/${projectId}/snapshots/${snapshotId}/grants/${email.toLowerCase()}`,
@@ -37,7 +44,13 @@ export const firestorePaths = {
     `projects/${projectId}/reviews/${reviewId}/threads/${threadId}`,
   comments: (projectId: ProjectId, reviewId: ReviewId, threadId: ThreadId) =>
     `projects/${projectId}/reviews/${reviewId}/threads/${threadId}/comments`,
+  /** O PDF do diff fica nos pedaços deste mesmo documento (campo `pdf`). */
   diff: (projectId: ProjectId, diffKey: string) => `projects/${projectId}/diffs/${diffKey}`,
+  /** Conteúdo endereçado por hash: imutável e deduplicado entre versões. */
+  blob: (projectId: ProjectId, sha256: string) => `projects/${projectId}/blobs/${sha256}`,
+  /** Pedaços de um arquivo guardado: blob, arquivo de versão ou diff. */
+  chunks: (parentPath: string) => `${parentPath}/chunks`,
+  chunk: (parentPath: string, index: number) => `${parentPath}/chunks/${index}`,
   aiConversations: (projectId: ProjectId) => `projects/${projectId}/aiConversations`,
   aiConversation: (projectId: ProjectId, conversationId: string) =>
     `projects/${projectId}/aiConversations/${conversationId}`,
@@ -46,26 +59,9 @@ export const firestorePaths = {
   referenceChecks: (projectId: ProjectId) => `projects/${projectId}/referenceChecks`,
 } as const;
 
-export const storagePaths = {
-  /** Conteúdo endereçado por hash: imutável e deduplicado entre snapshots. */
-  blob: (projectId: ProjectId, sha256: string) => `projects/${projectId}/blobs/${sha256}`,
-  /** Última compilação de trabalho (sobrescrita a cada build). */
-  buildPdf: (projectId: ProjectId, documentId: DocumentId) =>
-    `projects/${projectId}/builds/${documentId}/latest.pdf`,
-  buildLog: (projectId: ProjectId, documentId: DocumentId) =>
-    `projects/${projectId}/builds/${documentId}/latest.log`,
-  snapshotPdf: (projectId: ProjectId, snapshotId: SnapshotId, documentId: DocumentId) =>
-    `projects/${projectId}/snapshots/${snapshotId}/${documentId}.pdf`,
-  snapshotSynctex: (projectId: ProjectId, snapshotId: SnapshotId, documentId: DocumentId) =>
-    `projects/${projectId}/snapshots/${snapshotId}/${documentId}.synctex.gz`,
-  snapshotPageText: (projectId: ProjectId, snapshotId: SnapshotId, documentId: DocumentId) =>
-    `projects/${projectId}/snapshots/${snapshotId}/${documentId}.pages.json`,
-  /** Fica sob a versão alvo: quem pode ler a versão pode ler o diff dela. */
-  diffPdf: (
-    projectId: ProjectId,
-    targetSnapshotId: SnapshotId,
-    baseSnapshotId: SnapshotId,
-    documentId: DocumentId,
-    engineVersion: string,
-  ) => `projects/${projectId}/snapshots/${targetSnapshotId}/diffs/${baseSnapshotId}/${documentId}/${engineVersion}.pdf`,
-} as const;
+export type SnapshotFileKind = 'pdf' | 'synctex' | 'pages';
+
+/** Nome do arquivo de versão: o documento vem antes do ponto (as regras dependem disso). */
+export function snapshotFileName(documentId: DocumentId, kind: SnapshotFileKind): string {
+  return `${documentId}.${kind}`;
+}

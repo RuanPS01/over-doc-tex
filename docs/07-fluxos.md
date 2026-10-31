@@ -15,9 +15,9 @@ Cada cenário descreve o que o usuário vê e a mecânica interna. Não há serv
 | Passo | O que acontece |
 | --- | --- |
 | 1 | Força o autosave pendente e lê os arquivos na revisão atual, para congelar exatamente o que o autor vê |
-| 2 | Para cada arquivo: calcula sha256 (Web Crypto) e envia para `blobs/{hash}` se ainda não existir (deduplicação); monta o manifesto ordenado e `sourceHash = sha256(manifesto)` |
+| 2 | Para cada arquivo: calcula sha256 (Web Crypto) e grava em `blobs/{hash}`, em pedaços, se o cabeçalho ainda não existir (deduplicação); monta o manifesto ordenado e `sourceHash = sha256(manifesto)` |
 | 3 | Compila cada documento no Web Worker com o motor WebAssembly (com SyncTeX) e extrai o texto por página |
-| 4 | Envia PDF, SyncTeX e `pages.json` para `snapshots/{sid}/` no Storage. As regras só aceitam esses arquivos **antes** de o documento do snapshot existir |
+| 4 | Grava PDF, SyncTeX e texto por página em `snapshots/{sid}/files/{documentId}.pdf`, `.synctex` e `.pages`, em pedaços (`writeStoredFile`). As regras só aceitam esses arquivos **antes** de o documento do snapshot existir |
 | 5 | Lote 1, congelamento: cria `snapshots/{sid}` (com `sequence = counters.snapshots + 1`) e atualiza o projeto (`counters.snapshots`, `latestSnapshotId`). Carimba `resolution.fixedInSnapshotId` nas threads resolvidas desde a versão anterior |
 | 6 | Lote 2, revisão: cria `snapshots/{sid}/grants/{email}`, `reviews/{rid}` (número `counters.reviews + 1`) e avança `counters.reviews` |
 | 7 | Envia o convite ao revisor (ver abaixo) |
@@ -180,9 +180,9 @@ O nível alcançado vai para `diffs.granularity`.
 
 **Passo 10. Marcadores de navegação.** Cada marcação emite `\DIFmark{id}`. Depois da compilação, o motor lê o `.aux` (página e posição vertical de cada id) e grava `changes[]` com página, `y` normalizado e uma prévia do texto. Isso alimenta "Próxima alteração".
 
-**Passo 11. Publicar.** Quem edita envia o PDF para `snapshots/{alvo}/diffs/{base}/{documento}/{versão}.pdf` e grava `diffs/{diffKey}` com `granularity`, `stats` e `changes` (uma vez só; as regras proíbem alterar).
+**Passo 11. Publicar.** Quem edita grava o PDF em pedaços em `diffs/{diffKey}/chunks` (`writeChunks`) e, no último lote, o próprio `diffs/{diffKey}` com `granularity`, `stats`, `changes` e o campo `pdf` (tamanho, sha256, número de pedaços). Uma vez só; as regras proíbem alterar.
 
-**Passo 12. Exibir.** O PDF abre no mesmo visualizador. Membros e revisores com o documento no grant da versão alvo leem o arquivo direto do Storage.
+**Passo 12. Exibir.** O PDF é remontado dos pedaços (`readChunks`, com conferência do sha256) e abre no mesmo visualizador. Membros e revisores com o documento no grant da versão alvo podem ler os pedaços.
 
 Esboço do orquestrador no Worker:
 
@@ -224,20 +224,22 @@ O motor roda no navegador, sem servidor. A especificação completa (provedores,
 ### Exportar
 
 1. "Exportar projeto (.zip)" na árvore de arquivos ou no menu "Mais".
-2. Textos saem do cache do editor; binários vêm do Storage (`blobPath`). O zip (`fflate`) mantém a árvore de pastas e é baixado como `<nome-do-projeto>.zip`.
+2. Textos saem do cache do editor; binários são remontados dos pedaços em `blobPath` (`readStoredFile`, com conferência do sha256). O zip (`fflate`) mantém a árvore de pastas e é baixado como `<nome-do-projeto>.zip`.
 
 ### Importar
 
 1. "Importar" abre o diálogo com três origens: arquivo .zip, arquivos avulsos ou uma pasta do dispositivo (`webkitdirectory`, com o caminho relativo de cada arquivo).
-2. **Leitura segura:** cada caminho é normalizado; entradas com `..`, absolutas, com unidade de disco ou de sistema (`__MACOSX`, `.DS_Store`) são ignoradas e listadas. Limites: 2.000 arquivos, 200 MB no total e 50 MB por arquivo, conferidos pelo tamanho declarado **antes** de descompactar (proteção contra zip que se expande demais) e de novo depois.
+2. **Leitura segura:** cada caminho é normalizado; entradas com `..`, absolutas, com unidade de disco ou de sistema (`__MACOSX`, `.DS_Store`) são ignoradas e listadas. Limites: 2.000 arquivos, 100 MB no total e 25 MB por arquivo (os binários contam na cota de 1 GiB do Firestore), conferidos pelo tamanho declarado **antes** de descompactar (proteção contra zip que se expande demais) e de novo depois.
 3. Se o zip tem uma pasta raiz única, o diálogo oferece importar só o conteúdo dela.
 4. O usuário escolhe a **pasta de destino** (raiz, uma pasta existente ou uma nova) e a **política de conflito**: sobrescrever o arquivo de mesmo caminho ou manter os dois, com o importado recebendo `-1`, `-2`... antes da extensão.
 5. O plano (novo, sobrescreve, renomeado) aparece antes da confirmação.
-6. Ao confirmar: textos de até 400 KiB vão inline em `files`; binários e textos maiores sobem para `blobs/{sha256}` (pulando o que já existe) e o documento guarda `blobPath`. As gravações vão em lotes de até 400. No modo demonstração, os arquivos entram só no cache da aba.
+6. Ao confirmar: textos de até 400 KiB vão inline em `files`; binários e textos maiores viram `blobs/{sha256}` em pedaços (pulando o que já existe) e o documento guarda `blobPath`. Os documentos de `files` vão em lotes de até 400. No modo demonstração, os arquivos entram só no cache da aba.
+
+Verificado de ponta a ponta contra os emuladores de Auth e Firestore, com as regras reais: um binário de 2,5 MB virou 3 pedaços com cabeçalho correto, a segunda importação do mesmo conteúdo não regravou nada e a exportação devolveu o arquivo idêntico (mesmo sha256).
 
 ## Fluxo de compilação de trabalho (rascunho)
 
 1. O autosave grava `files/{id}` com `revision + 1` (debounce de 800 ms).
 2. "Compilar" (ou Ctrl+S) entrega a árvore ao motor WebAssembly no Web Worker.
-3. Ao terminar, o app envia o PDF para `builds/{documentId}/latest.pdf` e grava `documents/{id}.lastBuild`.
+3. Ao terminar, o PDF fica só no navegador (memória e cache local) e o app grava o resumo em `documents/{id}.lastBuild`. O PDF de trabalho não vai para o banco: cada pessoa compila no próprio navegador, e gravar cada compilação gastaria a cota.
 4. O `PdfPreviewPanel` mostra o PDF; erros exibem o log com link para a linha.
