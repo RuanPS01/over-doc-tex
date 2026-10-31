@@ -1,0 +1,53 @@
+name: Autenticar no Firebase
+description: >
+  Confere a configuração do deploy e autentica no Google Cloud com uma das duas
+  formas aceitas: chave de conta de serviço ou Workload Identity Federation.
+  Usada pelos jobs de deploy das regras e do Hosting (docs/02-tecnologias.md).
+
+inputs:
+  project-id:
+    description: ID do projeto Firebase (variável FIREBASE_PROJECT_ID).
+    required: false
+    default: ''
+  credentials-json:
+    description: JSON da chave de conta de serviço (secret FIREBASE_SERVICE_ACCOUNT).
+    required: false
+    default: ''
+  workload-identity-provider:
+    description: Provider do Workload Identity Federation (variável GCP_WORKLOAD_IDENTITY_PROVIDER).
+    required: false
+    default: ''
+  service-account:
+    description: E-mail da conta de serviço usada com Workload Identity (variável GCP_SERVICE_ACCOUNT).
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Conferir configuração
+      shell: bash
+      env:
+        FIREBASE_PROJECT_ID: ${{ inputs.project-id }}
+        SERVICE_ACCOUNT_JSON: ${{ inputs.credentials-json }}
+        WIF_PROVIDER: ${{ inputs.workload-identity-provider }}
+        WIF_SERVICE_ACCOUNT: ${{ inputs.service-account }}
+      run: |
+        if [ -z "$FIREBASE_PROJECT_ID" ]; then
+          echo "::error::Defina a variável FIREBASE_PROJECT_ID em Settings > Secrets and variables > Actions."
+          exit 1
+        fi
+        has_key=false; has_wif=false
+        [ -n "$SERVICE_ACCOUNT_JSON" ] && has_key=true
+        [ -n "$WIF_PROVIDER" ] && [ -n "$WIF_SERVICE_ACCOUNT" ] && has_wif=true
+        if [ "$has_key" = "$has_wif" ]; then
+          echo "::error::Configure exatamente uma forma de autenticação: o secret FIREBASE_SERVICE_ACCOUNT ou as variáveis GCP_WORKLOAD_IDENTITY_PROVIDER e GCP_SERVICE_ACCOUNT."
+          exit 1
+        fi
+
+    - name: Autenticar no Google Cloud
+      uses: google-github-actions/auth@v3
+      with:
+        credentials_json: ${{ inputs.credentials-json }}
+        workload_identity_provider: ${{ inputs.workload-identity-provider }}
+        service_account: ${{ inputs.service-account }}

@@ -4,8 +4,10 @@
 # Push na main (ou execução manual):
 #   1. verificações e testes das regras (em paralelo);
 #   2. deploy das configurações do Firebase (regras do Firestore, índices e regras do
-#      Storage) em paralelo com o build do PWA para o GitHub Pages;
-#   3. publicação no GitHub Pages, somente depois do deploy do Firebase dar certo.
+#      Storage) em paralelo com o build do site, feito duas vezes: com o subcaminho do
+#      GitHub Pages e na raiz do domínio para o Firebase Hosting;
+#   3. publicação no GitHub Pages e no Firebase Hosting (em paralelo), somente depois
+#      do deploy das regras dar certo: o site nunca vai ao ar contra regras antigas.
 #
 # Não há Cloud Functions: o app é estático e a IA usa a chave de cada usuário.
 #
@@ -119,46 +121,38 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: Conferir configuração
-        env:
-          SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          WIF_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          WIF_SERVICE_ACCOUNT: ${{ vars.GCP_SERVICE_ACCOUNT }}
-        run: |
-          if [ -z "$FIREBASE_PROJECT_ID" ]; then
-            echo "::error::Defina a variável FIREBASE_PROJECT_ID em Settings > Secrets and variables > Actions."
-            exit 1
-          fi
-          has_key=false; has_wif=false
-          [ -n "$SERVICE_ACCOUNT_JSON" ] && has_key=true
-          [ -n "$WIF_PROVIDER" ] && [ -n "$WIF_SERVICE_ACCOUNT" ] && has_wif=true
-          if [ "$has_key" = "$has_wif" ]; then
-            echo "::error::Configure exatamente uma forma de autenticação: o secret FIREBASE_SERVICE_ACCOUNT ou as variáveis GCP_WORKLOAD_IDENTITY_PROVIDER e GCP_SERVICE_ACCOUNT."
-            exit 1
-          fi
-
-      - name: Autenticar no Google Cloud
-        uses: google-github-actions/auth@v3
+      - name: Autenticar no Firebase
+        uses: ./.github/actions/firebase-auth
         with:
-          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+          project-id: ${{ vars.FIREBASE_PROJECT_ID }}
+          credentials-json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          workload-identity-provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service-account: ${{ vars.GCP_SERVICE_ACCOUNT }}
 
-      - name: Deploy no Firebase
+      - name: Deploy das regras, índices e Storage
         run: |
           npx -y "firebase-tools@${FIREBASE_TOOLS_VERSION}" deploy \
             --only "firestore:rules,firestore:indexes,storage" \
             --project "${FIREBASE_PROJECT_ID}" \
             --non-interactive
 
-  pages-build:
-    name: Build para o GitHub Pages
+  web-build:
+    name: Build do site (GitHub Pages e Firebase Hosting)
     needs: verify
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pages: read
+    env:
+      # Configuração pública do app web do Firebase (não é segredo).
+      VITE_FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
+      VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.FIREBASE_AUTH_DOMAIN }}
+      VITE_FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+      VITE_FIREBASE_STORAGE_BUCKET: ${{ vars.FIREBASE_STORAGE_BUCKET }}
+      VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.FIREBASE_MESSAGING_SENDER_ID }}
+      VITE_FIREBASE_APP_ID: ${{ vars.FIREBASE_APP_ID }}
+      VITE_USE_FIREBASE_EMULATORS: 'false'
     steps:
       - uses: actions/checkout@v7
 
@@ -175,18 +169,10 @@ jobs:
         id: pages
         uses: actions/configure-pages@v6
 
-      - name: Build do PWA
+      - name: Build para o GitHub Pages
         env:
           # "/<repositório>/" em páginas de projeto; "/" com domínio próprio.
           BASE_PATH: ${{ steps.pages.outputs.base_path }}/
-          # Configuração pública do app web do Firebase (não é segredo).
-          VITE_FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
-          VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.FIREBASE_AUTH_DOMAIN }}
-          VITE_FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
-          VITE_FIREBASE_STORAGE_BUCKET: ${{ vars.FIREBASE_STORAGE_BUCKET }}
-          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.FIREBASE_MESSAGING_SENDER_ID }}
-          VITE_FIREBASE_APP_ID: ${{ vars.FIREBASE_APP_ID }}
-          VITE_USE_FIREBASE_EMULATORS: 'false'
         # build:pages também gera o 404.html que faz as rotas do SPA funcionarem no Pages.
         run: npm run build:pages
 
@@ -194,9 +180,24 @@ jobs:
         with:
           path: dist
 
+      - name: Build para o Firebase Hosting
+        env:
+          # O Hosting serve na raiz do domínio (<projeto>.web.app). O typecheck já rodou
+          # no build anterior; aqui só o Vite, em outra pasta.
+          BASE_PATH: /
+        run: npx vite build --outDir dist-hosting
+
+      - name: Guardar o build do Hosting
+        uses: actions/upload-artifact@v7
+        with:
+          name: firebase-hosting
+          path: dist-hosting/
+          if-no-files-found: error
+          retention-days: 1
+
   pages-deploy:
     name: Publicar no GitHub Pages
-    needs: [firebase-deploy, pages-build]
+    needs: [firebase-deploy, web-build]
     runs-on: ubuntu-latest
     permissions:
       pages: write
@@ -208,3 +209,50 @@ jobs:
       - name: Publicar
         id: deployment
         uses: actions/deploy-pages@v5
+
+  hosting-deploy:
+    name: Publicar no Firebase Hosting
+    needs: [firebase-deploy, web-build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # necessário para Workload Identity Federation
+    environment:
+      name: firebase-hosting
+      url: ${{ steps.deploy.outputs.url }}
+    env:
+      FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+    steps:
+      # firebase.json (pasta pública, rewrites e cabeçalhos) e a ação de autenticação.
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Baixar o build do Hosting
+        uses: actions/download-artifact@v8
+        with:
+          name: firebase-hosting
+          path: dist
+
+      - name: Autenticar no Firebase
+        uses: ./.github/actions/firebase-auth
+        with:
+          project-id: ${{ vars.FIREBASE_PROJECT_ID }}
+          credentials-json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          workload-identity-provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service-account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Deploy no Firebase Hosting
+        id: deploy
+        run: |
+          set -o pipefail
+          npx -y "firebase-tools@${FIREBASE_TOOLS_VERSION}" deploy \
+            --only hosting \
+            --project "${FIREBASE_PROJECT_ID}" \
+            --message "Commit ${GITHUB_SHA::7}" \
+            --non-interactive | tee hosting-deploy.log
+          # O site padrão costuma ter o id do projeto, mas pode ter sufixo: lê a URL do log.
+          url=$(grep -oE 'https://[A-Za-z0-9.-]+\.web\.app' hosting-deploy.log | tail -n 1 || true)
+          echo "url=${url:-https://${FIREBASE_PROJECT_ID}.web.app}" >> "$GITHUB_OUTPUT"
