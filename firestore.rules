@@ -1,10 +1,14 @@
 rules_version = '2';
 
 // Regras do Firestore. Modelo detalhado em docs/06-banco-de-dados.md.
-// Princípios:
-// - Membros do projeto (members[uid]) leem tudo do projeto; owner/editor escrevem.
-// - Revisores NÃO são membros: leem apenas snapshots com grant e a própria revisão.
-// - Snapshots, jobs, diffs e mensagens de IA são escritos só pelo servidor (Admin SDK).
+//
+// Não há servidor: toda gravação vem do app de quem age. Por isso as regras
+// validam também a coerência entre documentos gravados no mesmo lote
+// (getAfter/existsAfter), por exemplo snapshot e contador do projeto.
+//
+// - Membros (members[uid]) leem tudo do projeto; owner/editor escrevem.
+// - Revisores não são membros: o acesso vem de grants por e-mail verificado.
+// - Coautores são convidados por e-mail (pendingMembers) e entram sozinhos ao aceitar.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -16,8 +20,24 @@ service cloud.firestore {
       return request.auth.uid;
     }
 
+    function verifiedEmail() {
+      return signedIn() && request.auth.token.email != null && request.auth.token.email_verified == true;
+    }
+
+    function myEmail() {
+      return request.auth.token.email.lower();
+    }
+
+    function projectPath(pid) {
+      return /databases/$(database)/documents/projects/$(pid);
+    }
+
     function projectData(pid) {
-      return get(/databases/$(database)/documents/projects/$(pid)).data;
+      return get(projectPath(pid)).data;
+    }
+
+    function projectAfter(pid) {
+      return getAfter(projectPath(pid)).data;
     }
 
     function roleIn(pid) {
@@ -32,9 +52,16 @@ service cloud.firestore {
       return signedIn() && roleIn(pid) in ['owner', 'editor'];
     }
 
+    function isOwner(pid) {
+      return signedIn() && roleIn(pid) == 'owner';
+    }
+
+    function grantPath(pid, sid, email) {
+      return /databases/$(database)/documents/projects/$(pid)/snapshots/$(sid)/grants/$(email);
+    }
+
     function hasGrant(pid, sid) {
-      return signedIn()
-        && exists(/databases/$(database)/documents/projects/$(pid)/snapshots/$(sid)/grants/$(uid()));
+      return verifiedEmail() && exists(grantPath(pid, sid, myEmail()));
     }
 
     function reviewData(pid, rid) {
@@ -42,7 +69,7 @@ service cloud.firestore {
     }
 
     function isReviewer(pid, rid) {
-      return signedIn() && reviewData(pid, rid).reviewerUid == uid();
+      return verifiedEmail() && reviewData(pid, rid).reviewerEmail == myEmail();
     }
 
     function onlyChanges(keys) {
@@ -57,26 +84,92 @@ service cloud.firestore {
         && onlyChanges(['displayName', 'photoURL', 'preferences', 'lastSeenAt']);
       allow delete: if false;
 
+      // Configuração da IA do usuário (inclui chaves de API): só o dono.
+      match /private/{docId} {
+        allow read, write: if signedIn() && uid() == userId;
+      }
+
       match /notifications/{notificationId} {
-        allow read: if signedIn() && uid() == userId;
+        allow read, delete: if signedIn() && uid() == userId;
         allow update: if signedIn() && uid() == userId && onlyChanges(['read']);
-        allow create, delete: if false;
+        // Gravada pelo app de quem age: participante do projeto ou revisor da revisão citada.
+        allow create: if signedIn()
+          && request.resource.data.actorId == uid()
+          && request.resource.data.read == false
+          && (isMember(request.resource.data.projectId)
+            || (request.resource.data.reviewId != null
+              && isReviewer(request.resource.data.projectId, request.resource.data.reviewId)));
       }
     }
 
     // --------------------------------------------------------------- projects
     match /projects/{pid} {
-      allow get: if isMember(pid);
+      function next() {
+        return request.resource.data;
+      }
+
+      function pending(doc) {
+        return doc.get('pendingMembers', {});
+      }
+
+      function invitedRole() {
+        return verifiedEmail() ? pending(resource.data).get(myEmail(), null) : null;
+      }
+
+      function editingDetails() {
+        return canEdit(pid) && onlyChanges(['name', 'description', 'engine', 'mainDocumentId', 'updatedAt']);
+      }
+
+      // Congelar versão: contador +1 e latestSnapshotId do snapshot criado no mesmo lote.
+      function freezingSnapshot() {
+        return canEdit(pid)
+          && onlyChanges(['counters', 'latestSnapshotId', 'updatedAt'])
+          && next().counters.snapshots == resource.data.counters.snapshots + 1
+          && next().counters.reviews == resource.data.counters.reviews
+          && existsAfter(/databases/$(database)/documents/projects/$(pid)/snapshots/$(next().latestSnapshotId));
+      }
+
+      // Abrir revisão: contador de revisões +1 (o número da revisão é conferido nela).
+      function openingReview() {
+        return canEdit(pid)
+          && onlyChanges(['counters', 'updatedAt'])
+          && next().counters.reviews == resource.data.counters.reviews + 1
+          && next().counters.snapshots == resource.data.counters.snapshots;
+      }
+
+      // O dono gerencia membros e convites; o dono continua dono e convite nunca é de dono.
+      function managingMembers() {
+        return isOwner(pid)
+          && onlyChanges(['members', 'memberIds', 'pendingMembers', 'updatedAt'])
+          && next().members[resource.data.ownerId] == 'owner'
+          && next().members.values().hasOnly(['owner', 'editor', 'viewer'])
+          && next().memberIds.toSet() == next().members.keys().toSet()
+          && pending(next()).values().hasOnly(['editor', 'viewer']);
+      }
+
+      // O convidado aceita sozinho: entra com o papel do convite e o convite some.
+      function claimingInvite() {
+        let role = invitedRole();
+        return role != null
+          && onlyChanges(['members', 'memberIds', 'pendingMembers', 'updatedAt'])
+          && next().members.diff(resource.data.members).affectedKeys().hasOnly([uid()])
+          && next().members[uid()] == role
+          && next().memberIds.toSet() == resource.data.memberIds.toSet().union([uid()].toSet())
+          && pending(next()).diff(pending(resource.data)).affectedKeys().hasOnly([myEmail()])
+          && !pending(next()).keys().hasAny([myEmail()]);
+      }
+
+      allow get: if isMember(pid) || invitedRole() != null;
       // A consulta precisa filtrar por memberIds array-contains uid.
       allow list: if signedIn() && uid() in resource.data.memberIds;
       allow create: if signedIn()
-        && request.resource.data.ownerId == uid()
-        && request.resource.data.members.keys().hasOnly([uid()])
-        && request.resource.data.members[uid()] == 'owner'
-        && request.resource.data.memberIds == [uid()];
-      // Membros e contadores mudam apenas via Cloud Function.
-      allow update: if canEdit(pid)
-        && onlyChanges(['name', 'description', 'engine', 'mainDocumentId', 'updatedAt']);
+        && next().ownerId == uid()
+        && next().members.keys().hasOnly([uid()])
+        && next().members[uid()] == 'owner'
+        && next().memberIds == [uid()]
+        && pending(next()).size() == 0
+        && next().counters == {'snapshots': 0, 'reviews': 0};
+      allow update: if editingDetails() || freezingSnapshot() || openingReview() || managingMembers() || claimingInvite();
       allow delete: if false;
 
       match /files/{fileId} {
@@ -89,36 +182,59 @@ service cloud.firestore {
 
       match /documents/{documentId} {
         allow read: if isMember(pid);
-        allow create: if canEdit(pid) && request.resource.data.lastBuild == null;
-        // lastBuild é escrito pelo worker de compilação.
+        allow create: if canEdit(pid);
+        // lastBuild é gravado pelo app depois da compilação no navegador.
         allow update: if canEdit(pid)
-          && onlyChanges(['title', 'order', 'rootFileId', 'rootPath', 'engine', 'updatedAt']);
+          && onlyChanges(['title', 'order', 'rootFileId', 'rootPath', 'engine', 'lastBuild', 'updatedAt']);
         allow delete: if canEdit(pid) && resource.data.role != 'main';
       }
 
-      // Snapshot: imutável. Criado apenas pela função createSnapshot.
+      // Snapshot: criado uma vez, no mesmo lote que avança o contador; depois, imutável.
       match /snapshots/{sid} {
-        allow read: if isMember(pid) || hasGrant(pid, sid);
-        allow write: if false;
+        allow get: if isMember(pid) || hasGrant(pid, sid);
+        allow list: if isMember(pid);
+        allow create: if canEdit(pid)
+          && request.resource.data.createdBy == uid()
+          && request.resource.data.sequence == projectData(pid).counters.snapshots + 1
+          && request.resource.data.sequence == projectAfter(pid).counters.snapshots
+          && projectAfter(pid).latestSnapshotId == sid;
+        allow update, delete: if false;
 
-        match /grants/{grantUid} {
-          allow read: if isMember(pid) || (signedIn() && uid() == grantUid);
-          allow write: if false;
+        // Acesso do revisor, por e-mail (em minúsculas). Gravado por quem edita o projeto.
+        match /grants/{email} {
+          allow get: if isMember(pid) || (verifiedEmail() && myEmail() == email);
+          allow list: if isMember(pid);
+          allow create, update: if canEdit(pid)
+            && email == email.lower()
+            && request.resource.data.grantedBy == uid()
+            && request.resource.data.documentIds is list;
+          allow delete: if canEdit(pid);
         }
       }
 
       match /reviews/{rid} {
-        allow get: if isMember(pid) || (signedIn() && resource.data.reviewerUid == uid());
-        // Revisor lista com where('reviewerUid', '==', uid).
-        allow list: if isMember(pid) || (signedIn() && resource.data.reviewerUid == uid());
-        // Criada pela função requestReview (congela snapshot, convite e e-mail).
-        allow create, delete: if false;
+        function amReviewer() {
+          return verifiedEmail() && resource.data.reviewerEmail == myEmail();
+        }
+
+        allow get, list: if isMember(pid) || amReviewer();
+        allow create: if canEdit(pid)
+          && next().requestedBy == uid()
+          && next().number == projectData(pid).counters.reviews + 1
+          && next().number == projectAfter(pid).counters.reviews
+          && next().status == 'invited'
+          && next().reviewerUid == null
+          && next().reviewerEmail == next().reviewerEmail.lower()
+          && existsAfter(/databases/$(database)/documents/projects/$(pid)/snapshots/$(next().snapshotId))
+          && existsAfter(grantPath(pid, next().snapshotId, next().reviewerEmail));
         allow update: if (canEdit(pid)
             && onlyChanges(['title', 'description', 'status', 'closedAt', 'lastActivityAt'])
-            && request.resource.data.status in ['in_review', 'closed'])
-          || (isReviewer(pid, rid)
-            && onlyChanges(['status', 'lastActivityAt'])
-            && request.resource.data.status in ['in_review', 'changes_requested', 'approved']);
+            && next().status in ['in_review', 'closed'])
+          || (amReviewer()
+            && onlyChanges(['status', 'reviewerUid', 'reviewerName', 'lastActivityAt'])
+            && next().reviewerUid == uid()
+            && next().status in ['in_review', 'changes_requested', 'approved']);
+        allow delete: if false;
 
         match /threads/{tid} {
           function canParticipate() {
@@ -138,22 +254,41 @@ service cloud.firestore {
               && d.anchor.page is int && d.anchor.page >= 1
               && d.status == 'open'
               && d.resolution == null
-              && d.commentCount == 0;
+              && d.commentCount in [0, 1]
+              && d.participantIds == [uid()];
+          }
+
+          // Contador mantido pelo app: +1 por comentário, e o autor entra nos participantes.
+          function countingComment() {
+            return onlyChanges(['commentCount', 'lastCommentAt', 'participantIds', 'updatedAt'])
+              && request.resource.data.commentCount == resource.data.commentCount + 1
+              && request.resource.data.participantIds.toSet() == resource.data.participantIds.toSet().union([uid()].toSet());
+          }
+
+          function changingStatus() {
+            return onlyChanges(['status', 'resolution', 'updatedAt'])
+              && (request.resource.data.resolution == null || request.resource.data.resolution.by == uid());
+          }
+
+          // Ao congelar a versão seguinte, quem edita carimba em qual versão a correção entrou.
+          function stampingFix() {
+            return canEdit(pid)
+              && onlyChanges(['resolution', 'updatedAt'])
+              && resource.data.status == 'resolved'
+              && resource.data.resolution.fixedInSnapshotId == null
+              && request.resource.data.resolution.diff(resource.data.resolution).affectedKeys().hasOnly(['fixedInSnapshotId']);
           }
 
           allow read: if canParticipate();
           allow create: if canParticipate() && validNewThread();
-          // commentCount, participantIds e lastCommentAt são mantidos por trigger.
-          allow update: if canParticipate()
-            && onlyChanges(['status', 'resolution', 'updatedAt'])
-            && (request.resource.data.resolution == null || request.resource.data.resolution.by == uid());
+          allow update: if canParticipate() && (countingComment() || changingStatus() || stampingFix());
           allow delete: if false;
 
           match /comments/{cid} {
             allow read: if canParticipate();
             allow create: if canParticipate()
               && request.resource.data.authorId == uid()
-              && request.resource.data.kind == 'comment'
+              && request.resource.data.kind in ['comment', 'status_change']
               && request.resource.data.body is string
               && request.resource.data.body.size() <= 10000;
             // Edição e exclusão lógica pelo próprio autor.
@@ -164,50 +299,41 @@ service cloud.firestore {
         }
       }
 
-      match /diffJobs/{diffKey} {
-        allow get: if isMember(pid)
-          || (hasGrant(pid, resource.data.baseSnapshotId) && hasGrant(pid, resource.data.targetSnapshotId));
+      // Cache do PDF de diff (gerado no navegador): gravado por quem edita, nunca alterado.
+      match /diffs/{diffKey} {
+        allow get: if isMember(pid) || hasGrant(pid, resource.data.targetSnapshotId);
         allow list: if isMember(pid);
-        allow write: if false;
-      }
-
-      match /jobs/{jobId} {
-        allow read: if isMember(pid);
-        allow write: if false;
+        allow create: if canEdit(pid) && request.resource.data.createdBy == uid();
+        allow update, delete: if false;
       }
 
       // Conversas com a IA são privadas de quem as criou.
       match /aiConversations/{cid} {
-        allow read: if isMember(pid) && resource.data.createdBy == uid();
-        allow update: if isMember(pid) && resource.data.createdBy == uid() && onlyChanges(['title']);
-        allow delete: if isMember(pid) && resource.data.createdBy == uid();
-        allow create: if false;
+        allow read, delete: if isMember(pid) && resource.data.createdBy == uid();
+        allow create: if isMember(pid) && request.resource.data.createdBy == uid();
+        allow update: if isMember(pid) && resource.data.createdBy == uid()
+          && onlyChanges(['title', 'lastTask', 'updatedAt']);
 
         match /messages/{mid} {
-          allow read: if isMember(pid)
-            && get(/databases/$(database)/documents/projects/$(pid)/aiConversations/$(cid)).data.createdBy == uid();
-          allow write: if false;
+          function ownsConversation() {
+            return get(/databases/$(database)/documents/projects/$(pid)/aiConversations/$(cid)).data.createdBy == uid();
+          }
+
+          allow read, create: if isMember(pid) && ownsConversation();
+          allow update, delete: if false;
         }
       }
 
       match /referenceChecks/{checkId} {
         allow read: if isMember(pid);
-        allow write: if false;
+        allow create: if isMember(pid) && request.resource.data.createdBy == uid();
+        allow update, delete: if false;
       }
     }
 
-    // Painel "Minhas revisões": collectionGroup('reviews') filtrado por reviewerUid.
+    // Painel "Minhas revisões": collectionGroup('reviews') filtrado pelo e-mail do revisor.
     match /{path=**}/reviews/{rid} {
-      allow list: if signedIn() && resource.data.reviewerUid == uid();
-    }
-
-    // Somente servidor.
-    match /invites/{inviteId} {
-      allow read, write: if false;
-    }
-
-    match /mail/{mailId} {
-      allow read, write: if false;
+      allow list: if verifiedEmail() && resource.data.reviewerEmail == myEmail();
     }
   }
 }

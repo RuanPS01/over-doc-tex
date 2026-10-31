@@ -1,29 +1,27 @@
 /**
  * Modelo de dados do Firestore (fonte única da verdade).
  *
- * Compartilhado entre o frontend (firebase/firestore) e o backend
- * (firebase-admin/firestore). Por isso nenhum tipo aqui importa SDK:
- * datas usam `TimestampLike`, que os dois SDKs satisfazem estruturalmente.
+ * Não há servidor: o app grava tudo, e as regras (firestore.rules) validam
+ * cada gravação. Nenhum tipo aqui importa SDK: datas usam `TimestampLike`,
+ * que o SDK web e o Admin satisfazem estruturalmente (scripts e testes).
  *
  * Mapa de coleções (detalhado em docs/06-banco-de-dados.md):
  *
  *   users/{uid}
+ *   users/{uid}/private/ai                                      (configuração da IA, só o dono)
  *   users/{uid}/notifications/{notificationId}
  *   projects/{projectId}
  *   projects/{projectId}/files/{fileId}
  *   projects/{projectId}/documents/{documentId}
  *   projects/{projectId}/snapshots/{snapshotId}                 (imutável)
- *   projects/{projectId}/snapshots/{snapshotId}/grants/{uid}    (acesso do revisor)
+ *   projects/{projectId}/snapshots/{snapshotId}/grants/{email}  (acesso do revisor)
  *   projects/{projectId}/reviews/{reviewId}
  *   projects/{projectId}/reviews/{reviewId}/threads/{threadId}
  *   projects/{projectId}/reviews/{reviewId}/threads/{threadId}/comments/{commentId}
- *   projects/{projectId}/diffJobs/{diffKey}
- *   projects/{projectId}/jobs/{jobId}
+ *   projects/{projectId}/diffs/{diffKey}
  *   projects/{projectId}/aiConversations/{conversationId}
  *   projects/{projectId}/aiConversations/{conversationId}/messages/{messageId}
  *   projects/{projectId}/referenceChecks/{checkId}
- *   invites/{inviteId}                                          (somente servidor)
- *   mail/{mailId}                                               (extensão Trigger Email)
  */
 
 /** Timestamp compatível com os SDKs web e Admin. */
@@ -59,7 +57,6 @@ export type ResolutionKind = 'fixed_next_version' | 'answered' | 'not_applicable
 export type CommentKind = 'comment' | 'status_change' | 'system';
 /** Cores de anotação como tokens semânticos (ver docs/03-identidade-visual.md). */
 export type AnnotationColor = 'annotation-1' | 'annotation-2' | 'annotation-3' | 'annotation-4';
-export type JobStatus = 'queued' | 'running' | 'done' | 'failed';
 export type DiffGranularity = 'word' | 'paragraph' | 'text-only';
 export type NotificationType =
   | 'review_requested'
@@ -88,6 +85,19 @@ export interface UserDoc {
   lastSeenAt: TimestampLike;
 }
 
+// users/{uid}/private/ai  (lido e gravado só pelo próprio usuário)
+// Configuração da IA do usuário: lista ordenada de modelos, o primeiro é o
+// principal e os demais, reservas. A plataforma não oferece IA própria.
+export interface UserAiConfigDoc {
+  models: Array<{
+    provider: 'anthropic' | 'openai' | 'gemini';
+    /** Nulo usa o modelo padrão do provedor. */
+    model: string | null;
+    apiKey: string;
+  }>;
+  updatedAt: TimestampLike;
+}
+
 // users/{uid}/notifications/{notificationId}
 export interface NotificationDoc {
   type: NotificationType;
@@ -113,10 +123,15 @@ export interface ProjectDoc {
   members: Record<UserId, ProjectRole>;
   /** Espelho das chaves de `members` para consultas `array-contains`. */
   memberIds: UserId[];
+  /**
+   * Convites de coautoria por e-mail (em minúsculas). O convidado, com e-mail
+   * verificado, entra sozinho com esse papel e o convite some.
+   */
+  pendingMembers: Record<string, 'editor' | 'viewer'>;
   engine: LatexEngine;
   mainDocumentId: DocumentId;
   latestSnapshotId: SnapshotId | null;
-  /** Contador monotônico usado para gerar rótulos de versão e números de revisão. */
+  /** Contadores sequenciais; as regras só aceitam +1, no mesmo lote do snapshot ou da revisão. */
   counters: { snapshots: number; reviews: number };
   stats: { fileCount: number; totalBytes: number };
   createdAt: TimestampLike;
@@ -156,7 +171,7 @@ export interface DocumentDoc {
   /** Nulo herda o motor do projeto. */
   engine: LatexEngine | null;
   order: number;
-  /** Última compilação de trabalho (mutável, escrita só pelo servidor). */
+  /** Última compilação de trabalho (feita no navegador e gravada pelo app). */
   lastBuild: {
     status: BuildStatus;
     pdfPath: string | null;
@@ -196,8 +211,9 @@ export interface SnapshotRender {
 }
 
 // projects/{projectId}/snapshots/{snapshotId}
-// Escrito UMA vez pela Cloud Function `createSnapshot`, depois da compilação.
-// As regras negam qualquer update/delete: o snapshot é imutável.
+// Escrito UMA vez pelo app de quem congela, no mesmo lote que avança
+// `counters.snapshots`, depois de enviar PDFs e blobs. As regras negam
+// qualquer update/delete: o snapshot é imutável.
 export interface SnapshotDoc {
   /** Rótulo legível, ex.: "1.0", "1.1". */
   label: string;
@@ -216,8 +232,9 @@ export interface SnapshotDoc {
   createdAt: TimestampLike;
 }
 
-// projects/{projectId}/snapshots/{snapshotId}/grants/{uid}
-// Existência deste documento libera leitura do snapshot para um não membro.
+// projects/{projectId}/snapshots/{snapshotId}/grants/{email}
+// Existência deste documento (id = e-mail do revisor em minúsculas) libera a
+// leitura do snapshot para quem entrar com esse e-mail verificado.
 export interface SnapshotGrantDoc {
   /** Documentos visíveis ao revisor; sempre contém o documento principal. */
   documentIds: DocumentId[];
@@ -247,11 +264,11 @@ export interface ReviewDoc {
   requestedBy: UserId;
   requestedAt: TimestampLike;
   reviewerEmail: string;
+  /** Preenchidos pelo próprio revisor ao abrir a revisão pela primeira vez. */
   reviewerUid: UserId | null;
   reviewerName: string | null;
   status: ReviewStatus;
   grantedDocumentIds: DocumentId[];
-  threadCounts: { open: number; resolved: number; total: number };
   lastActivityAt: TimestampLike;
   closedAt: TimestampLike | null;
 }
@@ -333,7 +350,7 @@ export interface ThreadDoc {
     kind: ResolutionKind;
     by: UserId;
     at: TimestampLike;
-    /** Preenchido pela função `createSnapshot` ao congelar a próxima versão. */
+    /** Carimbado pelo app de quem congela a próxima versão. */
     fixedInSnapshotId: SnapshotId | null;
   } | null;
   sourceHint: SourceLocation | null;
@@ -341,7 +358,7 @@ export interface ThreadDoc {
   carriedFromThreadId: ThreadId | null;
   createdBy: UserId;
   createdByRole: ParticipantRole;
-  /** Mantidos por trigger no servidor. */
+  /** Mantidos pelo app no mesmo lote do comentário; as regras só aceitam +1. */
   commentCount: number;
   participantIds: UserId[];
   lastCommentAt: TimestampLike | null;
@@ -378,41 +395,23 @@ export interface DiffChangeMarker {
   preview: string;
 }
 
-// projects/{projectId}/diffJobs/{diffKey}
-// diffKey = sha256(base.sourceHash + target.sourceHash + documentId + engineVersion):
-// pedidos repetidos reaproveitam o mesmo job e o mesmo PDF (idempotência).
-export interface DiffJobDoc {
+// projects/{projectId}/diffs/{diffKey}
+// diffKey = `${baseSnapshotId}_${targetSnapshotId}_${documentId}_${engineVersion}`.
+// Cache do PDF de diff gerado no navegador: snapshots são imutáveis, então a
+// mesma chave sempre produz o mesmo resultado e é gravada uma vez só.
+export interface DiffDoc {
   documentId: DocumentId;
   baseSnapshotId: SnapshotId;
   targetSnapshotId: SnapshotId;
   engineVersion: string;
-  status: JobStatus;
   /** Nível alcançado na escada de degradação (ver docs/07-fluxos.md). */
-  granularity: DiffGranularity | null;
+  granularity: DiffGranularity;
   pdfPath: string | null;
-  logPath: string | null;
-  stats: { insertedWords: number; deletedWords: number; changedBlocks: number } | null;
+  stats: { insertedWords: number; deletedWords: number; changedBlocks: number };
   /** Limitado a 500 marcadores para respeitar o tamanho máximo do documento. */
   changes: DiffChangeMarker[];
-  error: { code: string; message: string } | null;
-  requestedBy: UserId;
-  requestedAt: TimestampLike;
-  startedAt: TimestampLike | null;
-  finishedAt: TimestampLike | null;
-}
-
-// projects/{projectId}/jobs/{jobId}
-export interface JobDoc {
-  type: 'compile' | 'snapshot';
-  status: JobStatus;
-  documentId: DocumentId | null;
-  /** 0..1, atualizado pelo worker. */
-  progress: number;
-  result: { snapshotId?: SnapshotId; pdfPath?: string } | null;
-  error: { code: string; message: string } | null;
-  requestedBy: UserId;
+  createdBy: UserId;
   createdAt: TimestampLike;
-  updatedAt: TimestampLike;
 }
 
 // ---------------------------------------------------------------------------
@@ -445,7 +444,7 @@ export interface AiConversationDoc {
 }
 
 // projects/{projectId}/aiConversations/{conversationId}/messages/{messageId}
-// Gravado pelo backend ao fim de cada stream.
+// Gravado pelo app ao fim de cada resposta.
 export interface AiMessageDoc {
   role: 'user' | 'assistant';
   task: AiTaskName;
@@ -462,37 +461,14 @@ export interface AiMessageDoc {
 export interface ReferenceCheckDoc {
   createdBy: UserId;
   snapshotId: SnapshotId | null;
-  /** Mesmo formato de `ReferenceAudit` em shared/ai/schemas.ts. */
+  /** Mesmo formato de `ReferenceAudit` em src/lib/ai/schemas.ts. */
   results: Array<{
     key: string;
     url: string | null;
-    linkStatus: 'ok' | 'redirected' | 'broken' | 'timeout' | 'blocked' | 'no_url';
-    httpStatus: number | null;
+    linkStatus: 'ok' | 'broken' | 'blocked' | 'unchecked' | 'no_url';
     verdict: 'matches' | 'mismatch' | 'unreachable' | 'uncertain';
     explanation: string;
   }>;
   summary: { ok: number; problems: number; uncertain: number };
   createdAt: TimestampLike;
-}
-
-// ---------------------------------------------------------------------------
-// Coleções de nível raiz acessadas apenas pelo servidor
-// ---------------------------------------------------------------------------
-
-// invites/{inviteId}  (inviteId = sha256 do token enviado por e-mail)
-export interface InviteDoc {
-  projectId: ProjectId;
-  reviewId: ReviewId;
-  email: string;
-  createdBy: UserId;
-  createdAt: TimestampLike;
-  expiresAt: TimestampLike;
-  acceptedAt: TimestampLike | null;
-  acceptedBy: UserId | null;
-}
-
-// mail/{mailId}  (consumida pela extensão oficial "Trigger Email from Firestore")
-export interface MailDoc {
-  to: string[];
-  message: { subject: string; text: string; html: string };
 }

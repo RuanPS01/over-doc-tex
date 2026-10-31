@@ -1,8 +1,9 @@
 rules_version = '2';
 
 // Regras do Storage. Layout de caminhos em shared/firestore/paths.ts (storagePaths).
-// As regras consultam o Firestore (firestore.get/exists) para reaproveitar o
-// mesmo modelo de permissão: membros do projeto e grants de snapshot.
+// Sem servidor: os arquivos sobem do app de quem edita. As regras consultam o
+// Firestore (no máximo duas leituras por pedido) para reaproveitar o mesmo
+// modelo de permissão: membros do projeto e grants de snapshot por e-mail.
 service firebase.storage {
   match /b/{bucket}/o {
 
@@ -22,8 +23,16 @@ service firebase.storage {
       return signedIn() && role(pid) in ['owner', 'editor'];
     }
 
-    function grantPath(pid, sid) {
-      return /databases/(default)/documents/projects/$(pid)/snapshots/$(sid)/grants/$(request.auth.uid);
+    function verifiedEmail() {
+      return signedIn() && request.auth.token.email != null && request.auth.token.email_verified == true;
+    }
+
+    function grantedDocuments(pid, sid) {
+      return firestore.get(/databases/(default)/documents/projects/$(pid)/snapshots/$(sid)/grants/$(request.auth.token.email.lower())).data.documentIds;
+    }
+
+    function snapshotExists(pid, sid) {
+      return firestore.exists(/databases/(default)/documents/projects/$(pid)/snapshots/$(sid));
     }
 
     // Conteúdo endereçado por hash (sha256): imutável depois de enviado.
@@ -35,26 +44,26 @@ service firebase.storage {
       allow update, delete: if false;
     }
 
-    // Compilações de trabalho: escritas pelo latex-worker.
-    match /projects/{pid}/builds/{rest=**} {
+    // Última compilação de trabalho, feita no navegador e enviada por quem edita.
+    match /projects/{pid}/builds/{documentId}/{fileName} {
       allow read: if isMember(pid);
-      allow write: if false;
+      allow write: if canEdit(pid) && (request.resource == null || request.resource.size < 100 * 1024 * 1024);
     }
 
-    // Arquivos do snapshot: {documentId}.pdf, .synctex.gz e .pages.json.
-    // O revisor só lê os documentos listados no seu grant.
+    // Arquivos da versão ({documentId}.pdf, .synctex.gz, .pages.json): sobem ANTES do
+    // documento do snapshot; depois que ele existe, nada mais entra nem muda.
     match /projects/{pid}/snapshots/{sid}/{fileName} {
       allow read: if isMember(pid)
-        || (signedIn()
-          && firestore.exists(grantPath(pid, sid))
-          && fileName.split('\\.')[0] in firestore.get(grantPath(pid, sid)).data.documentIds);
-      allow write: if false;
+        || (verifiedEmail() && fileName.split('\\.')[0] in grantedDocuments(pid, sid));
+      allow create: if canEdit(pid) && !snapshotExists(pid, sid) && request.resource.size < 100 * 1024 * 1024;
+      allow update, delete: if false;
     }
 
-    // PDFs de diff: membros leem direto; revisores recebem URL assinada da função.
-    match /projects/{pid}/diffs/{fileName} {
-      allow read: if isMember(pid);
-      allow write: if false;
+    // PDF de diff entre a versão base e esta (cache compartilhado, gerado por quem edita).
+    match /projects/{pid}/snapshots/{sid}/diffs/{baseSid}/{documentId}/{fileName} {
+      allow read: if isMember(pid) || (verifiedEmail() && documentId in grantedDocuments(pid, sid));
+      allow create: if canEdit(pid) && request.resource.size < 100 * 1024 * 1024;
+      allow update, delete: if false;
     }
   }
 }

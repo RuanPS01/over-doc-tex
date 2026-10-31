@@ -14,6 +14,7 @@ import type {
 
 export const firestorePaths = {
   user: (uid: UserId) => `users/${uid}`,
+  userAiConfig: (uid: UserId) => `users/${uid}/private/ai`,
   notifications: (uid: UserId) => `users/${uid}/notifications`,
   projects: () => 'projects',
   project: (projectId: ProjectId) => `projects/${projectId}`,
@@ -25,8 +26,9 @@ export const firestorePaths = {
   snapshots: (projectId: ProjectId) => `projects/${projectId}/snapshots`,
   snapshot: (projectId: ProjectId, snapshotId: SnapshotId) =>
     `projects/${projectId}/snapshots/${snapshotId}`,
-  snapshotGrant: (projectId: ProjectId, snapshotId: SnapshotId, uid: UserId) =>
-    `projects/${projectId}/snapshots/${snapshotId}/grants/${uid}`,
+  /** O id do grant é o e-mail do revisor em minúsculas. */
+  snapshotGrant: (projectId: ProjectId, snapshotId: SnapshotId, email: string) =>
+    `projects/${projectId}/snapshots/${snapshotId}/grants/${email.toLowerCase()}`,
   reviews: (projectId: ProjectId) => `projects/${projectId}/reviews`,
   review: (projectId: ProjectId, reviewId: ReviewId) => `projects/${projectId}/reviews/${reviewId}`,
   threads: (projectId: ProjectId, reviewId: ReviewId) =>
@@ -35,16 +37,13 @@ export const firestorePaths = {
     `projects/${projectId}/reviews/${reviewId}/threads/${threadId}`,
   comments: (projectId: ProjectId, reviewId: ReviewId, threadId: ThreadId) =>
     `projects/${projectId}/reviews/${reviewId}/threads/${threadId}/comments`,
-  diffJob: (projectId: ProjectId, diffKey: string) => `projects/${projectId}/diffJobs/${diffKey}`,
-  job: (projectId: ProjectId, jobId: string) => `projects/${projectId}/jobs/${jobId}`,
+  diff: (projectId: ProjectId, diffKey: string) => `projects/${projectId}/diffs/${diffKey}`,
   aiConversations: (projectId: ProjectId) => `projects/${projectId}/aiConversations`,
   aiConversation: (projectId: ProjectId, conversationId: string) =>
     `projects/${projectId}/aiConversations/${conversationId}`,
   aiMessages: (projectId: ProjectId, conversationId: string) =>
     `projects/${projectId}/aiConversations/${conversationId}/messages`,
   referenceChecks: (projectId: ProjectId) => `projects/${projectId}/referenceChecks`,
-  invite: (inviteId: string) => `invites/${inviteId}`,
-  mail: () => 'mail',
 } as const;
 
 export const storagePaths = {
@@ -61,6 +60,12 @@ export const storagePaths = {
     `projects/${projectId}/snapshots/${snapshotId}/${documentId}.synctex.gz`,
   snapshotPageText: (projectId: ProjectId, snapshotId: SnapshotId, documentId: DocumentId) =>
     `projects/${projectId}/snapshots/${snapshotId}/${documentId}.pages.json`,
-  diffPdf: (projectId: ProjectId, diffKey: string) => `projects/${projectId}/diffs/${diffKey}.pdf`,
-  diffLog: (projectId: ProjectId, diffKey: string) => `projects/${projectId}/diffs/${diffKey}.log`,
+  /** Fica sob a versão alvo: quem pode ler a versão pode ler o diff dela. */
+  diffPdf: (
+    projectId: ProjectId,
+    targetSnapshotId: SnapshotId,
+    baseSnapshotId: SnapshotId,
+    documentId: DocumentId,
+    engineVersion: string,
+  ) => `projects/${projectId}/snapshots/${targetSnapshotId}/diffs/${baseSnapshotId}/${documentId}/${engineVersion}.pdf`,
 } as const;
