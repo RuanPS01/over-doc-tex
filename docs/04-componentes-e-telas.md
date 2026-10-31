@@ -109,7 +109,8 @@ ReviewPage                               pages/review-page.tsx: membro entra com
     ├── SelectionPopover                 "Comentar trecho" logo abaixo da seleção de texto
     ├── ThreadList                       lateral de 24rem (desktop) ou Sheet inferior (celular)
     │   ├── PendingAnnotationPanel       comentário da marcação nova (citação do trecho; cor e desfazer traço no desenho)
-    │   └── ThreadCard                   citação, comentários, responder, resolver ou reabrir, "Abrir no código" (autor)
+    │   └── ThreadCard                   citação, "Rodada anterior" (conversa da thread de origem), comentários, responder,
+    │                                    resolver ou reabrir, "Abrir no código" (autor), aviso de "Desatualizada"
     └── ReviewChangesDialog              abas "PDF marcado" (DiffPdfViewer) e "Texto" (DiffView do texto das páginas)
 ```
 
@@ -179,7 +180,8 @@ Pontos de atenção:
 | `useSnapshotFiles` | snapshots | Lê o código (blobs, com cache por hash), o PDF e o texto por página de uma versão |
 | `useTreeChanges`, `useVersionComparison` | diff | Compara o código de duas versões, ou de uma versão com o rascunho, palavra por palavra |
 | `useVisualDiff` | diff | Diff em PDF entre versões (cache em `diffs/{diffKey}`, gerado e guardado por quem edita) ou contra o rascunho |
-| `useRequestReview` | review | Congela se o código mudou, abre a revisão (grant, revisão e contador num lote) e envia o link de acesso ao revisor |
+| `useRequestReview` | review | Congela se o código mudou, abre a revisão (grant, revisão e contador num lote), gera o diff em PDF, leva as threads abertas e envia o link de acesso ao revisor |
+| `useCarryThreads` | review | Leva as threads abertas da rodada anterior para a revisão nova, reancoradas (trecho pelo `.pages` e pdf.js, pin pelo SyncTeX) |
 | `useReview`, `useReviews`, `useMyReviews` | review | Uma revisão, a fila do projeto e as revisões pedidas ao e-mail da conta |
 | `useThreads`, `useComments` | review | Threads da revisão (na ordem de leitura do PDF) e comentários de cada uma, em tempo real |
 | `useReviewActions` | review | Thread nova (ponto, desenho ou trecho, com `sourceHint`) com o primeiro comentário, resposta com o contador, status da thread e da revisão, e as notificações de cada uma |

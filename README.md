@@ -14,12 +14,12 @@ Este repositório contém a fundação do produto:
 - **Assistente de IA no navegador** com a chave do usuário: diálogo "Usar a minha própria IA" com fila de até 5 modelos, lista de modelos consultada ao vivo no provedor, RAG lexical (BM25), saídas estruturadas validadas com Zod e verificação real de links das referências.
 - **Importação e exportação**: projeto inteiro em .zip; importação de .zip, arquivos avulsos ou pastas do dispositivo, para a raiz ou uma pasta interna, sobrescrevendo ou mantendo os dois arquivos (`nome-1`).
 
-- **Compilação LaTeX no navegador** com o Siglum (pdfTeX do TeX Live 2025 em WebAssembly), sem servidor: PDF desenhado com pdf.js, erros com arquivo e linha, pacotes extras servidos pelo próprio site (`node scripts/latex-packages.mjs`).
-- **Versões e revisão**: congelar versões (código, PDF, texto das páginas e SyncTeX de cada documento), pedir revisão por e-mail (link de acesso do Firebase) escolhendo os documentos, tela de revisão com comentário em trecho de texto, pins com desenho livre, threads, resolução, aprovação, notificações e "Abrir no código".
+- **Compilação LaTeX no navegador** com o Siglum (pdfTeX do TeX Live 2025 em WebAssembly), sem servidor: PDF desenhado com pdf.js, erros com arquivo e linha, bibliografia BibTeX (o `.bbl` é gerado no navegador), pacotes extras servidos pelo próprio site (`node scripts/latex-packages.mjs`).
+- **Versões e revisão**: congelar versões (código, PDF, texto das páginas e SyncTeX de cada documento), pedir revisão por e-mail (link de acesso do Firebase) escolhendo os documentos, tela de revisão com comentário em trecho de texto, pins com desenho livre, threads (as abertas seguem para a rodada seguinte, reancoradas), resolução, aprovação, notificações e "Abrir no código".
 - **Ver alterações**: diff por palavra do código (entre versões ou com o rascunho) e o PDF recompilado com as alterações marcadas (inserido em verde, removido riscado em vermelho), com "Próxima alteração".
 - **Projeto e arquivos**: criar, renomear e excluir arquivos, documentos secundários, membros com papéis e convites de coautoria por e-mail, editor somente leitura para quem só lê, SyncTeX entre PDF e código.
 
-O que ainda falta (threads levadas entre rodadas, BibTeX na compilação e outros) está em `docs/10-manutencao-e-granularidade.md`.
+O que ainda falta (biblatex com Biber, estilos ABNT na bibliografia e outros) está em `docs/10-manutencao-e-granularidade.md`.
 
 ## Começando
 

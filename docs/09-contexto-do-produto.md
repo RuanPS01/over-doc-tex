@@ -85,7 +85,7 @@ Fora (por enquanto):
 | Fase | Entregas |
 | --- | --- |
 | 1. Fundação (este repositório) | Arquitetura sem servidor, modelo de dados, regras, layout responsivo, IA do usuário com fila de reserva, importação e exportação, CI e deploy |
-| 2. Editor completo | BibTeX na compilação (já entregues: lista e criação de projetos, login obrigatório, salvamento automático, compilação no navegador com Siglum, visualizador pdf.js, navegação SyncTeX, criar, renomear e excluir arquivos, documentos secundários, membros e convites de coautoria) |
-| 3. Revisão | Threads levadas entre rodadas e reancoragem (já entregues: versões congeladas, convite do revisor por link de e-mail, ReviewPage com comentário em trecho, pins com desenho livre, threads, resolução, aprovação, notificações e "Abrir no código") |
-| 4. Diff | Diff dentro dos argumentos de comandos (já entregues: diff por palavra do código e do texto das páginas, diff visual em PDF recompilado com degradação, cache e "Próxima alteração") |
+| 2. Editor completo | biblatex com Biber e estilos ABNT na bibliografia (já entregues: BibTeX na compilação, lista e criação de projetos, login obrigatório, salvamento automático, compilação no navegador com Siglum, visualizador pdf.js, navegação SyncTeX, criar, renomear e excluir arquivos, documentos secundários, membros e convites de coautoria) |
+| 3. Revisão | Refinos de uso (já entregues: threads levadas entre rodadas com reancoragem, versões congeladas, convite do revisor por link de e-mail, ReviewPage com comentário em trecho, pins com desenho livre, threads, resolução, aprovação, notificações e "Abrir no código") |
+| 4. Diff | Refinos de uso (já entregues: diff dentro dos argumentos de comandos de texto, diff por palavra do código e do texto das páginas, diff visual em PDF recompilado com degradação, cache e "Próxima alteração") |
 | 5. Refino | Histórico das conversas de IA, ícones PNG do PWA, métricas |

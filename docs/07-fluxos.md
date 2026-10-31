@@ -50,7 +50,7 @@ Cada cenário descreve o que o usuário vê e a mecânica interna. Não há serv
 - **Notificações:** cada ação grava `users/{uid}/notifications` para o outro lado (comentário novo, resposta, resolvido ou reaberto, revisor abriu, aprovou ou pediu alterações, revisão encerrada). O sino (lista, contagem, marcar como lidas) abre a revisão.
 - Respostas sobem o contador da thread no mesmo lote; autor e revisor resolvem (o autor com `fixed_next_version`, o revisor com `answered`) ou reabrem; ao congelar a versão seguinte, quem congela carimba `fixedInSnapshotId` e a thread aparece como "Corrigida".
 
-**Ainda não implementado:** levar threads abertas para a rodada seguinte (`carriedFromThreadId`) e a reancoragem descrita abaixo.
+- **Rodada seguinte:** ao pedir nova revisão ao mesmo revisor, as threads ainda abertas da rodada anterior vêm junto (`carriedFromThreadId`), reancoradas na versão nova como em "Reancoragem" abaixo (trecho com os retângulos refeitos pelo pdf.js a partir do texto das páginas; pin movido pela linha do código no SyncTeX). Trecho não encontrado vira `outdated` ("Desatualizada") com a citação original. A conversa antiga aparece no cartão, em "Rodada anterior", e as respostas novas seguem abaixo.
 
 ### Comentário em trecho de texto
 
@@ -91,7 +91,7 @@ Na ordem: (1) `position` com conferência de `quote.exact`; (2) busca de `exact`
 **Diferenças em relação ao algoritmo abaixo** (código em `src/lib/diff/latex-diff.ts` e `visual-diff.ts`):
 
 - Roda na thread principal (o texto é leve); só a compilação vai para o worker do Siglum.
-- Comandos com argumentos (`\emph{...}`, `\cite{...}`), grupos entre chaves e matemática são átomos: mudou, o átomo inteiro é marcado (sem diff dentro do argumento).
+- Comandos de texto com um argumento (`\emph`, `\textbf`, `\section`, `\caption`, `\footnote`...) que só mudaram o argumento recebem o diff dentro dele, sem `\DIFmark` no argumento (o marcador fica antes do comando). Os demais comandos (`\cite{...}`), grupos entre chaves e matemática são átomos: mudou, o átomo inteiro é marcado.
 - Blocos com ambiente (`itemize`, `figure`, `tabular`...) são comparados inteiros e vão em `DIFaddenv` ou `DIFdelenv`.
 - A posição de cada alteração vem de `\DIFmark{n}` como destino nomeado do pdfTeX (`\pdfdest`), lido pelo pdf.js, em vez do `zref` no `.aux` (o Siglum não devolve o `.aux`).
 - O preâmbulo carrega `xcolor` e `ulem` só se o documento ainda não carregou; no nível `paragraph` não usa o `ulem` (só cor). O `ulem` vem do repositório de pacotes do site.
@@ -293,6 +293,8 @@ Verificado de ponta a ponta contra os emuladores de Auth e Firestore: redirecion
 5. O PDF fica só no navegador e aparece no `PdfPreviewPanel` (pdf.js). Uma falha mantém o último PDF bom na tela. Não vai para o banco: cada pessoa compila no próprio navegador, e gravar cada compilação gastaria a cota.
 6. Os erros do log viram uma lista com arquivo e linha (`parseTexLog`); o clique abre o arquivo e põe o cursor na linha. A linha do principal é corrigida quando o Siglum entrega só o trecho depois de `\begin{document}` ao TeX (preâmbulo em formato de cache) ou insere linhas (microtype).
 
-Limitações atuais: BibTeX e Biber não rodam (citações saem como `[?]`, com aviso); pacotes que exigem `--shell-escape` (minted) não funcionam; pacotes que não estão no Siglum nem no repositório próprio aparecem como "não disponível no compilador".
+**Bibliografia (BibTeX):** o compilador não tem o bibtex, então `src/lib/latex/bibliography.ts` monta o `.bbl` antes de compilar: lê `\bibliography` e `\bibliographystyle`, as citações na ordem em que aparecem (seguindo `\input`, com `\nocite{*}`) e os `.bib` (com `@string` e `#`), e formata como os estilos plain, abbrv, alpha e unsrt, ou autor-ano com natbib (e estilos `*nat`). O TeX lê o arquivo como `document.bbl`, e citações indefinidas só viram aviso se continuarem assim na última passagem. Outros estilos caem em plain; estilos ABNT saem numéricos.
+
+Limitações atuais: biblatex precisa do Biber e não roda (citações saem como `[?]`, com aviso); pacotes que exigem `--shell-escape` (minted) não funcionam; pacotes que não estão no Siglum nem no repositório próprio aparecem como "não disponível no compilador".
 
 Verificado no navegador: o projeto de exemplo compila em cerca de 5 s na primeira vez; um erro inserido na linha 10 aparece como `main.tex:10` e o clique leva à linha; no celular o PDF abre sozinho depois de compilar. Contra os emuladores, um projeto importado com imagem PNG (arquivo em pedaços), `booktabs` e `setspace` (do repositório próprio) e `[brazil]{babel}` compila sem erros.

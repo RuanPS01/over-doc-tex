@@ -185,6 +185,8 @@ A thread guarda a âncora (texto ou pin com desenho, coordenadas de 0 a 1), stat
 
 Decisões da âncora: coordenadas normalizadas (independem de zoom e tela); três seletores de texto (geometria, citação com contexto, posição) para reancorar; pontos achatados (`[x0, y0, x1, y1, ...]`, porque o Firestore não aceita array dentro de array), simplificados e limitados a 2.000 por desenho; cor como token (`annotation-2`).
 
+Rodada seguinte: as threads abertas viram threads novas na revisão nova, criadas pelo autor com `commentCount: 0`, `carriedFromThreadId` e a âncora reancorada; as regras só deixam nascer `outdated` quem tem `carriedFromThreadId`.
+
 Resolução: o autor marca `resolved` com `fixed_next_version`; ao congelar a próxima versão, quem edita carimba `resolution.fixedInSnapshotId` (as regras só permitem mudar esse campo nesse caso).
 
 ### 2.9 `projects/{projectId}/diffs/{diffKey}`
@@ -279,7 +281,7 @@ O cache offline do Firestore (`persistentLocalCache`) também guarda os pedaços
 | `aiConversations`, `messages` | só o criador | só o criador |
 | `notifications` | só o destinatário | quem age, se participa do projeto ou da revisão |
 
-**Testes** (`npm run test:rules`): 79 de 79 cenários aprovados no emulador, 5 deles para comentário em trecho, documento não concedido e notificações, 7 para a lista de membros (`memberProfiles`: a própria entrada sim, a de outro não, o dono só remove) e 20 para os arquivos em pedaços (cabeçalho sem o último pedaço, hash diferente do id, tamanho incoerente, pedaço grande demais, gravação depois de finalizar, leitura do revisor por documento concedido). A suíte começa com o Firestore vazio (`createTestEnv` em `tests/rules/harness.mjs`).
+**Testes** (`npm run test:rules`): 81 de 81 cenários aprovados no emulador, 2 para threads levadas entre rodadas (só thread com `carriedFromThreadId` nasce `outdated`), 5 para comentário em trecho, documento não concedido e notificações, 7 para a lista de membros (`memberProfiles`: a própria entrada sim, a de outro não, o dono só remove) e 20 para os arquivos em pedaços (cabeçalho sem o último pedaço, hash diferente do id, tamanho incoerente, pedaço grande demais, gravação depois de finalizar, leitura do revisor por documento concedido). A suíte começa com o Firestore vazio (`createTestEnv` em `tests/rules/harness.mjs`).
 
 ## 6. Índices
 
