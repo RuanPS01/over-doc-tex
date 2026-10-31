@@ -99,6 +99,19 @@ describe('log do TeX', () => {
     expect(parseTexLog(nested, 'main.tex', 2)[0]).toMatchObject({ file: 'cap/um.tex', line: 3 });
   });
 
+  it('citação indefinida só conta na última passagem do TeX', () => {
+    const lines = [
+      'This is pdfTeX, Version 3.141592653',
+      '(/document.tex',
+      "LaTeX Warning: Citation `silva2020' on page 1 undefined on input line 9.",
+      ')',
+      'This is pdfTeX, Version 3.141592653',
+      '(/document.tex',
+      ')',
+    ];
+    expect(parseTexLog(lines, 'main.tex')).toEqual([]);
+  });
+
   it('reconhece pacote ausente e citação indefinida', () => {
     const issues = parseTexLog(
       [
