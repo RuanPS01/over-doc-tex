@@ -87,7 +87,7 @@ Não existe chave de IA da plataforma em lugar nenhum.
 
 ## 6. Deploy
 
-O workflow `.github/workflows/deploy.yml` faz o CI e publica o mesmo site em dois lugares: GitHub Pages (`https://<dono>.github.io/<repositório>/`) e Firebase Hosting (`https://<projeto>.web.app`).
+O workflow `.github/workflows/deploy.yml` faz o CI e publica o mesmo site em dois lugares: GitHub Pages (`https://<dono>.github.io/<repositório>/`) e Firebase Hosting (`https://<site>.web.app`, em que `<site>` vem de `FIREBASE_HOSTING_SITE` ou é o site padrão do projeto).
 
 | Job | Quando roda | O que faz |
 | --- | --- | --- |
@@ -96,7 +96,7 @@ O workflow `.github/workflows/deploy.yml` faz o CI e publica o mesmo site em doi
 | `firebase-deploy` | main e execução manual, depois de `verify` e `rules-tests` | `firebase deploy --only firestore:rules,firestore:indexes` |
 | `web-build` | main e execução manual, depois de `verify` | Dois builds com a configuração pública do Firebase: `npm run build:pages` com o subcaminho do Pages (`dist/`) e `vite build` na raiz para o Hosting (`dist-hosting/`, guardado como artefato) |
 | `pages-deploy` | depois de `firebase-deploy` **e** `web-build` | Publica no GitHub Pages |
-| `hosting-deploy` | depois de `firebase-deploy` **e** `web-build` | `firebase deploy --only hosting` com o artefato do Hosting; a URL publicada aparece no ambiente `firebase-hosting` |
+| `hosting-deploy` | depois de `firebase-deploy` **e** `web-build` | `firebase deploy --only hosting` com o artefato do Hosting, no site de `FIREBASE_HOSTING_SITE` (o workflow grava `hosting.site` no `firebase.json` antes do deploy); a URL publicada aparece no ambiente `firebase-hosting` |
 
 Se o deploy das regras falhar, nenhum dos dois sites é publicado: o app nunca vai ao ar contra regras antigas. Pages e Hosting publicam em paralelo e um não bloqueia o outro.
 
@@ -116,6 +116,7 @@ O cache do Hosting fica em `firebase.json`: `no-cache` para tudo (HTML, `sw.js`,
    | `FIREBASE_AUTH_DOMAIN` | build | `authDomain` |
    | `FIREBASE_MESSAGING_SENDER_ID` | build | `messagingSenderId` |
    | `FIREBASE_APP_ID` | build | `appId` |
+   | `FIREBASE_HOSTING_SITE` (opcional) | deploy do Hosting | Console > Hosting: o nome do site no cartão (ex.: `overdoctex` para `overdoctex.web.app`). Vazio publica no site padrão do projeto |
 
    São a configuração pública do app da Web, não são segredos. O `storageBucket` da configuração do SDK não é usado. Sem `FIREBASE_API_KEY` e `FIREBASE_PROJECT_ID`, o site publicado roda em modo demonstração. `BASE_PATH` não precisa ser configurada: o workflow pega do próprio Pages.
 3. **Autenticação do deploy**, exatamente uma das duas formas (o workflow recusa nenhuma ou as duas):
@@ -133,8 +134,8 @@ O cache do Hosting fica em `firebase.json`: `no-cache` para tudo (HTML, `sw.js`,
    `Service Account User` não é necessário (só serve para deploy de Functions ou Hosting com conta de execução).
 5. **APIs ativas no projeto** (APIs e serviços > Biblioteca): Cloud Firestore API, Firebase Rules API e Firebase Hosting API. Os papéis acima não incluem ativar APIs, então o deploy falha se alguma estiver desligada.
 6. **Banco do Firestore criado antes do primeiro deploy**, na região desejada (ex.: `southamerica-east1`). Se o banco não existir, o firebase-tools tenta criá-lo em `nam5` (EUA).
-7. **Firebase Hosting:** ativado uma vez (Console > Hosting > Começar), para existir o site padrão; sem ele o deploy falha com "Could not determine the default site for the project".
-8. **Firebase Authentication:** ativar Google, e-mail e senha e **Link de e-mail**; em Settings > Authorized domains, adicionar `<dono>.github.io` (ou o domínio próprio). `<projeto>.web.app` e `<projeto>.firebaseapp.com` já vêm autorizados.
+7. **Firebase Hosting:** ativado uma vez (Console > Hosting > Começar), para existir o site padrão; sem ele o deploy falha com "Could not determine the default site for the project". Para publicar em outro site do mesmo projeto, crie-o em "Adicionar outro site" e informe o nome em `FIREBASE_HOSTING_SITE`.
+8. **Firebase Authentication:** ativar Google, e-mail e senha e **Link de e-mail**; em Settings > Authorized domains, adicionar `<dono>.github.io` (ou o domínio próprio). `<projeto>.web.app` e `<projeto>.firebaseapp.com` já vêm autorizados; com outro site, confira se `<site>.web.app` e `<site>.firebaseapp.com` estão na lista e adicione se faltarem, senão o login falha com `auth/unauthorized-domain`.
 
 Os ambientes `firebase` e `firebase-hosting` do GitHub são criados no primeiro deploy; neles dá para exigir aprovação manual antes de publicar. Guarde o secret e as variáveis no nível do repositório, não dentro de um ambiente: os dois jobs do Firebase usam ambientes diferentes.
 

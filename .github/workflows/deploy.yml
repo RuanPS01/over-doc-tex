@@ -222,6 +222,9 @@ jobs:
       url: ${{ steps.deploy.outputs.url }}
     env:
       FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+      # Site do Hosting que recebe o deploy (ex.: "overdoctex" para overdoctex.web.app).
+      # Vazio usa o site padrão do projeto.
+      FIREBASE_HOSTING_SITE: ${{ vars.FIREBASE_HOSTING_SITE }}
     steps:
       # firebase.json (pasta pública, rewrites e cabeçalhos) e a ação de autenticação.
       - uses: actions/checkout@v7
@@ -244,6 +247,13 @@ jobs:
           workload-identity-provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service-account: ${{ vars.GCP_SERVICE_ACCOUNT }}
 
+      - name: Escolher o site do Hosting
+        if: env.FIREBASE_HOSTING_SITE != ''
+        run: |
+          jq --arg site "$FIREBASE_HOSTING_SITE" '.hosting.site = $site' firebase.json > firebase.site.json
+          mv firebase.site.json firebase.json
+          echo "Deploy no site ${FIREBASE_HOSTING_SITE}"
+
       - name: Deploy no Firebase Hosting
         id: deploy
         run: |
@@ -255,4 +265,4 @@ jobs:
             --non-interactive | tee hosting-deploy.log
           # O site padrão costuma ter o id do projeto, mas pode ter sufixo: lê a URL do log.
           url=$(grep -oE 'https://[A-Za-z0-9.-]+\.web\.app' hosting-deploy.log | tail -n 1 || true)
-          echo "url=${url:-https://${FIREBASE_PROJECT_ID}.web.app}" >> "$GITHUB_OUTPUT"
+          echo "url=${url:-https://${FIREBASE_HOSTING_SITE:-$FIREBASE_PROJECT_ID}.web.app}" >> "$GITHUB_OUTPUT"
