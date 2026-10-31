@@ -2,7 +2,7 @@
 
 ## 1. Visão geral
 
-O OverDocTeX é um PWA estático de edição LaTeX com revisão por versões congeladas (snapshots), comentários ancorados no PDF, diff visual recompilado, importação e exportação de projetos e um assistente de IA contextual. **Não há servidor próprio:** o app roda no navegador, guarda dados no Firebase (Auth, Firestore, Storage) e fala direto com a API de IA escolhida pelo usuário, com a chave dele.
+O OverDocTeX é um PWA estático de edição LaTeX com revisão por versões congeladas (snapshots), comentários ancorados no PDF, diff visual recompilado, importação e exportação de projetos e um assistente de IA contextual. **Não há servidor próprio:** o app roda no navegador, guarda dados no Firebase (Auth e Firestore, inclusive os binários, em pedaços) e fala direto com a API de IA escolhida pelo usuário, com a chave dele.
 
 ```
 +--------------------------------------------------------------+
@@ -17,7 +17,7 @@ O OverDocTeX é um PWA estático de edição LaTeX com revisão por versões con
 +-------------+--------------+     +-------+------------------+
 |  Firebase Authentication   |     |  Claude (Anthropic)      |
 |  Cloud Firestore           |     |  OpenAI                  |
-|  Cloud Storage             |     |  Gemini (Google)         |
+|  (dados e binários)        |     |  Gemini (Google)         |
 +----------------------------+     +--------------------------+
 ```
 
@@ -27,8 +27,8 @@ O OverDocTeX é um PWA estático de edição LaTeX com revisão por versões con
 | --- | --- | --- |
 | Interface | React 18, TypeScript estrito, Vite, Tailwind, shadcn/ui | Editor, visualizador de PDF, revisão, chat de IA, modo offline |
 | Dados em tempo real | Firestore (SDK web com cache persistente) | Projetos, arquivos, versões, revisões, threads, configuração de IA |
-| Arquivos | Cloud Storage | Conteúdo por hash, PDFs de versão e de diff |
-| Regras | `firestore.rules`, `storage.rules` | Toda a autorização e a coerência entre documentos gravados em lote |
+| Arquivos | Firestore, em pedaços de até 1.000.000 bytes | Conteúdo por hash, PDFs de versão e de diff (`06-banco-de-dados.md`, seção 3) |
+| Regras | `firestore.rules` | Toda a autorização e a coerência entre documentos gravados em lote, inclusive dos binários |
 | Trabalho pesado | Web Workers no navegador | Compilação LaTeX (motor WebAssembly, planejado) e motor de diff |
 | IA | `@anthropic-ai/sdk`, `openai`, `@google/genai` no navegador | Escrita, paráfrase, estrutura, sumário, auditoria de referências |
 | Hospedagem | GitHub Pages e Firebase Hosting | O mesmo site estático nos dois; deploy pelo workflow `.github/workflows/deploy.yml` |
@@ -55,6 +55,8 @@ O OverDocTeX é um PWA estático de edição LaTeX com revisão por versões con
 
 **D10. Hospedagem estática no GitHub Pages e no Firebase Hosting.** O mesmo código publica nos dois, sempre depois do deploy das regras e índices do Firebase. O build roda duas vezes porque o caminho base muda: no Pages, o subcaminho (`/<repositório>/`) vem de `BASE_PATH` e vai para o Vite, o manifesto e o roteador, e um `404.html` igual ao `index.html` abre as rotas do SPA em acesso direto; no Hosting, o site fica na raiz (`<projeto>.web.app`) e as rotas abrem pelo rewrite para `index.html` do `firebase.json`. O Hosting tem a vantagem do domínio já autorizado no Firebase Auth e cabeçalhos de cache sob controle.
 
+**D11. Binários no próprio Firestore, sem Cloud Storage.** O Cloud Storage exige o plano Blaze (com cartão) desde fevereiro de 2026, e qualquer armazenamento de objetos de terceiros (R2, B2, S3) precisaria de um servidor para guardar a chave e conferir permissões. Os binários viraram arquivos em pedaços no Firestore: cabeçalho com tamanho, tipo e sha256 mais a subcoleção `chunks`, e o cabeçalho só entra no mesmo lote do último pedaço. As mesmas regras do Firestore protegem tudo (membros, grants do revisor, versão congelada), e o projeto inteiro cabe no plano Spark. O preço é a cota: 1 GiB no total, cada pedaço lido conta como uma leitura, e por isso há tetos (25 MiB por blob, 50 MiB por PDF de versão ou diff, 100 MB por importação) e o PDF da compilação de trabalho não é gravado.
+
 ## 4. Estrutura de pastas
 
 Itens marcados como *(planejado)* ainda não existem.
@@ -65,7 +67,7 @@ over-doc-tex/
 ├── docs/                              documentação de referência (00 a 11)
 ├── shared/firestore/
 │   ├── types.ts                       tipos de todas as coleções e âncoras
-│   └── paths.ts                       caminhos do Firestore e do Storage
+│   └── paths.ts                       caminhos do Firestore (dados e arquivos em pedaços)
 ├── src/
 │   ├── main.tsx                       montagem do React e registro do service worker
 │   ├── app/                           providers, roteador (com o subcaminho do Pages)
@@ -91,7 +93,8 @@ over-doc-tex/
 │   ├── lib/
 │   │   ├── ai/                        motor de IA: provedores, fila, RAG, prompts, tarefas, referências
 │   │   ├── project-archive/           caminhos seguros, plano de importação, zip
-│   │   ├── firebase/                  inicialização preguiçosa e emuladores
+│   │   ├── stored-files/              arquivos em pedaços: divisão, remontagem, sha256 (puro)
+│   │   ├── firebase/                  inicialização preguiçosa, emuladores e leitura/gravação dos pedaços
 │   │   ├── markdown/                  marked + DOMPurify
 │   │   ├── monaco/                    linguagem LaTeX e tema derivado dos tokens
 │   │   ├── latex/                     (planejado) motor WebAssembly em Web Worker
@@ -102,7 +105,7 @@ over-doc-tex/
 │   ├── unit/                          Vitest: motor de IA e importação/exportação
 │   └── rules/                         regras nos emuladores (pacote isolado)
 ├── scripts/                           verificação de responsividade e de convenções
-├── firestore.rules, storage.rules, firestore.indexes.json, firebase.json
+├── firestore.rules, firestore.indexes.json, firebase.json
 └── vite.config.ts, vitest.config.ts, tailwind.config.ts
 ```
 
@@ -122,14 +125,15 @@ Componente de uma feature que precisa de dados de outra recebe por props (ex.: `
 ## 5. Segurança
 
 - **Autenticação:** Firebase Auth (Google, e-mail e senha, e link por e-mail para revisores). E-mail verificado é exigido para grants e convites.
-- **Autorização:** só as regras do Firestore e do Storage, com o mesmo modelo (membros por papel, convites por e-mail, grants por e-mail). Cobertas por `tests/rules/`.
-- **Integridade sem servidor:** lotes validados com `getAfter` e `existsAfter` (snapshot com contador, revisão com grant).
+- **Autorização:** só as regras do Firestore, com o mesmo modelo (membros por papel, convites por e-mail, grants por e-mail). Cobertas por `tests/rules/`.
+- **Integridade sem servidor:** lotes validados com `getAfter` e `existsAfter` (snapshot com contador, revisão com grant, cabeçalho de arquivo com o último pedaço). O sha256 de cada arquivo em pedaços é conferido ao remontar.
 - **Chaves de IA:** só do usuário, em documento privado ou no navegador; nunca no build.
 - **Conteúdo gerado:** Markdown da IA sanitizado; conteúdo do documento e de páginas externas delimitado e marcado como dado.
 - **Importação:** caminhos normalizados (bloqueio de `..`, absolutos e lixo de sistema) e limites de tamanho conferidos antes de descompactar.
 
 ## 6. Custos e escala
 
-- Sem servidores: o custo é o do Firebase (Firestore, Storage, que exige o plano Blaze desde fevereiro de 2026, com cotas gratuitas) e o da IA, pago por cada usuário na própria chave.
+- Sem servidores: Auth, Firestore e Hosting cabem no plano Spark (gratuito, sem cartão); a IA é paga por cada usuário na própria chave.
+- O limite real é a cota do Firestore: 1 GiB guardado (dados e binários juntos), 50 mil leituras e 20 mil gravações por dia. Um PDF de 5 MB custa 5 leituras de pedaço para abrir, e o cache offline evita repetir.
 - Leituras vêm do cache persistente do Firestore; `onSnapshot` só traz deltas.
 - PDFs de diff ficam em cache por par de versões: o mesmo par nunca é compilado duas vezes por quem edita.

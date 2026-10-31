@@ -2,14 +2,14 @@
 
 Editor de documentos LaTeX em formato PWA, com revisão por versões congeladas, comentários ancorados no PDF no estilo Pull Request, pins com desenho livre, diff visual recompilado (removido em vermelho, inserido em verde) e assistente de IA contextual.
 
-O app é **100% estático** (GitHub Pages e Firebase Hosting) com Firebase Auth, Firestore e Storage. Não há Cloud Functions nem servidor próprio, e a plataforma **não oferece IA própria**: cada usuário configura a sua (Claude, OpenAI ou Gemini, inclusive chave gratuita), com modelos de reserva para quando um atinge o limite.
+O app é **100% estático** (GitHub Pages e Firebase Hosting) com Firebase Auth e Firestore, inclusive para os binários, guardados em pedaços. Tudo cabe no plano Spark, sem cartão. Não há Cloud Functions nem servidor próprio, e a plataforma **não oferece IA própria**: cada usuário configura a sua (Claude, OpenAI ou Gemini, inclusive chave gratuita), com modelos de reserva para quando um atinge o limite.
 
 ## Estado atual
 
 Este repositório contém a fundação do produto:
 
 - **Arquitetura e especificação** completas em [`docs/`](docs/00-regras-para-ia.md).
-- **Modelo de dados** tipado (`shared/firestore/types.ts`), regras de segurança que validam todas as escritas do cliente (`firestore.rules`, `storage.rules`), índices e testes de regras.
+- **Modelo de dados** tipado (`shared/firestore/types.ts`), regras de segurança que validam todas as escritas do cliente (`firestore.rules`), índices e testes de regras.
 - **Frontend** React 18 + TypeScript + Vite + Tailwind + shadcn/ui com o layout responsivo do editor (colunas no desktop; abas ou duas colunas curtas no celular) e Monaco com realce LaTeX.
 - **Assistente de IA no navegador** com a chave do usuário: diálogo "Usar a minha própria IA" com fila de até 5 modelos, lista de modelos consultada ao vivo no provedor, RAG lexical (BM25), saídas estruturadas validadas com Zod e verificação real de links das referências.
 - **Importação e exportação**: projeto inteiro em .zip; importação de .zip, arquivos avulsos ou pastas do dispositivo, para a raiz ou uma pasta interna, sobrescrevendo ou mantendo os dois arquivos (`nome-1`).
@@ -42,7 +42,7 @@ npm --prefix tests/rules install && npm run test:rules   # requer Java 21+
 
 Cada push na `main` roda o CI e, se tudo passar, publica as regras e os índices do Firebase e, em seguida, o PWA em dois lugares ao mesmo tempo: GitHub Pages e Firebase Hosting (`.github/workflows/deploy.yml`). Pull requests rodam só as verificações. A configuração única (variáveis, autenticação, papéis e pré-requisitos) está em [`docs/02-tecnologias.md`](docs/02-tecnologias.md#6-deploy).
 
-O Cloud Storage exige o plano Blaze desde fevereiro de 2026 (com cotas gratuitas); Auth e Firestore funcionam no Spark.
+Não há Cloud Storage: ele exige o plano Blaze desde fevereiro de 2026. Os binários ficam no Firestore em pedaços de até 1 MB (`docs/06-banco-de-dados.md`, seção 3), dentro da cota gratuita de 1 GiB.
 
 ## Documentação
 
@@ -54,7 +54,7 @@ O Cloud Storage exige o plano Blaze desde fevereiro de 2026 (com cotas gratuitas
 | [03-identidade-visual.md](docs/03-identidade-visual.md) | Tokens, tipografia, ícones e acessibilidade |
 | [04-componentes-e-telas.md](docs/04-componentes-e-telas.md) | Telas e componentização do editor e da revisão |
 | [05-padroes-de-nomes.md](docs/05-padroes-de-nomes.md) | Convenções de nomes, commits e branches |
-| [06-banco-de-dados.md](docs/06-banco-de-dados.md) | Firestore, Storage, regras e índices |
+| [06-banco-de-dados.md](docs/06-banco-de-dados.md) | Firestore, arquivos em pedaços, regras e índices |
 | [07-fluxos.md](docs/07-fluxos.md) | Snapshot, revisão, algoritmo do diff, IA, importação e exportação |
 | [08-responsividade.md](docs/08-responsividade.md) | Contrato de 360px e código do layout |
 | [09-contexto-do-produto.md](docs/09-contexto-do-produto.md) | Visão, personas, escopo e glossário |
