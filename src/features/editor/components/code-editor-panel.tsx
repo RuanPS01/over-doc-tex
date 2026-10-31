@@ -29,7 +29,7 @@ function EditorSkeleton() {
 }
 
 export function CodeEditorPanel() {
-  const { projectId, activeFileId, setImportOpen, revealRequest } = useEditorStore();
+  const { projectId, activeFileId, setImportOpen, revealRequest, canEdit } = useEditorStore();
   const { data: files, isPending } = useProjectFiles(projectId);
   const file = files?.find((candidate) => candidate.id === activeFileId);
   const autosave = useFileAutosave(projectId);
@@ -62,6 +62,7 @@ export function CodeEditorPanel() {
       <div className="flex h-9 shrink-0 items-center gap-2 border-b px-3 text-xs text-muted-foreground">
         <FileCode2 className="size-3.5 shrink-0" />
         <span className="min-w-0 flex-1 truncate">{file?.path ?? 'Nenhum arquivo aberto'}</span>
+        {!canEdit && <span className="shrink-0">Somente leitura</span>}
         <span
           role="status"
           title={autosave.error ?? undefined}
@@ -82,7 +83,7 @@ export function CodeEditorPanel() {
             path={file.path}
             defaultLanguage={file.kind === 'bib' ? 'plaintext' : LATEX_LANGUAGE_ID}
             defaultValue={file.content}
-            onChange={(value) => autosave.schedule(file.id, value ?? '')}
+            onChange={(value) => canEdit && autosave.schedule(file.id, value ?? '')}
             theme={isDark ? 'overdoctex-dark' : 'overdoctex-light'}
             beforeMount={handleBeforeMount}
             onMount={(editor) => {
@@ -90,6 +91,8 @@ export function CodeEditorPanel() {
             }}
             loading={<EditorSkeleton />}
             options={{
+              // Quem só lê o projeto vê o código, mas as regras recusariam a gravação.
+              readOnly: !canEdit,
               automaticLayout: true,
               minimap: { enabled: false },
               wordWrap: 'on',
@@ -109,9 +112,11 @@ export function CodeEditorPanel() {
             ) : (
               <>
                 <p>Nenhum arquivo de texto no projeto ainda.</p>
-                <Button variant="link" size="sm" onClick={() => setImportOpen(true)}>
-                  Importar arquivos ou um .zip
-                </Button>
+                {canEdit && (
+                  <Button variant="link" size="sm" onClick={() => setImportOpen(true)}>
+                    Importar arquivos ou um .zip
+                  </Button>
+                )}
               </>
             )}
           </div>

@@ -1,0 +1,121 @@
+import { ArrowLeft, CheckCircle2, GitCompare, MessageSquarePlus, MoreVertical, RotateCcw, TriangleAlert, XCircle } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { Link } from 'wouter';
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import type { ParticipantRole, ReviewStatus } from '@shared/firestore/types';
+import { cn } from '@/lib/utils';
+import { REVIEW_STATUS_LABELS, type ReviewSummary } from '../model/review';
+
+interface StatusAction {
+  status: ReviewStatus;
+  label: string;
+  icon: ReactNode;
+}
+
+/** O que cada lado pode fazer a partir do status atual (as mesmas transições das regras). */
+function statusActions(role: ParticipantRole, status: ReviewStatus): StatusAction[] {
+  if (role === 'author') {
+    return status === 'closed'
+      ? [{ status: 'in_review', label: 'Reabrir', icon: <RotateCcw /> }]
+      : [{ status: 'closed', label: 'Encerrar revisão', icon: <XCircle /> }];
+  }
+  if (status === 'closed' || status === 'invited') return [];
+  const actions: StatusAction[] = [];
+  if (status !== 'changes_requested') actions.push({ status: 'changes_requested', label: 'Pedir alterações', icon: <TriangleAlert /> });
+  if (status !== 'approved') actions.push({ status: 'approved', label: 'Aprovar', icon: <CheckCircle2 /> });
+  return actions;
+}
+
+interface ReviewHeaderProps {
+  review: ReviewSummary;
+  role: ParticipantRole;
+  isPlacing: boolean;
+  canWrite: boolean;
+  onTogglePlacing: () => void;
+  onShowChanges: () => void;
+  onStatusChange: (status: ReviewStatus) => void;
+}
+
+/** Cabeçalho travado da revisão: versão, status e ações do autor ou do revisor. */
+export function ReviewHeader({ review, role, isPlacing, canWrite, onTogglePlacing, onShowChanges, onStatusChange }: ReviewHeaderProps) {
+  const actions = statusActions(role, review.status);
+  const backHref = role === 'author' ? `/p/${review.projectId}` : '/';
+
+  return (
+    <header className="flex h-header shrink-0 items-center gap-1 border-b bg-background px-2 pt-safe">
+      <Button variant="ghost" size="icon" asChild>
+        <Link href={backHref} aria-label={role === 'author' ? 'Voltar ao editor' : 'Voltar aos projetos'}>
+          <ArrowLeft />
+        </Link>
+      </Button>
+      <div className="min-w-0 flex-1 px-1">
+        <h1 className="truncate text-sm font-semibold">
+          #{review.number} {review.title}
+        </h1>
+        <p className="truncate text-xs text-muted-foreground">
+          Versão {review.snapshotLabel} · {REVIEW_STATUS_LABELS[review.status]}
+          {role === 'author' ? ` · ${review.reviewerName ?? review.reviewerEmail}` : ` · ${review.projectName}`}
+        </p>
+      </div>
+      {review.baseSnapshotId && (
+        <Button variant="ghost" size="sm" className="hidden md:inline-flex" onClick={onShowChanges}>
+          <GitCompare />
+          Ver alterações
+        </Button>
+      )}
+      {canWrite && (
+        <Button
+          variant={isPlacing ? 'secondary' : 'outline'}
+          size="sm"
+          aria-pressed={isPlacing}
+          className="px-2 sm:px-3"
+          onClick={onTogglePlacing}
+        >
+          <MessageSquarePlus />
+          <span className="hidden sm:inline">{isPlacing ? 'Clique no PDF' : 'Comentar'}</span>
+        </Button>
+      )}
+      {actions.map((action) => (
+        <Button
+          key={action.status}
+          size="sm"
+          variant={action.status === 'approved' ? 'default' : 'outline'}
+          className="hidden lg:inline-flex"
+          onClick={() => onStatusChange(action.status)}
+        >
+          {action.icon}
+          {action.label}
+        </Button>
+      ))}
+      {(actions.length > 0 || review.baseSnapshotId) && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" aria-label="Mais ações" className={cn('lg:hidden', actions.length === 0 && 'md:hidden')}>
+              <MoreVertical />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {review.baseSnapshotId && (
+              <DropdownMenuItem className="md:hidden" onSelect={onShowChanges}>
+                <GitCompare />
+                Ver alterações
+              </DropdownMenuItem>
+            )}
+            {actions.map((action) => (
+              <DropdownMenuItem key={action.status} className="lg:hidden" onSelect={() => onStatusChange(action.status)}>
+                {action.icon}
+                {action.label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+    </header>
+  );
+}
