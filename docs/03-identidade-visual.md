@@ -53,6 +53,7 @@ Traços e destaques guardam o **nome do token** (`'annotation-2'`), nunca a cor.
 | Tema do Monaco | O Monaco só aceita hexadecimal | `src/lib/monaco/theme-from-tokens.ts` lê os tokens CSS e converte em runtime |
 | Preâmbulo LaTeX do diff | Cores vivem no PDF | `xcolor` com misturas nomeadas (`green!50!black`), definidas só no worker |
 | Ícone do app (`public/icons/icon.svg`) | Arquivo de imagem | `hsl(...)` dos tokens |
+| Logo do Google no botão de login (`public/icons/google-g.svg`) | As diretrizes do "Sign in with Google" exigem o "G" nas quatro cores da marca, sem versão monocromática nem recoloração | Arquivo SVG com as cores oficiais, usado por `<img>`; logo de 18px a 10px do texto, centralizado com ele no botão |
 
 ## 3. Tipografia
 
