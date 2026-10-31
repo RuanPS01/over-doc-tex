@@ -223,6 +223,16 @@ await runScenarios('Firestore', [
     assertFails(updateDoc(doc(rev(), 'projects/p1/reviews/r1'), { grantedDocumentIds: ['main', 'apendice'] }))],
   ['revisor cria thread com pin e desenho', () =>
     assertSucceeds(setDoc(doc(rev(), 'projects/p1/reviews/r1/threads/t1'), pinThread()))],
+  ['revisor comenta um trecho de texto', () =>
+    assertSucceeds(setDoc(doc(rev(), 'projects/p1/reviews/r1/threads/t5'), pinThread({
+      kind: 'text',
+      anchor: {
+        type: 'text', page: 1, rects: [{ x: 0.1, y: 0.2, width: 0.3, height: 0.02 }],
+        quote: { exact: 'trecho', prefix: 'um ', suffix: ' aqui' }, position: { start: 3, end: 9 },
+      },
+    })))],
+  ['thread em documento não concedido na revisão é negada', () =>
+    assertFails(setDoc(doc(rev(), 'projects/p1/reviews/r1/threads/t6'), pinThread({ documentId: 'apendice' })))],
   ['thread em documento não concedido é negada', () =>
     assertFails(setDoc(doc(rev(), 'projects/p1/reviews/r1/threads/t2'), pinThread({ documentId: 'apendice' })))],
   ['thread com autor falso é negada', () =>
@@ -264,6 +274,17 @@ await runScenarios('Firestore', [
   ['revisor notifica a autora pela revisão', () =>
     assertSucceeds(setDoc(doc(rev(), 'users/ana/notifications/n1'), {
       type: 'comment_added', projectId: 'p1', reviewId: 'r1', threadId: 't0', actorId: 'rev', title: 't', body: 'b', read: false,
+    }))],
+  ['autora notifica o revisor e o destinatário marca como lida', async () => {
+    await assertSucceeds(setDoc(doc(as('ana'), 'users/rev/notifications/n3'), {
+      type: 'thread_resolved', projectId: 'p1', reviewId: 'r1', threadId: 't0', actorId: 'ana', title: 't', body: '', read: false,
+    }));
+    await assertSucceeds(updateDoc(doc(rev(), 'users/rev/notifications/n3'), { read: true }));
+  }],
+  ['ninguém lê as notificações de outra pessoa', () => assertFails(getDoc(doc(as('bia'), 'users/rev/notifications/n3')))],
+  ['notificação em nome de outra pessoa é negada', () =>
+    assertFails(setDoc(doc(as('bia'), 'users/ana/notifications/n4'), {
+      type: 'comment_added', projectId: 'p1', reviewId: 'r1', threadId: 't0', actorId: 'caio', title: 't', body: 'b', read: false,
     }))],
   ['estranho não cria notificação', () =>
     assertFails(setDoc(doc(as('zed'), 'users/ana/notifications/n2'), {
