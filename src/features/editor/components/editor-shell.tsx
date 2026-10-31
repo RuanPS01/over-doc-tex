@@ -1,5 +1,7 @@
 import { AiAssistantPanel } from '@/features/ai-assistant/components/ai-assistant-panel';
 import { useLayoutMode } from '@/hooks/use-layout-mode';
+import { useProjectFiles } from '../hooks/use-project-files';
+import { useEditorStore } from '../state/editor-store';
 import { DesktopWorkspace } from './desktop-workspace';
 import { EditorHeader } from './editor-header';
 import { FileTreeSheet } from './file-tree-sheet';
@@ -10,8 +12,10 @@ import { MobileWorkspace } from './mobile-workspace';
  * 100dvh) com overflow-hidden: o cabeçalho fica travado e só o conteúdo
  * interno de cada painel rola.
  */
-export function EditorShell({ projectName }: { projectName: string }) {
+export function EditorShell() {
   const layoutMode = useLayoutMode();
+  const { projectId, projectName, aiOpen, setAiOpen } = useEditorStore();
+  const { data: files = [] } = useProjectFiles(projectId);
 
   return (
     <div className="flex h-viewport flex-col overflow-hidden bg-background">
@@ -26,7 +30,7 @@ export function EditorShell({ projectName }: { projectName: string }) {
       </main>
 
       {layoutMode !== 'desktop' && <FileTreeSheet />}
-      <AiAssistantPanel layoutMode={layoutMode} />
+      <AiAssistantPanel layoutMode={layoutMode} open={aiOpen} onOpenChange={setAiOpen} files={files} />
     </div>
   );
 }

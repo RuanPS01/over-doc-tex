@@ -9,8 +9,8 @@ import { EditorStoreProvider } from '@/features/editor/state/editor-store';
 export default function EditorPage() {
   const { projectId = 'demo' } = useParams<{ projectId: string }>();
   return (
-    <EditorStoreProvider projectId={projectId} initialFileId="main">
-      <EditorShell projectName="Revisão Colaborativa de Documentos LaTeX" />
+    <EditorStoreProvider projectId={projectId} projectName="Revisão Colaborativa de Documentos LaTeX" initialFileId="main">
+      <EditorShell />
     </EditorStoreProvider>
   );
 }

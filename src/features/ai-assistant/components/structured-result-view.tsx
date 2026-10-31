@@ -1,4 +1,4 @@
-import type { AiStructuredResult, OutlineProposal, ReferenceAudit } from '@shared/ai/schemas';
+import type { AiStructuredResult, OutlineProposal, ReferenceAudit } from '@/lib/ai/schemas';
 import { cn } from '@/lib/utils';
 
 const VERDICT_LABEL: Record<ReferenceAudit['results'][number]['verdict'], string> = {

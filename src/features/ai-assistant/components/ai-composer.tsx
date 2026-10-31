@@ -1,6 +1,6 @@
 import { ArrowUp, ChevronDown, Square } from 'lucide-react';
 import { useState, type FormEvent, type KeyboardEvent } from 'react';
-import type { AiTask } from '@shared/ai/schemas';
+import type { AiTask } from '@/lib/ai/schemas';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,

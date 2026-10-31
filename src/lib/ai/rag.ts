@@ -3,7 +3,24 @@
  * Sem embeddings nem banco vetorial: é determinístico, barato e suficiente
  * para projetos de tese ou artigo (centenas de blocos).
  */
-import type { SourceFile } from './sources';
+import type { AiSourceFile } from './schemas';
+
+/** Arquivo de texto do projeto que entra no RAG. */
+export interface TextSource {
+  id: string;
+  path: string;
+  kind: 'tex' | 'bib';
+  content: string;
+}
+
+/** Mantém só os .tex e .bib com conteúdo carregado (binários e pastas ficam de fora). */
+export function toTextSources(files: readonly AiSourceFile[]): TextSource[] {
+  return files.flatMap((file) =>
+    (file.kind === 'tex' || file.kind === 'bib') && file.content !== null
+      ? [{ id: file.id, path: file.path, kind: file.kind, content: file.content }]
+      : [],
+  );
+}
 
 export interface Chunk {
   fileId: string;
@@ -51,7 +68,7 @@ export function tokenize(text: string): string[] {
  * Fatia um arquivo em blocos: um bloco novo começa em comando de seção,
  * em entrada BibTeX ou em fim de parágrafo, e é cortado ao exceder o limite.
  */
-export function chunkSource(file: SourceFile): Chunk[] {
+export function chunkSource(file: TextSource): Chunk[] {
   const lines = file.content.split(/\r?\n/);
   const chunks: Chunk[] = [];
   let buffer: string[] = [];
@@ -61,7 +78,7 @@ export function chunkSource(file: SourceFile): Chunk[] {
   const flush = (endLine: number) => {
     const text = buffer.join('\n').trim();
     if (text) {
-      chunks.push({ fileId: file.fileId, path: file.path, startLine, endLine, text, tokens: tokenize(text) });
+      chunks.push({ fileId: file.id, path: file.path, startLine, endLine, text, tokens: tokenize(text) });
     }
     buffer = [];
     bufferChars = 0;
@@ -137,7 +154,7 @@ export function selectWithinBudget(ranked: readonly RankedChunk[], budgetChars: 
 }
 
 /** Extrai a hierarquia de seções de todos os arquivos .tex. */
-export function buildOutline(files: readonly SourceFile[]): OutlineEntry[] {
+export function buildOutline(files: readonly TextSource[]): OutlineEntry[] {
   return files
     .filter((file) => file.kind === 'tex')
     .flatMap((file) =>

@@ -26,8 +26,6 @@ export interface AuthContextValue {
   signInWithEmail: (email: string, password: string) => Promise<void>;
   signUpWithEmail: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
-  /** ID token atual, enviado como Bearer para as rotas pesadas do backend. */
-  getIdToken: () => Promise<string>;
 }
 
 export const AuthContext = createContext<AuthContextValue | null>(null);
@@ -62,11 +60,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await createUserWithEmailAndPassword(getFirebase().auth, email, password);
       },
       signOut: () => firebaseSignOut(getFirebase().auth),
-      getIdToken: async () => {
-        const current = getFirebase().auth.currentUser;
-        if (!current) throw new Error('Faça login para usar o assistente.');
-        return current.getIdToken();
-      },
     }),
     [status, user],
   );

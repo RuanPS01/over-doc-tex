@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 
 /** Rota /login: Google ou e-mail e senha (Firebase Authentication). */
@@ -26,9 +27,6 @@ export default function LoginPage() {
     void run(() => signInWithEmail(email, password));
   };
 
-  const inputClass =
-    'h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
-
   return (
     <div className="flex min-h-viewport items-center justify-center px-4">
       <div className="flex w-full max-w-sm flex-col gap-4 rounded-xl border bg-card p-6 shadow-sm">
@@ -40,23 +38,21 @@ export default function LoginPage() {
           Continuar com Google
         </Button>
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-          <input
+          <Input
             type="email"
             required
             autoComplete="email"
             placeholder="E-mail"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
-            className={inputClass}
           />
-          <input
+          <Input
             type="password"
             required
             autoComplete="current-password"
             placeholder="Senha"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            className={inputClass}
           />
           <Button type="submit" disabled={status === 'demo'}>
             Entrar com e-mail

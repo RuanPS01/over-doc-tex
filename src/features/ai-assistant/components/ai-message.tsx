@@ -23,9 +23,12 @@ export function AiMessage({ message }: { message: AiChatMessage }) {
       )}
       {message.text && <MarkdownContent markdown={message.text} />}
       {message.result && <StructuredResultView result={message.result} />}
-      {message.sources.length > 0 && message.status === 'complete' && (
+      {message.status === 'complete' && (message.sources.length > 0 || message.servedBy) && (
         <p className="truncate text-[11px] text-muted-foreground">
-          Fontes: {message.sources.map((source) => `${source.path}:${source.startLine}`).join(', ')}
+          {message.servedBy && `Respondido por ${message.servedBy}`}
+          {message.servedBy && message.sources.length > 0 && '. '}
+          {message.sources.length > 0 &&
+            `Fontes: ${message.sources.map((source) => `${source.path}:${source.startLine}`).join(', ')}`}
         </p>
       )}
       {message.error && (

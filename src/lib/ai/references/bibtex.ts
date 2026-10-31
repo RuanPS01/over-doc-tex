@@ -2,7 +2,7 @@
  * Extração mínima de referências: entradas BibTeX (.bib) e links soltos
  * (\url, \href) nos arquivos .tex. Não pretende ser um parser BibTeX completo.
  */
-import type { SourceFile } from '../ai/sources';
+import type { TextSource } from '../rag';
 
 export interface ReferenceEntry {
   key: string;
@@ -76,7 +76,7 @@ export function parseBibtex(content: string): ReferenceEntry[] {
 }
 
 /** Junta entradas BibTeX e links \url/\href citados diretamente no texto. */
-export function collectReferences(files: readonly SourceFile[], limit: number): ReferenceEntry[] {
+export function collectReferences(files: readonly TextSource[], limit: number): ReferenceEntry[] {
   const fromBib = files.filter((file) => file.kind === 'bib').flatMap((file) => parseBibtex(file.content));
   const knownUrls = new Set(fromBib.flatMap((entry) => (entry.url ? [entry.url] : [])));
 

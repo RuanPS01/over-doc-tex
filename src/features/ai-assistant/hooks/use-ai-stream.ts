@@ -1,9 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { AiRequest, AiSelection, AiStreamEvent, AiStructuredResult, AiTask } from '@shared/ai/schemas';
-import { useAuth } from '@/features/auth/hooks/use-auth';
-import { streamAiTask } from '@/lib/ai/ai-client';
-import { demoAiStream } from '@/lib/ai/demo-stream';
-import { isFirebaseConfigured } from '@/lib/firebase/app';
+import { runAiTask } from '@/lib/ai/run-task';
+import {
+  AiTaskError,
+  type AiConfig,
+  type AiEvent,
+  type AiSelection,
+  type AiSourceFile,
+  type AiStructuredResult,
+  type AiTask,
+} from '@/lib/ai/schemas';
 
 export interface AiChatMessage {
   id: string;
@@ -11,11 +16,13 @@ export interface AiChatMessage {
   task: AiTask;
   text: string;
   status: 'streaming' | 'complete' | 'error' | 'aborted';
-  /** Etapa atual exibida enquanto a resposta não começa (ex.: "Testando 12 links"). */
+  /** Etapa atual exibida enquanto a resposta não começa (ex.: "Abrindo 12 links"). */
   stage: string | null;
-  sources: Extract<AiStreamEvent, { type: 'context' }>['sources'];
+  sources: Extract<AiEvent, { type: 'context' }>['sources'];
   result: AiStructuredResult | null;
   error: string | null;
+  /** Provedor e modelo que responderam (a lista pode ter trocado de modelo). */
+  servedBy: string | null;
 }
 
 interface SendInput {
@@ -25,20 +32,19 @@ interface SendInput {
 }
 
 /**
- * Conversa com a IA consumindo o stream NDJSON. Os deltas são acumulados e
- * aplicados uma vez por frame (requestAnimationFrame) para não renderizar a
- * cada token.
+ * Conversa com a IA direto do navegador, com a configuração do usuário. Os
+ * deltas são acumulados e aplicados uma vez por frame (requestAnimationFrame)
+ * para não renderizar a cada token.
  */
-export function useAiStream(projectId: string) {
-  const { getIdToken } = useAuth();
+export function useAiStream({ config, files }: { config: AiConfig | null; files: readonly AiSourceFile[] }) {
   const [messages, setMessages] = useState<AiChatMessage[]>([]);
-  const [conversationId, setConversationId] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
   const send = useCallback(
     async ({ task, prompt, selection = null }: SendInput) => {
+      if (!config) return;
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
@@ -49,11 +55,12 @@ export function useAiStream(projectId: string) {
         .slice(-10)
         .map((message) => ({ role: message.role, content: message.text }));
 
-      const base: Pick<AiChatMessage, 'task' | 'sources' | 'result' | 'error'> = {
+      const base: Pick<AiChatMessage, 'task' | 'sources' | 'result' | 'error' | 'servedBy'> = {
         task,
         sources: [],
         result: null,
         error: null,
+        servedBy: null,
       };
       setMessages((previous) => [
         ...previous,
@@ -76,26 +83,16 @@ export function useAiStream(projectId: string) {
         if (chunk) update((message) => ({ text: message.text + chunk, stage: null }));
       };
 
-      const request: AiRequest = {
-        projectId,
-        conversationId,
-        task,
-        prompt,
-        selection,
-        scope: { fileIds: [], allowExternalSources: task === 'checkReferences' },
-        history,
-      };
-
       try {
-        const events = isFirebaseConfigured
-          ? streamAiTask(request, { token: await getIdToken(), signal: controller.signal })
-          : demoAiStream(request, controller.signal);
+        const events = runAiTask({
+          input: { task, prompt, selection, history },
+          files,
+          config,
+          signal: controller.signal,
+        });
 
         for await (const event of events) {
           switch (event.type) {
-            case 'meta':
-              setConversationId(event.conversationId);
-              break;
             case 'status':
               update(() => ({ stage: event.message }));
               break;
@@ -109,18 +106,18 @@ export function useAiStream(projectId: string) {
             case 'result':
               update(() => ({ result: event.result }));
               break;
-            case 'error':
-              flush();
-              update((message) => ({
-                status: 'error',
-                stage: null,
-                error: event.message,
-                text: event.discardPartial ? '' : message.text,
-              }));
-              return;
+            case 'switch':
+              // O modelo anterior falhou: descarta o que ele escreveu e segue com o próximo.
+              pending = '';
+              update(() => ({ text: '', result: null, stage: event.message }));
+              break;
             case 'done':
               flush();
-              update(() => ({ status: 'complete', stage: null }));
+              update(() => ({
+                status: 'complete',
+                stage: null,
+                servedBy: `${event.servedBy.provider}, ${event.servedBy.model}`,
+              }));
               return;
           }
         }
@@ -130,20 +127,24 @@ export function useAiStream(projectId: string) {
         flush();
         if (controller.signal.aborted) {
           update(() => ({ status: 'aborted', stage: null }));
-        } else {
-          const message = error instanceof Error ? error.message : 'Falha ao falar com o assistente.';
-          update(() => ({ status: 'error', stage: null, error: message }));
+          return;
         }
+        const failure = error instanceof AiTaskError ? error : null;
+        update((message) => ({
+          status: 'error',
+          stage: null,
+          error: failure?.message ?? 'Falha ao falar com o assistente.',
+          text: failure?.discardPartial ? '' : message.text,
+        }));
       }
     },
-    [conversationId, getIdToken, messages, projectId],
+    [config, files, messages],
   );
 
   const stop = useCallback(() => abortRef.current?.abort(), []);
   const reset = useCallback(() => {
     abortRef.current?.abort();
     setMessages([]);
-    setConversationId(null);
   }, []);
 
   const isStreaming = messages.at(-1)?.status === 'streaming';

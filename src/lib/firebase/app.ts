@@ -22,10 +22,8 @@ const config = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-/** Sem configuração, o app roda em modo demonstração (dados locais, IA simulada). */
+/** Sem configuração, o app roda em modo demonstração (arquivos de exemplo, nada é salvo). */
 export const isFirebaseConfigured = Boolean(config.apiKey && config.projectId);
-
-export const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? '';
 
 interface FirebaseServices {
   app: FirebaseApp;

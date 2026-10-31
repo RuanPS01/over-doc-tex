@@ -7,7 +7,7 @@
  * - Conteúdo do usuário e de páginas externas entra só na mensagem do usuário,
  *   delimitado por tags, e é tratado como dado, nunca como instrução.
  */
-import type { AiRequest, AiTask } from '@shared/ai/schemas';
+import type { AiTask, AiTaskInput } from './schemas';
 import type { OutlineEntry, RankedChunk } from './rag';
 
 const BASE = `Você é o assistente de escrita do OverDocTeX, um editor de documentos LaTeX.
@@ -51,7 +51,7 @@ Responda somente com o JSON do schema fornecido. Em "latex", entregue o bloco de
 
   checkReferences: `${BASE}
 Tarefa: avaliar se cada referência bibliográfica corresponde ao conteúdo encontrado no link.
-Você recebe os metadados da referência e um resumo da página obtido pelo servidor.
+Você recebe os metadados da referência e um resumo da página aberta pela ferramenta de busca de páginas.
 Critérios do veredito:
 - "matches": título ou autores da página são compatíveis com a referência.
 - "mismatch": a página existe, mas trata de outro conteúdo.
@@ -59,6 +59,11 @@ Critérios do veredito:
 - "uncertain": dados insuficientes para decidir (ex.: PDF sem título extraído).
 Responda somente com o JSON do schema fornecido, com uma entrada por chave recebida e explicações de uma frase.`,
 };
+
+/** Etapa de abertura dos links em `checkReferences` (ferramenta web_fetch, sem análise). */
+export const FETCH_LINKS_PROMPT = `Você abre links para um verificador de referências bibliográficas.
+Use a ferramenta web_fetch exatamente uma vez para cada URL da lista recebida, na ordem dada.
+Não comente o conteúdo das páginas e não abra nenhuma outra URL. Quando terminar, responda apenas "ok".`;
 
 function formatChunks(chunks: readonly RankedChunk[]): string {
   return chunks
@@ -75,7 +80,7 @@ function formatOutline(outline: readonly OutlineEntry[]): string {
 
 /** Monta a mensagem do usuário: contexto recuperado, estrutura, seleção e pedido. */
 export function buildUserMessage(input: {
-  request: AiRequest;
+  request: AiTaskInput;
   chunks: readonly RankedChunk[];
   outline: readonly OutlineEntry[];
 }): string {
