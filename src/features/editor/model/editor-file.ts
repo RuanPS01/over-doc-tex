@@ -6,11 +6,13 @@ export interface EditorFile {
   path: string;
   name: string;
   kind: FileKind;
+  /** Texto inline; nulo para binários e textos grandes, que ficam em `blobPath`. */
   content: string | null;
+  blobPath: string | null;
 }
 
 export function toEditorFile(id: string, doc: FileDoc): EditorFile {
-  return { id, path: doc.path, name: doc.name, kind: doc.kind, content: doc.content };
+  return { id, path: doc.path, name: doc.name, kind: doc.kind, content: doc.content, blobPath: doc.blobPath };
 }
 
 /** Projeto de exemplo usado no modo demonstração (sem Firebase configurado). */
@@ -20,6 +22,7 @@ export const DEMO_FILES: EditorFile[] = [
     path: 'main.tex',
     name: 'main.tex',
     kind: 'tex',
+    blobPath: null,
     content: String.raw`\documentclass[12pt]{article}
 \usepackage[brazil]{babel}
 \usepackage{graphicx}
@@ -48,6 +51,7 @@ com marcações de inserção e remoção, como em $\Delta = V_{1.1} - V_{1.0}$.
     path: 'capitulos/introducao.tex',
     name: 'introducao.tex',
     kind: 'tex',
+    blobPath: null,
     content: String.raw`\section{Introdução}
 A revisão de documentos científicos ainda depende de trocas de arquivos por e-mail.
 Este trabalho propõe um fluxo semelhante ao de Pull Requests \cite{silva2020}.
@@ -58,6 +62,7 @@ Este trabalho propõe um fluxo semelhante ao de Pull Requests \cite{silva2020}.
     path: 'referencias.bib',
     name: 'referencias.bib',
     kind: 'bib',
+    blobPath: null,
     content: `@article{silva2020,
   title = {Revisão de código aplicada a textos acadêmicos},
   author = {Silva, Ana and Souza, Bruno},
@@ -66,5 +71,5 @@ Este trabalho propõe um fluxo semelhante ao de Pull Requests \cite{silva2020}.
 }
 `,
   },
-  { id: 'fig', path: 'figuras/arquitetura.pdf', name: 'arquitetura.pdf', kind: 'pdf', content: null },
+  { id: 'fig', path: 'figuras/arquitetura.pdf', name: 'arquitetura.pdf', kind: 'pdf', content: null, blobPath: null },
 ];

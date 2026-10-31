@@ -1,5 +1,6 @@
 import {
   ArrowLeft,
+  Download,
   FolderTree,
   GitCompare,
   History,
@@ -8,6 +9,7 @@ import {
   Send,
   Settings,
   Sparkles,
+  Upload,
 } from 'lucide-react';
 import { Link } from 'wouter';
 import { Button } from '@/components/ui/button';
@@ -20,6 +22,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import type { LayoutMode } from '@/hooks/use-layout-mode';
+import { useExportProject } from '../hooks/use-export-project';
 import { useEditorStore } from '../state/editor-store';
 
 interface EditorHeaderProps {
@@ -33,7 +36,8 @@ interface EditorHeaderProps {
  * (itens com `sm:hidden`), sem medir nada em JavaScript.
  */
 export function EditorHeader({ projectName, layoutMode }: EditorHeaderProps) {
-  const { aiOpen, setAiOpen, setFileTreeOpen } = useEditorStore();
+  const { aiOpen, setAiOpen, setFileTreeOpen, setImportOpen } = useEditorStore();
+  const { exportProject } = useExportProject();
   const isDesktop = layoutMode === 'desktop';
 
   return (
@@ -102,6 +106,15 @@ export function EditorHeader({ projectName, layoutMode }: EditorHeaderProps) {
               <ArrowLeft />
               Voltar aos projetos
             </Link>
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => setImportOpen(true)}>
+            <Upload />
+            Importar .zip, arquivos ou pasta
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => void exportProject()}>
+            <Download />
+            Exportar projeto (.zip)
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem>

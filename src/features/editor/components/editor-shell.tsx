@@ -5,6 +5,7 @@ import { useEditorStore } from '../state/editor-store';
 import { DesktopWorkspace } from './desktop-workspace';
 import { EditorHeader } from './editor-header';
 import { FileTreeSheet } from './file-tree-sheet';
+import { ImportDialog } from './import-dialog';
 import { MobileWorkspace } from './mobile-workspace';
 
 /**
@@ -30,6 +31,7 @@ export function EditorShell() {
       </main>
 
       {layoutMode !== 'desktop' && <FileTreeSheet />}
+      <ImportDialog />
       <AiAssistantPanel layoutMode={layoutMode} open={aiOpen} onOpenChange={setAiOpen} files={files} />
     </div>
   );
