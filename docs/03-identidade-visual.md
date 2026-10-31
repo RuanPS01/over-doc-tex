@@ -27,7 +27,7 @@ Paleta monocromática (Colab Arena). Definida em `src/styles/globals.css` como c
 | `--status-online`, `-away`, `-busy`, `-offline` | `#22c55e`, `#f59e0b`, `#ef4444`, `#9ca3af` | iguais | `bg-status-online`... | Indicadores de presença |
 | `--pdf-canvas` | `#e5e5e5` | `#212121` | `bg-pdf-canvas` | Fundo atrás das páginas do PDF |
 | `--diff-*` | verde e vermelho | verde e vermelho | `text-diff-added`, `bg-diff-removed-bg`... | Inserções e remoções no diff (cor de conteúdo, fora da paleta neutra) |
-| `--annotation-1` a `--annotation-4` | amarelo, vermelho, azul, verde | idem | `text-annotation-1`... | Paleta do revisor (cor de conteúdo) |
+| `--annotation-1` a `--annotation-4` | amarelo, vermelho, azul, verde | idem | `text-annotation-1`... | Paleta do revisor (cor de conteúdo); pins abertos da revisão usam `bg-annotation-3` com `text-background`, e os resolvidos, `bg-muted` com borda |
 | `--editor-*` | neutros da paleta | neutros da paleta | (lidos em runtime) | Tema do Monaco; comandos, comentários e matemática mantêm cor para leitura do código |
 
 **Cor de texto com contraste garantido.** Duas cores da paleta não servem como texto: o `#9e2f2f` do escuro (2,6:1 sobre `#121212`) e o `#22c55e` do claro (2,2:1 sobre `#fafafa`). Por isso `text-destructive` e `text-success` usam tokens próprios (`--destructive-text` e `--success-text`, mapeados em `theme.extend.textColor`), enquanto `bg-*` e `border-*` continuam com a cor da paleta:

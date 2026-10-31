@@ -140,6 +140,10 @@ Em 360px a barra tem: Arquivos, título truncado, Compilar, IA e Mais.
 | Blocos de código no chat | `max-w-full overflow-x-auto` no `pre` |
 | Páginas do PDF | largura proporcional ao painel; zoom acima de 100% rola dentro do painel |
 | Áreas seguras (notch, barra de gestos) | `.pt-safe` no cabeçalho, `.pb-safe` no Sheet inferior e `viewport-fit=cover` no `index.html` |
+| Diálogos de leitura (PDF da versão, "Ver alterações") | `h-[calc(100dvh-1rem)] max-w-4xl flex flex-col gap-0 overflow-hidden p-0`; só o corpo rola; a barra do PDF reserva `pr-10` para o botão de fechar |
+| Lateral de comentários da revisão | `w-96` no desktop; no celular vira Sheet inferior de `75dvh`, aberto por um botão flutuante "Comentários (N)" |
+| Ações por arquivo na árvore | botão "..." visível no hover e sempre visível em telas de toque (`[@media(hover:none)]:opacity-100`) |
+| Linha com campo e botão em formulário de diálogo | `flex-col` no celular e `sm:flex-row`; o campo usa `sm:flex-1` (com `flex-1` na coluna ele perde a altura) |
 
 O caso do grid foi encontrado pelo verificador automático: a lista de projetos chegava a 418px em uma tela de 360px.
 

@@ -2,13 +2,16 @@
 
 Cada cenário descreve o que o usuário vê e a mecânica interna. Não há servidor: tudo roda no navegador, e as gravações com mais de um documento vão num lote (`writeBatch`) que as regras conferem por inteiro (`06-banco-de-dados.md`, seção 4). Os passos marcados como *implementado* já existem no código; os demais são a especificação a seguir.
 
-## Cenário A: autoria e solicitação de revisão (snapshot)
+## Cenário A: autoria e solicitação de revisão (snapshot) (implementado, com as diferenças abaixo)
 
 ### O que o usuário vê
 
 1. O autor escreve no Monaco e vê o PDF ao lado (no celular, alterna entre Código e PDF).
-2. Clica em "Solicitar revisão", escolhe os documentos (o principal vem marcado), informa o e-mail do revisor e uma mensagem.
-3. Vê o progresso "Congelando versão 1.0" e, ao final, a revisão #1 na fila. Pode continuar editando: o que muda daqui em diante pertence à próxima versão.
+2. Em "Versões", congela uma versão quando quiser (com descrição opcional; ajuste 1.1 ou principal 2.0), abre o PDF guardado, compara com o rascunho e baixa o código daquela versão em .zip.
+3. Clica em "Solicitar revisão", informa o e-mail do revisor, um título e uma mensagem. Hoje só o documento principal é concedido.
+4. Vê o progresso ("Compilando a versão", "Guardando o código e o PDF", "Congelando", "Abrindo a revisão") e, ao final, a revisão #1 com o link para copiar, "Enviar pelo meu e-mail" e "Abrir a revisão". Se o código não mudou desde a última versão, a revisão usa essa versão e nada é congelado de novo. Pode continuar editando: o que muda daqui em diante pertence à próxima versão.
+
+**Diferenças em relação à especificação abaixo:** o SyncTeX não é gerado (o Siglum ainda não o entrega), então `synctexPath` fica nulo e "Abrir no código" não existe; a escolha de documentos secundários ainda não aparece na tela; falha de compilação mostra os erros do TeX com arquivo e linha (clique leva à linha) e nada é gravado.
 
 ### Mecânica interna (no navegador)
 
@@ -23,19 +26,22 @@ Cada cenário descreve o que o usuário vê e a mecânica interna. Não há serv
 | 7 | Envia o convite ao revisor (ver abaixo) |
 | 8 | Em falha de compilação, mostra o log e nada é gravado no Firestore; os arquivos do passo 4 podem ser reenviados na próxima tentativa |
 
-### Convite do revisor
+### Convite do revisor (implementado)
 
-1. O app do autor chama `sendSignInLinkToEmail` do Firebase Auth para o e-mail do revisor, com o link de retorno `/p/{projectId}/reviews/{reviewId}`. O próprio Firebase envia o e-mail (é preciso ativar "Link de e-mail" nos provedores de login). Como alternativa, o app oferece um link `mailto:` com o mesmo endereço.
+1. O app do autor chama `sendSignInLinkToEmail` do Firebase Auth para o e-mail do revisor; o link volta para `/login?next=/p/{projectId}/reviews/{reviewId}&email=...`, onde o revisor confirma o e-mail e entra. O próprio Firebase envia o e-mail (é preciso ativar "Link de e-mail" no provedor E-mail/senha e autorizar o domínio do site em Authentication). Se o envio falhar, a tela avisa e oferece o link para copiar e um `mailto:` com o mesmo endereço.
 2. O revisor abre o link e entra (o link já confirma o e-mail; Google também serve, se for o mesmo endereço).
 3. As regras liberam snapshot e revisão porque o e-mail verificado dele bate com o grant e com `reviewerEmail`. Na primeira abertura, o app grava `reviewerUid`, `reviewerName` e `status: in_review`.
 4. Rodadas seguintes para o mesmo revisor repetem o lote 2 com o mesmo e-mail.
 
-### Convite de coautoria
+### Convite de coautoria (implementado)
 
-1. O dono grava `pendingMembers[email] = 'editor' | 'viewer'` no projeto.
-2. O convidado entra com esse e-mail verificado; as regras deixam ele ver o projeto e se adicionar a `members` e `memberIds` com o papel do convite, apagando a entrada de `pendingMembers` no mesmo pedido.
+1. Em "Configurações do projeto", o dono informa o e-mail e o papel ("Edita" ou "Só lê"); o app grava `pendingMembers[email]` e mostra o link do projeto para enviar.
+2. O convidado abre o link e entra com esse e-mail verificado (Google ou link de acesso por e-mail). O editor mostra "Convite para ..." com "Aceitar convite"; ao aceitar, ele se adiciona a `members` e `memberIds` com o papel do convite, apaga a entrada de `pendingMembers` e grava o próprio nome em `memberProfiles`, tudo no mesmo pedido.
+3. O dono muda o papel ou remove membros na mesma tela; quem edita muda nome e descrição do projeto.
 
-## Cenário B: revisão estilo Pull Request e resolução
+## Cenário B: revisão estilo Pull Request e resolução (parcial: pins sem desenho)
+
+**Implementado:** a `ReviewPage` mostra o PDF da versão; "Comentar" e um clique na página criam um pin numerado (`kind: 'pin'`, `drawing: null`) com o primeiro comentário no mesmo lote; respostas sobem o contador da thread no mesmo lote; autor e revisor marcam a thread como resolvida (o autor com `fixed_next_version`, o revisor com `answered`) ou reabrem; ao congelar a versão seguinte, quem congela carimba `fixedInSnapshotId` e a thread aparece como "Corrigida". O revisor aprova ou pede alterações; o autor encerra ou reabre. **Falta:** comentário em trecho de texto, desenho livre, notificações e reancoragem entre rodadas.
 
 ### Comentário em trecho de texto
 
@@ -65,7 +71,14 @@ Cada cenário descreve o que o usuário vê e a mecânica interna. Não há serv
 
 Na ordem: (1) `position` com conferência de `quote.exact`; (2) busca de `exact` com `prefix` e `suffix` na mesma página e nas duas vizinhas, com tolerância a pequenas diferenças; (3) sem correspondência, a thread vira `outdated` e mostra a citação original.
 
-## Cenário C: diff visual e recompilação
+## Cenário C: diff visual e recompilação (parcial: diff de texto)
+
+**Implementado (granularidade `text-only`):** o diff por palavra de `src/lib/diff/word-diff.ts` (Myers por linha e, nos trechos alterados, por palavra, com as limpezas do passo 6) aparece em dois lugares:
+
+- **No editor ("Ver alterações"):** compara o código de uma versão com outra versão ou com o rascunho, arquivo por arquivo, com contadores de palavras e as linhas sem mudança recolhidas. Só membros, porque lê os blobs.
+- **Na revisão ("Ver alterações"):** compara o texto das páginas do PDF (`.pages`) da versão da rodada anterior do mesmo revisor (`baseSnapshotId`) com o da versão atual. O revisor tem grant nas duas versões e nunca vê o código.
+
+**Falta:** o PDF recompilado com as marcações (passos 1 a 12 abaixo), a navegação "Próxima alteração" e o cache em `diffs/{diffKey}`.
 
 ### O que o usuário vê
 
@@ -236,6 +249,12 @@ O motor roda no navegador, sem servidor. A especificação completa (provedores,
 6. Ao confirmar: textos de até 400 KiB vão inline em `files`; binários e textos maiores viram `blobs/{sha256}` em pedaços (pulando o que já existe) e o documento guarda `blobPath`. Os documentos de `files` vão em lotes de até 400. No modo demonstração, os arquivos entram só no cache da aba.
 
 Verificado de ponta a ponta contra os emuladores de Auth e Firestore, com as regras reais: um binário de 2,5 MB virou 3 pedaços com cabeçalho correto, a segunda importação do mesmo conteúdo não regravou nada e a exportação devolveu o arquivo idêntico (mesmo sha256).
+
+## Arquivos do rascunho (implementado)
+
+1. "Novo arquivo" na barra da árvore pede o caminho (pastas entram no caminho: `capitulos/introducao.tex`) e cria um arquivo de texto vazio, já aberto no editor. Imagens e PDFs entram por Importar.
+2. O menu de cada arquivo tem "Renomear ou mover" (o texto da tela vai junto, então nada digitado se perde) e "Excluir" (com confirmação; as versões congeladas continuam com o arquivo).
+3. Quem só lê vê o código em modo somente leitura, sem Novo arquivo, Importar, Solicitar revisão nem congelar.
 
 ## Criar e abrir um projeto (implementado)
 

@@ -58,6 +58,7 @@ Configuração da IA do usuário (`UserAiConfigDoc`): lista ordenada de modelos,
 | `members` | mapa `uid: 'owner' \| 'editor' \| 'viewer'` | Fonte da verdade das regras |
 | `memberIds` | string[] | Espelho das chaves de `members` para `array-contains` |
 | `pendingMembers` | mapa `email: 'editor' \| 'viewer'` | Convites de coautoria; o convidado se adiciona ao aceitar |
+| `memberProfiles` | mapa `uid: { name, email }` | Nome e e-mail para a lista de membros (`users/{uid}` é privado). Cada membro grava só a própria entrada (ao criar o projeto, ao aceitar o convite ou ao abrir um projeto antigo); o dono só remove a entrada de quem sai |
 | `engine` | `'pdflatex' \| 'xelatex' \| 'lualatex'` | Motor padrão |
 | `mainDocumentId` | string | Documento exibido ao revisor por padrão |
 | `latestSnapshotId` | string ou null | |
@@ -117,6 +118,8 @@ Gravado uma vez, no lote que avança `counters.snapshots`, depois de enviar blob
 ```
 
 `files` é array porque caminhos têm `/` e `.`, que exigiriam escape em field paths, e o manifesto é sempre lido inteiro.
+
+Como o app grava hoje (`useFreezeSnapshot`): o manifesto inclui os arquivos de texto como estão na tela (cada um vira um blob, deduplicado pelo hash); o PDF é compilado no navegador; `{documentId}.pages` é um JSON `{ "pages": ["texto da página 1", ...] }` extraído com o pdf.js, que alimenta o "Ver alterações" do revisor; `synctexPath` fica nulo (o Siglum ainda não entrega o SyncTeX); `stats.words` conta as palavras desse texto. A versão é `1.0` na primeira vez e depois `1.1`, `1.2`... ou a próxima principal (`2.0`), à escolha de quem congela.
 
 ### 2.6 `snapshots/{snapshotId}/grants/{email}`
 
@@ -253,7 +256,8 @@ O cache offline do Firestore (`persistentLocalCache`) também guarda os pedaços
 | Congelar versão | `snapshots/{novo}` mais `projects/{id}` (`counters.snapshots`, `latestSnapshotId`) | Sequência igual ao contador anterior mais 1 e ao contador depois do lote; `latestSnapshotId` aponta para o snapshot criado |
 | Abrir revisão | `grants/{email}` mais `reviews/{nova}` mais `projects/{id}` (`counters.reviews`) | Número igual ao contador anterior mais 1; snapshot e grant existem depois do lote |
 | Comentar | `comments/{novo}` mais a thread (`commentCount`, `participantIds`) | Contador sobe exatamente 1; só o autor entra nos participantes |
-| Aceitar convite de coautoria | `projects/{id}` (`members`, `memberIds`, `pendingMembers`) | O usuário entra com o papel do convite do próprio e-mail verificado, e o convite some |
+| Aceitar convite de coautoria | `projects/{id}` (`members`, `memberIds`, `pendingMembers`, `memberProfiles`) | O usuário entra com o papel do convite do próprio e-mail verificado, o convite some e só a entrada dele entra em `memberProfiles` |
+| Remover membro | `projects/{id}` (`members`, `memberIds`, `memberProfiles`) | Só o dono; o dono continua dono; `memberProfiles` não ganha nem muda entradas e só tem chaves de membros |
 | Carimbar correção | thread (`resolution.fixedInSnapshotId`) | Só esse campo, só em thread resolvida e ainda sem carimbo |
 | Finalizar arquivo em pedaços | últimos `chunks/{i}` mais o cabeçalho (ou o documento do diff) | Cabeçalho coerente (tamanho, número de pedaços, sha256, autor, data do servidor) e último pedaço existindo depois do lote |
 
@@ -262,7 +266,7 @@ O cache offline do Firestore (`persistentLocalCache`) também guarda os pedaços
 | Recurso | Ler | Escrever |
 | --- | --- | --- |
 | `users/{uid}/private/ai` | só o dono | só o dono |
-| `projects` | membros e convidados por e-mail (`list` exige `memberIds array-contains uid`) | criar como dono, com contadores zerados; detalhes por owner/editor; membros e convites pelo dono; aceite pelo convidado |
+| `projects` | membros e convidados por e-mail (`list` exige `memberIds array-contains uid`) | criar como dono, com contadores zerados; detalhes por owner/editor; membros e convites pelo dono; aceite pelo convidado; cada membro grava a própria entrada em `memberProfiles` |
 | `files`, `documents` | membros | owner/editor |
 | `snapshots` | membros ou grant por e-mail | criar no lote de congelamento; nunca alterar |
 | `grants` | membros ou o próprio e-mail | owner/editor |
@@ -275,7 +279,7 @@ O cache offline do Firestore (`persistentLocalCache`) também guarda os pedaços
 | `aiConversations`, `messages` | só o criador | só o criador |
 | `notifications` | só o destinatário | quem age, se participa do projeto ou da revisão |
 
-**Testes** (`npm run test:rules`): 67 de 67 cenários aprovados no emulador, 20 deles para os arquivos em pedaços (cabeçalho sem o último pedaço, hash diferente do id, tamanho incoerente, pedaço grande demais, gravação depois de finalizar, leitura do revisor por documento concedido). A suíte começa com o Firestore vazio (`createTestEnv` em `tests/rules/harness.mjs`).
+**Testes** (`npm run test:rules`): 74 de 74 cenários aprovados no emulador, 7 deles para a lista de membros (`memberProfiles`: a própria entrada sim, a de outro não, o dono só remove) e 20 para os arquivos em pedaços (cabeçalho sem o último pedaço, hash diferente do id, tamanho incoerente, pedaço grande demais, gravação depois de finalizar, leitura do revisor por documento concedido). A suíte começa com o Firestore vazio (`createTestEnv` em `tests/rules/harness.mjs`).
 
 ## 6. Índices
 

@@ -85,7 +85,7 @@ Fora (por enquanto):
 | Fase | Entregas |
 | --- | --- |
 | 1. Fundação (este repositório) | Arquitetura sem servidor, modelo de dados, regras, layout responsivo, IA do usuário com fila de reserva, importação e exportação, CI e deploy |
-| 2. Editor completo | Monaco com navegação SyncTeX, BibTeX na compilação (já entregues: lista e criação de projetos, login obrigatório, salvamento automático, compilação no navegador com Siglum e visualizador pdf.js) |
-| 3. Revisão | Snapshot, convite por link de e-mail, ReviewPage, seleção, threads, desenho e pins, notificações |
-| 4. Diff | Motor de diff no Web Worker, degradação, navegação entre alterações |
+| 2. Editor completo | Monaco com navegação SyncTeX, BibTeX na compilação (já entregues: lista e criação de projetos, login obrigatório, salvamento automático, compilação no navegador com Siglum, visualizador pdf.js, criar, renomear e excluir arquivos, membros e convites de coautoria) |
+| 3. Revisão | Seleção de texto, desenho nos pins e notificações (já entregues: versões congeladas, convite do revisor por link de e-mail, ReviewPage com pins, threads, resolução e aprovação) |
+| 4. Diff | Diff visual em PDF no Web Worker, degradação, navegação entre alterações (já entregue: diff por palavra do código e do texto das páginas) |
 | 5. Refino | Histórico das conversas de IA, ícones PNG do PWA, métricas |
