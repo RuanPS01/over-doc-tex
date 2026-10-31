@@ -2,6 +2,7 @@ import { assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
 import {
   Bytes,
   FieldPath,
+  arrayRemove,
   arrayUnion,
   collection,
   collectionGroup,
@@ -65,6 +66,13 @@ await env.withSecurityRulesDisabled(async (ctx) => {
   });
   await setDoc(doc(db, 'projects/p1'), project());
   await setDoc(doc(db, 'projects/p4'), project({ pendingMembers: { 'dani@uni.br': 'viewer' } }));
+  // p6: lista de membros com nome (memberProfiles) e convite pendente para gil@uni.br.
+  await setDoc(doc(db, 'projects/p6'), project({
+    members: { ana: 'owner', bia: 'editor' },
+    memberIds: ['ana', 'bia'],
+    pendingMembers: { 'gil@uni.br': 'editor' },
+    memberProfiles: { bia: { name: 'Bia', email: 'bia@uni.br' } },
+  }));
   await setDoc(doc(db, 'projects/p1/snapshots/s1'), { sequence: 1, label: '1.0' });
   await setDoc(doc(db, 'projects/p1/snapshots/s1/grants/rev@uni.br'), { documentIds: ['main'], grantedBy: 'ana' });
   await setDoc(doc(db, 'projects/p1/reviews/r1'), {
@@ -179,6 +187,23 @@ await runScenarios('Firestore', [
   ['convidada aceita o convite e entra no projeto', () =>
     assertSucceeds(updateDoc(doc(as('dani', { email: 'dani@uni.br', email_verified: true }), 'projects/p4'),
       new FieldPath('members', 'dani'), 'viewer', 'memberIds', arrayUnion('dani'), new FieldPath('pendingMembers', 'dani@uni.br'), deleteField()))],
+  ['membro grava o próprio nome na lista de membros', () =>
+    assertSucceeds(updateDoc(doc(as('caio'), 'projects/p1'), new FieldPath('memberProfiles', 'caio'), { name: 'Caio', email: 'caio@uni.br' }))],
+  ['membro não grava o nome de outro membro', () =>
+    assertFails(updateDoc(doc(as('caio'), 'projects/p1'), new FieldPath('memberProfiles', 'bia'), { name: 'X', email: 'x@uni.br' }))],
+  ['não membro não grava nome na lista de membros', () =>
+    assertFails(updateDoc(doc(as('zed'), 'projects/p1'), new FieldPath('memberProfiles', 'zed'), { name: 'Zed', email: 'zed@uni.br' }))],
+  ['dono não altera o nome de outro membro', () =>
+    assertFails(updateDoc(doc(as('ana'), 'projects/p6'), new FieldPath('memberProfiles', 'bia'), { name: 'Outro', email: 'bia@uni.br' }))],
+  ['convidado aceita o convite e grava o próprio nome', () =>
+    assertSucceeds(updateDoc(doc(as('gil', { email: 'gil@uni.br', email_verified: true }), 'projects/p6'),
+      new FieldPath('members', 'gil'), 'editor', 'memberIds', arrayUnion('gil'), new FieldPath('pendingMembers', 'gil@uni.br'), deleteField(),
+      new FieldPath('memberProfiles', 'gil'), { name: 'Gil', email: 'gil@uni.br' }))],
+  ['dono não remove membro deixando o nome dele na lista', () =>
+    assertFails(updateDoc(doc(as('ana'), 'projects/p6'), new FieldPath('members', 'bia'), deleteField(), 'memberIds', arrayRemove('bia')))],
+  ['dono remove membro e o nome dele sai junto', () =>
+    assertSucceeds(updateDoc(doc(as('ana'), 'projects/p6'),
+      new FieldPath('members', 'bia'), deleteField(), 'memberIds', arrayRemove('bia'), new FieldPath('memberProfiles', 'bia'), deleteField()))],
   ['editor congela versão (snapshot e contador no mesmo lote)', () => assertSucceeds(freeze(as('bia'), 's2', 2))],
   ['snapshot sem avançar o contador é negado', () =>
     assertFails(setDoc(doc(as('bia'), 'projects/p1/snapshots/s9'), { sequence: 3, createdBy: 'bia' }))],

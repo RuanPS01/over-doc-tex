@@ -128,6 +128,11 @@ export interface NotificationDoc {
 // projects/{projectId}
 // ---------------------------------------------------------------------------
 
+export interface MemberProfile {
+  name: string;
+  email: string;
+}
+
 export interface ProjectDoc {
   name: string;
   description: string | null;
@@ -141,6 +146,11 @@ export interface ProjectDoc {
    * verificado, entra sozinho com esse papel e o convite some.
    */
   pendingMembers: Record<string, 'editor' | 'viewer'>;
+  /**
+   * Nome e e-mail de cada membro, para a lista de membros (users/{uid} é
+   * privado). Cada membro grava só a própria entrada; o dono só remove.
+   */
+  memberProfiles?: Record<UserId, MemberProfile>;
   engine: LatexEngine;
   mainDocumentId: DocumentId;
   latestSnapshotId: SnapshotId | null;
