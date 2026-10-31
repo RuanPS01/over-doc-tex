@@ -2,6 +2,14 @@ import { createContext, useContext, useMemo, useState, type ReactNode } from 're
 
 export type EditorPane = 'code' | 'pdf';
 
+/** Pedido para o editor de código mostrar uma linha (vem da lista de erros da compilação). */
+export interface RevealRequest {
+  fileId: string;
+  line: number;
+  /** Muda a cada pedido, para repetir a mesma linha. */
+  nonce: number;
+}
+
 interface EditorStore {
   projectId: string;
   projectName: string;
@@ -11,7 +19,9 @@ interface EditorStore {
   fileTreeOpen: boolean;
   aiOpen: boolean;
   importOpen: boolean;
+  revealRequest: RevealRequest | null;
   openFile: (fileId: string) => void;
+  revealLine: (fileId: string, line: number) => void;
   setActivePane: (pane: EditorPane) => void;
   setFileTreeOpen: (open: boolean) => void;
   setAiOpen: (open: boolean) => void;
@@ -37,6 +47,7 @@ export function EditorStoreProvider({
   const [fileTreeOpen, setFileTreeOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [revealRequest, setRevealRequest] = useState<RevealRequest | null>(null);
 
   const value = useMemo<EditorStore>(
     () => ({
@@ -47,17 +58,23 @@ export function EditorStoreProvider({
       fileTreeOpen,
       aiOpen,
       importOpen,
+      revealRequest,
       openFile: (fileId) => {
         setActiveFileId(fileId);
         setActivePane('code');
         setFileTreeOpen(false);
+      },
+      revealLine: (fileId, line) => {
+        setActiveFileId(fileId);
+        setActivePane('code');
+        setRevealRequest((previous) => ({ fileId, line, nonce: (previous?.nonce ?? 0) + 1 }));
       },
       setActivePane,
       setFileTreeOpen,
       setAiOpen,
       setImportOpen,
     }),
-    [projectId, projectName, activeFileId, activePane, fileTreeOpen, aiOpen, importOpen],
+    [projectId, projectName, activeFileId, activePane, fileTreeOpen, aiOpen, importOpen, revealRequest],
   );
 
   return <EditorStoreContext.Provider value={value}>{children}</EditorStoreContext.Provider>;

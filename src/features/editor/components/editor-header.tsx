@@ -4,6 +4,7 @@ import {
   FolderTree,
   GitCompare,
   History,
+  Loader2,
   MoreVertical,
   Play,
   Send,
@@ -23,6 +24,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import type { LayoutMode } from '@/hooks/use-layout-mode';
 import { useExportProject } from '../hooks/use-export-project';
+import { useCompileStore } from '../state/compile-store';
 import { useEditorStore } from '../state/editor-store';
 
 interface EditorHeaderProps {
@@ -38,6 +40,7 @@ interface EditorHeaderProps {
 export function EditorHeader({ projectName, layoutMode }: EditorHeaderProps) {
   const { aiOpen, setAiOpen, setFileTreeOpen, setImportOpen } = useEditorStore();
   const { exportProject } = useExportProject();
+  const { compile, isCompiling } = useCompileStore();
   const isDesktop = layoutMode === 'desktop';
 
   return (
@@ -55,9 +58,16 @@ export function EditorHeader({ projectName, layoutMode }: EditorHeaderProps) {
 
       <h1 className="min-w-0 flex-1 truncate px-1 text-sm font-semibold">{projectName}</h1>
 
-      <Button size="sm" className="px-2 sm:px-3" aria-label="Compilar">
-        <Play />
-        <span className="hidden sm:inline">Compilar</span>
+      <Button
+        size="sm"
+        className="px-2 sm:px-3"
+        aria-label={isCompiling ? 'Compilando' : 'Compilar'}
+        title="Compilar (Ctrl+S)"
+        disabled={isCompiling}
+        onClick={compile}
+      >
+        {isCompiling ? <Loader2 className="animate-spin" /> : <Play />}
+        <span className="hidden sm:inline">{isCompiling ? 'Compilando' : 'Compilar'}</span>
       </Button>
       <Button variant="outline" size="sm" className="hidden sm:inline-flex">
         <Send />

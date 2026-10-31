@@ -1,7 +1,7 @@
 import { useDefaultLayout, type LayoutStorage } from 'react-resizable-panels';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
-import { PdfPreviewPanel } from '@/features/pdf-viewer/components/pdf-preview-panel';
 import { CodeEditorPanel } from './code-editor-panel';
+import { PdfPane } from './pdf-pane';
 import { FileTreePanel } from './file-tree-panel';
 
 /** localStorage pode falhar (aba anônima, cota): o layout salvo é só conveniência. */
@@ -37,7 +37,7 @@ export function DesktopWorkspace() {
       </ResizablePanel>
       <ResizableHandle withHandle />
       <ResizablePanel id="pdf" defaultSize="41%" minSize="25%">
-        <PdfPreviewPanel />
+        <PdfPane />
       </ResizablePanel>
     </ResizablePanelGroup>
   );

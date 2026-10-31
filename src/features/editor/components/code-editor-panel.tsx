@@ -1,6 +1,6 @@
-import Editor, { useMonaco, type Monaco } from '@monaco-editor/react';
+import Editor, { useMonaco, type Monaco, type OnMount } from '@monaco-editor/react';
 import { FileCode2 } from 'lucide-react';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { useIsDarkTheme } from '@/hooks/use-is-dark-theme';
 import { LATEX_LANGUAGE_ID, registerLatexLanguage } from '@/lib/monaco/latex-language';
@@ -29,10 +29,21 @@ function EditorSkeleton() {
 }
 
 export function CodeEditorPanel() {
-  const { projectId, activeFileId, setImportOpen } = useEditorStore();
+  const { projectId, activeFileId, setImportOpen, revealRequest } = useEditorStore();
   const { data: files, isPending } = useProjectFiles(projectId);
   const file = files?.find((candidate) => candidate.id === activeFileId);
   const autosave = useFileAutosave(projectId);
+  const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
+
+  // Clique num erro da compilação: abre o arquivo (feito pelo store) e leva o cursor à linha.
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor || !revealRequest || revealRequest.fileId !== file?.id) return;
+    const line = Math.min(revealRequest.line, editor.getModel()?.getLineCount() ?? revealRequest.line);
+    editor.revealLineInCenter(line);
+    editor.setPosition({ lineNumber: line, column: 1 });
+    editor.focus();
+  }, [revealRequest, file?.id]);
   const isDark = useIsDarkTheme();
   const monaco = useMonaco();
 
@@ -74,6 +85,9 @@ export function CodeEditorPanel() {
             onChange={(value) => autosave.schedule(file.id, value ?? '')}
             theme={isDark ? 'overdoctex-dark' : 'overdoctex-light'}
             beforeMount={handleBeforeMount}
+            onMount={(editor) => {
+              editorRef.current = editor;
+            }}
             loading={<EditorSkeleton />}
             options={{
               automaticLayout: true,
