@@ -18,7 +18,6 @@ import {
 import { createTestEnv, runScenarios } from './harness.mjs';
 
 const env = await createTestEnv();
-await env.clearFirestore();
 
 // p1: ana (owner), bia (editor), caio (viewer). rev@uni.br revisa a revisão r1 sobre o snapshot s1.
 await env.withSecurityRulesDisabled(async (ctx) => {

@@ -237,7 +237,7 @@ As regras do Storage fazem no máximo duas leituras do Firestore por pedido.
 | `aiConversations`, `messages` | só o criador | só o criador |
 | `notifications` | só o destinatário | quem age, se participa do projeto ou da revisão |
 
-**Testes** (`npm run test:rules`): 47 de 47 cenários do Firestore aprovados no emulador. No Storage, 4 de 7: os 3 cenários de permissão que dependem de consulta ao Firestore (`firestore.get`, `firestore.exists`) não passaram no ambiente onde a suíte foi criada, porque lá o emulador não executou nem o exemplo mínimo dessas funções. O job `rules-tests` do CI é o primeiro ambiente limpo onde eles rodam.
+**Testes** (`npm run test:rules`): 47 de 47 cenários do Firestore e 7 de 7 do Storage aprovados no emulador, inclusive os que dependem de consulta ao Firestore (`firestore.get`, `firestore.exists`). Cada suíte começa com os emuladores vazios (`createTestEnv` em `tests/rules/harness.mjs`), porque as duas rodam em sequência na mesma sessão.
 
 ## 6. Índices
 
