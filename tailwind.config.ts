@@ -43,11 +43,24 @@ export default {
           3: token('annotation-3'),
           4: token('annotation-4'),
         },
+        status: {
+          online: token('status-online'),
+          away: token('status-away'),
+          busy: token('status-busy'),
+          offline: token('status-offline'),
+        },
       },
+      // Texto usa tons próprios onde a cor da paleta não tem contraste como texto:
+      // text-destructive no escuro e text-success no claro (docs/03-identidade-visual.md).
+      textColor: {
+        destructive: { DEFAULT: token('destructive-text'), foreground: token('destructive-foreground') },
+        success: { DEFAULT: token('success-text'), foreground: token('success-foreground') },
+      },
+      // Paleta: lg 9px, md 6px, sm 3px com --radius 0.75rem (12px).
       borderRadius: {
-        lg: 'var(--radius)',
-        md: 'calc(var(--radius) - 2px)',
-        sm: 'calc(var(--radius) - 4px)',
+        lg: 'calc(var(--radius) - 3px)',
+        md: 'calc(var(--radius) - 6px)',
+        sm: 'calc(var(--radius) - 9px)',
       },
       spacing: {
         header: 'var(--header-height)',

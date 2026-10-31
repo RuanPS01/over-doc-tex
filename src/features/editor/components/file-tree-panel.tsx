@@ -76,7 +76,7 @@ export function FileTreePanel({ className }: { className?: string }) {
                 onClick={() => row.file && openFile(row.file.id)}
                 style={{ paddingLeft: `${0.75 + row.depth * 1}rem` }}
                 className={cn(
-                  'flex w-full min-w-0 items-center gap-2 py-1.5 pr-3 text-left transition-colors hover:bg-accent disabled:cursor-default disabled:hover:bg-transparent',
+                  'flex w-full min-w-0 items-center gap-2 py-1.5 pr-3 text-left transition-colors hover:bg-muted disabled:cursor-default disabled:hover:bg-transparent',
                   isActive && 'bg-accent font-medium text-accent-foreground',
                   !row.file && 'text-muted-foreground',
                 )}

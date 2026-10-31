@@ -16,7 +16,7 @@ function ProjectCard({ href, title, subtitle }: { href: string; title: string; s
     <li>
       <Link
         href={href}
-        className="flex min-w-0 items-center gap-3 rounded-lg border bg-card p-4 transition-colors hover:bg-accent"
+        className="flex min-w-0 items-center gap-3 rounded-lg border bg-card p-4 transition-colors hover:bg-muted"
       >
         <FileText className="size-5 shrink-0 text-primary" />
         <span className="min-w-0">

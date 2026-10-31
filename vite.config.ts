@@ -24,9 +24,9 @@ export default defineConfig({
         start_url: base,
         scope: base,
         // Única exceção à regra de cores por token: o manifesto exige valores literais.
-        // Os valores espelham --foreground e --background de src/styles/globals.css.
-        theme_color: 'hsl(222 47% 11%)',
-        background_color: 'hsl(0 0% 100%)',
+        // Os valores espelham --primary (#171717) e --background (#fafafa) de src/styles/globals.css.
+        theme_color: 'hsl(0 0% 9%)',
+        background_color: 'hsl(0 0% 98%)',
         icons: [{ src: 'icons/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }],
       },
       workbox: {
