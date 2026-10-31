@@ -1,6 +1,6 @@
 # 07. Fluxos
 
-Cada cenário descreve o que o usuário vê e a mecânica interna. Os passos marcados como *implementado* já existem no código; os demais são a especificação a seguir.
+Cada cenário descreve o que o usuário vê e a mecânica interna. Não há servidor: tudo roda no navegador, e as gravações com mais de um documento vão num lote (`writeBatch`) que as regras conferem por inteiro (`06-banco-de-dados.md`, seção 4). Os passos marcados como *implementado* já existem no código; os demais são a especificação a seguir.
 
 ## Cenário A: autoria e solicitação de revisão (snapshot)
 
@@ -10,26 +10,30 @@ Cada cenário descreve o que o usuário vê e a mecânica interna. Os passos mar
 2. Clica em "Solicitar revisão", escolhe os documentos (o principal vem marcado), informa o e-mail do revisor e uma mensagem.
 3. Vê o progresso "Congelando versão 1.0" e, ao final, a revisão #1 na fila. Pode continuar editando: o que muda daqui em diante pertence à próxima versão.
 
-### Mecânica interna
+### Mecânica interna (no navegador)
 
-| Passo | Onde | O que acontece |
-| --- | --- | --- |
-| 1 | Cliente | Força o autosave pendente e envia `expectedRevisions` (`fileId: revision`) para garantir que o congelado é exatamente o que o autor vê |
-| 2 | Function `requestReview` | Valida o papel (owner/editor), o e-mail e as revisões esperadas; divergência devolve `stale` e o cliente repete |
-| 3 | Function | Para cada arquivo: calcula sha256, envia para `blobs/{hash}` se ainda não existir (deduplicação) e monta o manifesto ordenado; `sourceHash = sha256(manifesto)` |
-| 4 | Function | Cria `jobs/{jobId}` (`type: snapshot`) e enfileira no Cloud Tasks a chamada `POST /snapshot` do `latex-worker` |
-| 5 | latex-worker | Materializa a árvore a partir dos blobs, compila cada documento com `latexmk -synctex=1`, extrai o texto por página e envia PDF, SyncTeX e `pages.json` ao Storage |
-| 6 | latex-worker | Em transação: incrementa `counters.snapshots`, grava `snapshots/{sid}` uma única vez, atualiza `latestSnapshotId` |
-| 7 | latex-worker | Carimba `resolution.fixedInSnapshotId` nas threads resolvidas desde o snapshot anterior |
-| 8 | Function (continuação via trigger do snapshot) | Cria `reviews/{rid}` (número sequencial), `invites/{sha256(token)}` com validade de 14 dias e o documento em `mail` com o link `/invite/{token}` |
-| 9 | Cliente | Acompanha `jobs/{jobId}` com `onSnapshot`; em falha de compilação, mostra o log e nenhum snapshot é criado |
+| Passo | O que acontece |
+| --- | --- |
+| 1 | Força o autosave pendente e lê os arquivos na revisão atual, para congelar exatamente o que o autor vê |
+| 2 | Para cada arquivo: calcula sha256 (Web Crypto) e envia para `blobs/{hash}` se ainda não existir (deduplicação); monta o manifesto ordenado e `sourceHash = sha256(manifesto)` |
+| 3 | Compila cada documento no Web Worker com o motor WebAssembly (com SyncTeX) e extrai o texto por página |
+| 4 | Envia PDF, SyncTeX e `pages.json` para `snapshots/{sid}/` no Storage. As regras só aceitam esses arquivos **antes** de o documento do snapshot existir |
+| 5 | Lote 1, congelamento: cria `snapshots/{sid}` (com `sequence = counters.snapshots + 1`) e atualiza o projeto (`counters.snapshots`, `latestSnapshotId`). Carimba `resolution.fixedInSnapshotId` nas threads resolvidas desde a versão anterior |
+| 6 | Lote 2, revisão: cria `snapshots/{sid}/grants/{email}`, `reviews/{rid}` (número `counters.reviews + 1`) e avança `counters.reviews` |
+| 7 | Envia o convite ao revisor (ver abaixo) |
+| 8 | Em falha de compilação, mostra o log e nada é gravado no Firestore; os arquivos do passo 4 podem ser reenviados na próxima tentativa |
 
-### Aceite do convite
+### Convite do revisor
 
-1. O revisor abre `/invite/{token}` e entra com Google ou e-mail/senha.
-2. `acceptInvite(token)` calcula o hash, confere validade e se o e-mail verificado do usuário é o do convite.
-3. Preenche `reviewerUid` e `status: in_review` na revisão e cria `snapshots/{sid}/grants/{uid}` com `grantedDocumentIds`.
-4. Rodadas seguintes para o mesmo revisor criam o grant direto e enviam só a notificação por e-mail.
+1. O app do autor chama `sendSignInLinkToEmail` do Firebase Auth para o e-mail do revisor, com o link de retorno `/p/{projectId}/reviews/{reviewId}`. O próprio Firebase envia o e-mail (é preciso ativar "Link de e-mail" nos provedores de login). Como alternativa, o app oferece um link `mailto:` com o mesmo endereço.
+2. O revisor abre o link e entra (o link já confirma o e-mail; Google também serve, se for o mesmo endereço).
+3. As regras liberam snapshot e revisão porque o e-mail verificado dele bate com o grant e com `reviewerEmail`. Na primeira abertura, o app grava `reviewerUid`, `reviewerName` e `status: in_review`.
+4. Rodadas seguintes para o mesmo revisor repetem o lote 2 com o mesmo e-mail.
+
+### Convite de coautoria
+
+1. O dono grava `pendingMembers[email] = 'editor' | 'viewer'` no projeto.
+2. O convidado entra com esse e-mail verificado; as regras deixam ele ver o projeto e se adicionar a `members` e `memberIds` com o papel do convite, apagando a entrada de `pendingMembers` no mesmo pedido.
 
 ## Cenário B: revisão estilo Pull Request e resolução
 
@@ -41,8 +45,8 @@ Cada cenário descreve o que o usuário vê e a mecânica interna. Os passos mar
    - `rects`: `Range.getClientRects()` convertido para coordenadas relativas à caixa da página e dividido pela largura e altura (0 a 1);
    - `quote.exact`: texto selecionado; `prefix` e `suffix`: até 32 caracteres antes e depois no texto da página;
    - `position`: deslocamentos no texto concatenado da página (mesma ordem do `pages.json` do snapshot).
-4. Um `writeBatch` cria a thread (`status: open`, `commentCount: 0`) e o primeiro comentário. As regras conferem snapshot, documento concedido e autoria.
-5. O trigger `onCommentCreated` atualiza contadores, participantes e envia notificação ao autor.
+4. Um `writeBatch` cria a thread (`status: open`, `commentCount: 1`, `participantIds: [uid]`) e o primeiro comentário. As regras conferem snapshot, documento concedido e autoria.
+5. Comentários seguintes vão num lote com a atualização da thread (`commentCount + 1`, o autor entra em `participantIds`). Em seguida o app grava a notificação em `users/{autor}/notifications`.
 
 ### Pin com desenho livre
 
@@ -73,20 +77,15 @@ Na ordem: (1) `position` com conferência de `quote.exact`; (2) busca de `exact`
 
 O revisor compara **snapshots**: a base é `review.baseSnapshotId` (versão 1.0) e o alvo é o snapshot da revisão atual (versão 1.1, congelada quando o autor pediu a nova rodada). Assim o revisor nunca vê o rascunho em movimento. O autor tem uma prévia extra que compara o último snapshot com o rascunho atual; esse resultado é visível só para membros.
 
-### Algoritmo de orquestração (backend)
+### Algoritmo (no navegador, em Web Worker)
 
-**Passo 0. Pedido idempotente.** A função `requestDiff({ projectId, documentId, baseSnapshotId, targetSnapshotId })`:
+**Passo 0. Cache.** `diffKey = base_alvo_documento_versãoDoMotor`. Se `diffs/{diffKey}` existe, o PDF em cache abre direto (snapshots são imutáveis, então o resultado seria o mesmo). Senão, o diff é gerado localmente; quem edita o projeto grava o resultado no cache, e o revisor sem cache gera só para si.
 
-1. confere se o usuário é membro ou tem grant nos dois snapshots;
-2. calcula `diffKey = sha256(base.sourceHash + ':' + target.sourceHash + ':' + documentId + ':' + DIFF_ENGINE_VERSION)`;
-3. se `diffJobs/{diffKey}` existe com `done`, `queued` ou `running`, devolve a chave (o cliente passa a observar o documento);
-4. senão, cria o job como `queued` e enfileira `POST /diff` no `latex-worker` via Cloud Tasks.
-
-**Passo 1. Materializar as duas árvores.** O worker baixa os blobs dos manifestos (cache local por hash) para `base/` e `target/`.
+**Passo 1. Materializar as duas árvores.** O Worker baixa os blobs dos manifestos (com cache local por hash) e monta as árvores `base/` e `target/` no sistema de arquivos em memória do motor.
 
 **Passo 2. Achatar.** A partir de `rootPath`, expande `\input`, `\include` e `\subfile` recursivamente nas duas árvores, gerando uma string única por versão e um mapa de origem (`arquivo`, `linha inicial`, `deslocamento`) para cada trecho. Limites: profundidade 20, detecção de ciclos, caminhos sempre dentro da árvore.
 
-**Passo 3. Separar preâmbulo e corpo.** Divide em `\begin{document}` e `\end{document}`. O preâmbulo final é o da versão alvo mais o bloco de macros do diff (passo 7). Mudanças de preâmbulo não são marcadas no PDF; entram no resumo do job.
+**Passo 3. Separar preâmbulo e corpo.** Divide em `\begin{document}` e `\end{document}`. O preâmbulo final é o da versão alvo mais o bloco de macros do diff (passo 7). Mudanças de preâmbulo não são marcadas no PDF; entram no resumo do diff.
 
 **Passo 4. Analisar o corpo em uma árvore leve.** Um lexer tolerante a erros gera nós:
 
@@ -167,15 +166,9 @@ Exemplo de saída:
 Os resultados indicam \DIFadd{uma }melhora\DIFadd{ significativa}\DIFaddatom{ \cite{silva2020}}.
 ```
 
-**Passo 8. Compilar.** O `diff.tex` é gravado na árvore alvo. Imagens que só existem na base (figuras removidas) são copiadas para `__base__/` e o caminho é reescrito. Execução:
+**Passo 8. Compilar.** O `diff.tex` vai para a árvore alvo do motor WebAssembly. Imagens que só existem na base (figuras removidas) são copiadas para `__base__/` e o caminho é reescrito. O motor roda no Worker, sem acesso à página, com prazo de 90 segundos, no modo equivalente a `-interaction=nonstopmode -halt-on-error -synctex=1` e sem shell-escape.
 
-```
-latexmk -<motor> -interaction=nonstopmode -halt-on-error -file-line-error -synctex=1 -no-shell-escape diff.tex
-```
-
-Limite de 90 segundos e 2 GiB de memória, sem rede.
-
-**Passo 9. Degradação controlada.** Se a compilação falhar, o worker tenta de novo com granularidade menor:
+**Passo 9. Degradação controlada.** Se a compilação falhar, o motor tenta de novo com granularidade menor:
 
 | Nível | Granularidade | Quando |
 | --- | --- | --- |
@@ -183,18 +176,18 @@ Limite de 90 segundos e 2 GiB de memória, sem rede.
 | 2 | `paragraph` | Marca blocos inteiros, sem marcação dentro de comandos |
 | 3 | `text-only` | Sem PDF: devolve um diff textual estruturado para exibição em HTML, com o log da falha |
 
-O nível alcançado vai para `diffJobs.granularity`.
+O nível alcançado vai para `diffs.granularity`.
 
-**Passo 10. Marcadores de navegação.** Cada marcação emite `\DIFmark{id}`. Depois da compilação, o worker lê o `.aux` (página e posição vertical de cada id) e grava `changes[]` com página, `y` normalizado e uma prévia do texto. Isso alimenta "Próxima alteração".
+**Passo 10. Marcadores de navegação.** Cada marcação emite `\DIFmark{id}`. Depois da compilação, o motor lê o `.aux` (página e posição vertical de cada id) e grava `changes[]` com página, `y` normalizado e uma prévia do texto. Isso alimenta "Próxima alteração".
 
-**Passo 11. Publicar.** Envia o PDF e o log para `diffs/{diffKey}`, atualiza o job com `status: done`, `granularity`, `stats` e `changes`, e notifica quem pediu (`diff_ready`).
+**Passo 11. Publicar.** Quem edita envia o PDF para `snapshots/{alvo}/diffs/{base}/{documento}/{versão}.pdf` e grava `diffs/{diffKey}` com `granularity`, `stats` e `changes` (uma vez só; as regras proíbem alterar).
 
-**Passo 12. Exibir.** Membros leem o PDF direto do Storage; o revisor recebe uma URL assinada de 15 minutos pela função `getDiffUrl`, depois de conferir os grants.
+**Passo 12. Exibir.** O PDF abre no mesmo visualizador. Membros e revisores com o documento no grant da versão alvo leem o arquivo direto do Storage.
 
-Esboço do orquestrador no worker:
+Esboço do orquestrador no Worker:
 
 ```ts
-async function runDiffJob(job: DiffJobRequest): Promise<void> {
+async function runDiff(job: DiffRequest): Promise<DiffOutcome> {
   const base = await materialize(job.baseSnapshot);
   const target = await materialize(job.targetSnapshot);
   const before = flatten(base, job.rootPath);
@@ -203,14 +196,13 @@ async function runDiffJob(job: DiffJobRequest): Promise<void> {
   for (const granularity of ['word', 'paragraph'] as const) {
     const annotated = emitAnnotatedLatex(parseBody(before.body), parseBody(after.body), { granularity });
     const source = injectPreamble(after.preamble, job.engine) + annotated.body;
-    const result = await compileSandboxed(target.dir, source, { engine: job.engine, timeoutMs: 90_000 });
+    const result = await compileInWorker(target, source, { engine: job.engine, timeoutMs: 90_000 });
     if (result.ok) {
-      const changes = readChangeMarkers(result.auxPath, annotated.markers);
-      await publishDiff(job, result.pdfPath, result.logPath, { granularity, stats: annotated.stats, changes });
-      return;
+      const changes = readChangeMarkers(result.aux, annotated.markers);
+      return { pdf: result.pdf, granularity, stats: annotated.stats, changes };
     }
   }
-  await publishTextOnlyDiff(job, before, after);
+  return textOnlyDiff(before, after);
 }
 ```
 
@@ -218,51 +210,34 @@ async function runDiffJob(job: DiffJobRequest): Promise<void> {
 
 ### O que o usuário vê
 
-1. Abre o assistente (painel flutuante no desktop, Sheet inferior no celular).
-2. Escolhe a tarefa ("Gerar rascunho", "Verificar referências"...) e escreve o pedido.
-3. Vê a etapa atual ("Buscando trechos relevantes", "Testando 12 links") e, em seguida, o texto chegando aos poucos, renderizado em Markdown. Resultados estruturados aparecem como lista ou relatório.
+1. Abre o assistente (painel flutuante no desktop, Sheet inferior no celular). Sem IA configurada, o painel mostra "Configurar a minha IA".
+2. No diálogo "Usar a minha própria IA", escolhe provedor, modelo e cola a própria chave; pode adicionar modelos de reserva.
+3. Escolhe a tarefa ("Gerar rascunho", "Verificar referências"...) e escreve o pedido.
+4. Vê a etapa atual e o texto chegando aos poucos. Se um modelo falhar, a resposta recomeça pelo modelo de reserva, com o motivo da troca.
 
-### Contrato
+### Mecânica
 
-- `POST {VITE_API_BASE_URL}/aiStream` com `Authorization: Bearer <ID token>` e corpo `AiRequest` (`shared/ai/schemas.ts`).
-- Erros de autenticação e validação: HTTP 4xx com JSON `{ code, message }`.
-- Depois disso: `200` com `Content-Type: application/x-ndjson`, uma linha por evento:
+O motor roda no navegador, sem servidor. A especificação completa (provedores, fila de reserva com pausa por motivo, saída estruturada com Zod, eventos, verificação de referências e testes) está em `11-servico-de-ia.md`.
 
-| Evento | Quando | Campos |
-| --- | --- | --- |
-| `meta` | Primeiro | `requestId`, `task`, `conversationId` |
-| `status` | Mudança de etapa | `stage` (`retrieving`, `checking_links`, `generating`, `validating`, `fallback`), `message` |
-| `context` | Após a recuperação | `sources[]` com caminho, linhas e score BM25 |
-| `delta` | Cada fragmento de texto | `text` |
-| `result` | Tarefas estruturadas | `result` validado por `AiStructuredResultSchema` |
-| `error` | Falha | `code`, `message`, `retryable`, `discardPartial` |
-| `done` | Fim | `stopReason`, `usage` |
+## Importação e exportação de projeto (implementado)
 
-### Mecânica no backend (`functions/src/ai/`)
+### Exportar
 
-1. `stream-handler.ts`: valida o ID token, o corpo (Zod) e o papel exigido pela tarefa (`tasks.ts`); cria ou reaproveita a conversa; abre o stream.
-2. `run-task.ts`: carrega `.tex` e `.bib` do projeto (`sources.ts`), fatia em blocos lógicos (seções, entradas BibTeX, parágrafos de até 1.500 caracteres) e ranqueia com BM25 (`rag.ts`). Tarefas de estrutura usam a abertura de cada seção e a hierarquia extraída.
-3. `prompts.ts`: system prompt especializado por tarefa; o contexto vai entre `<documento>` e `<selecao>`, tratado como dado.
-4. `claude.ts`: chamada em stream ao modelo `claude-opus-5-5` com pensamento adaptativo, esforço por tarefa e `fallbacks: 'default'`. Texto livre vira eventos `delta`; recusa ao final vira `error` com `discardPartial: true`; resposta truncada vira `truncated`.
-5. Saídas estruturadas (`reorganizeTopics`, `updateToc`, `checkReferences`): formato imposto pelo schema enviado ao modelo e **validado de novo com Zod** antes do evento `result`. JSON inválido vira `invalid_output` (com nova tentativa permitida).
-6. `persistence.ts`: grava pergunta e resposta em `aiConversations/{id}/messages` ao fim, inclusive em erro ou cancelamento.
+1. "Exportar projeto (.zip)" na árvore de arquivos ou no menu "Mais".
+2. Textos saem do cache do editor; binários vêm do Storage (`blobPath`). O zip (`fflate`) mantém a árvore de pastas e é baixado como `<nome-do-projeto>.zip`.
 
-### `checkReferences` em três etapas
+### Importar
 
-1. **Extração determinística** (`references/bibtex.ts`): entradas `.bib` (título, autores, ano, `url` ou `doi`) e links `\url` e `\href` no texto, até 60 referências.
-2. **Verificação HTTP no backend** (`references/link-checker.ts`): até 6 em paralelo, 8 segundos por link, até 5 redirecionamentos, proteção SSRF, leitura de até 64 KiB para extrair título, descrição e um trecho da página.
-3. **Julgamento semântico pelo modelo:** recebe metadados e o resumo da página (entre `<pagina_externa>`) e devolve só `verdict` e `explanation` por chave. O status do link nunca vem do modelo; link quebrado sempre resulta em `unreachable`.
-
-### Mecânica no cliente
-
-- `src/lib/ai/ndjson.ts` lê o corpo com `ReadableStream`, separa por quebra de linha e valida cada evento com `AiStreamEventSchema`.
-- `useAiStream` acumula os deltas e aplica uma vez por frame (`requestAnimationFrame`), mantém o histórico das últimas 10 mensagens e permite cancelar (o `AbortController` fecha o fetch e o backend aborta a chamada ao modelo).
-- `MarkdownContent` converte com `marked` e sanitiza com DOMPurify antes do `dangerouslySetInnerHTML`.
-- Sem Firebase configurado, `demoAiStream` simula os mesmos eventos.
+1. "Importar" abre o diálogo com três origens: arquivo .zip, arquivos avulsos ou uma pasta do dispositivo (`webkitdirectory`, com o caminho relativo de cada arquivo).
+2. **Leitura segura:** cada caminho é normalizado; entradas com `..`, absolutas, com unidade de disco ou de sistema (`__MACOSX`, `.DS_Store`) são ignoradas e listadas. Limites: 2.000 arquivos, 200 MB no total e 50 MB por arquivo, conferidos pelo tamanho declarado **antes** de descompactar (proteção contra zip que se expande demais) e de novo depois.
+3. Se o zip tem uma pasta raiz única, o diálogo oferece importar só o conteúdo dela.
+4. O usuário escolhe a **pasta de destino** (raiz, uma pasta existente ou uma nova) e a **política de conflito**: sobrescrever o arquivo de mesmo caminho ou manter os dois, com o importado recebendo `-1`, `-2`... antes da extensão.
+5. O plano (novo, sobrescreve, renomeado) aparece antes da confirmação.
+6. Ao confirmar: textos de até 400 KiB vão inline em `files`; binários e textos maiores sobem para `blobs/{sha256}` (pulando o que já existe) e o documento guarda `blobPath`. As gravações vão em lotes de até 400. No modo demonstração, os arquivos entram só no cache da aba.
 
 ## Fluxo de compilação de trabalho (rascunho)
 
 1. O autosave grava `files/{id}` com `revision + 1` (debounce de 800 ms).
-2. "Compilar" (ou Ctrl+S) cria `jobs/{id}` com `type: compile` e enfileira `POST /compile`.
-3. O worker compila e atualiza `documents/{id}.lastBuild` e `builds/{documentId}/latest.pdf`.
-4. O `PdfPreviewPanel` observa `lastBuild` e recarrega o PDF; erros mostram o log com link para a linha (`-file-line-error`).
+2. "Compilar" (ou Ctrl+S) entrega a árvore ao motor WebAssembly no Web Worker.
+3. Ao terminar, o app envia o PDF para `builds/{documentId}/latest.pdf` e grava `documents/{id}.lastBuild`.
+4. O `PdfPreviewPanel` mostra o PDF; erros exibem o log com link para a linha.

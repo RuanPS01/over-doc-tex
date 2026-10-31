@@ -1,34 +1,48 @@
 # 06. Banco de dados (Firestore e Storage)
 
-A fonte da verdade dos tipos é `shared/firestore/types.ts`; os caminhos estão em `shared/firestore/paths.ts`; as permissões em `firestore.rules` e `storage.rules`. Este documento explica o modelo e as decisões.
+A fonte da verdade dos tipos é `shared/firestore/types.ts`; os caminhos estão em `shared/firestore/paths.ts`; as permissões em `firestore.rules` e `storage.rules`, testadas em `tests/rules/`.
+
+**Não há servidor:** toda gravação vem do app de quem age. As regras validam cada documento e, nos fluxos que envolvem vários documentos, a coerência entre eles no mesmo lote (`writeBatch`), com `getAfter` e `existsAfter`.
 
 ## 1. Árvore de coleções
 
 ```
 users/{uid}                                              perfil e preferências
-  notifications/{notificationId}                         notificações in-app
+  private/ai                                             configuração da IA (chaves): só o dono
+  notifications/{notificationId}                         notificações gravadas por quem age
 
-projects/{projectId}                                     projeto, membros e contadores
+projects/{projectId}                                     projeto, membros, convites e contadores
   files/{fileId}                                         árvore de arquivos (rascunho mutável)
   documents/{documentId}                                 documentos compiláveis (principal e secundários)
   snapshots/{snapshotId}                                 versão congelada (IMUTÁVEL)
-    grants/{uid}                                         acesso de revisor a este snapshot
+    grants/{email}                                       acesso de revisor por e-mail verificado
   reviews/{reviewId}                                     rodada de revisão (fila estilo PR)
     threads/{threadId}                                   comentário ancorado em texto ou pin espacial
       comments/{commentId}                               mensagens da thread
-  diffJobs/{diffKey}                                     job e resultado do PDF de diff
-  jobs/{jobId}                                           compilação e congelamento em andamento
+  diffs/{diffKey}                                        cache do PDF de diff
   aiConversations/{conversationId}                       conversa privada com a IA
     messages/{messageId}
   referenceChecks/{checkId}                              relatórios de verificação de referências
-
-invites/{inviteId}                                       convites por e-mail (só servidor)
-mail/{mailId}                                            fila da extensão Trigger Email (só servidor)
 ```
 
 ## 2. Coleções
 
-### 2.1 `projects/{projectId}`
+### 2.1 `users/{uid}/private/ai`
+
+Configuração da IA do usuário (`UserAiConfigDoc`): lista ordenada de modelos, o primeiro é o principal. Reserva com `apiKey` vazia herda a chave do item anterior do mesmo provedor. Só o dono lê e grava. Detalhes em `11-servico-de-ia.md`.
+
+```json
+{
+  "models": [
+    { "provider": "gemini", "model": null, "apiKey": "<chave do usuário>" },
+    { "provider": "gemini", "model": "gemini-2.5-flash", "apiKey": "" },
+    { "provider": "anthropic", "model": null, "apiKey": "<outra chave>" }
+  ],
+  "updatedAt": "2026-10-31T12:00:00Z"
+}
+```
+
+### 2.2 `projects/{projectId}`
 
 | Campo | Tipo | Notas |
 | --- | --- | --- |
@@ -36,62 +50,34 @@ mail/{mailId}                                            fila da extensão Trigg
 | `ownerId` | string | uid do dono |
 | `members` | mapa `uid: 'owner' \| 'editor' \| 'viewer'` | Fonte da verdade das regras |
 | `memberIds` | string[] | Espelho das chaves de `members` para `array-contains` |
+| `pendingMembers` | mapa `email: 'editor' \| 'viewer'` | Convites de coautoria; o convidado se adiciona ao aceitar |
 | `engine` | `'pdflatex' \| 'xelatex' \| 'lualatex'` | Motor padrão |
 | `mainDocumentId` | string | Documento exibido ao revisor por padrão |
 | `latestSnapshotId` | string ou null | |
-| `counters` | `{ snapshots, reviews }` | Atualizados em transação pelo servidor |
-| `stats` | `{ fileCount, totalBytes }` | |
-| `createdAt`, `updatedAt`, `archivedAt` | Timestamp | |
+| `counters` | `{ snapshots, reviews }` | Só aceitam +1, no lote do snapshot ou da revisão |
+| `stats`, `createdAt`, `updatedAt`, `archivedAt` | | |
 
-```json
-{
-  "name": "Tese de Mestrado",
-  "description": null,
-  "ownerId": "uidAna",
-  "members": { "uidAna": "owner", "uidBia": "editor" },
-  "memberIds": ["uidAna", "uidBia"],
-  "engine": "pdflatex",
-  "mainDocumentId": "docMain",
-  "latestSnapshotId": "snap_0003",
-  "counters": { "snapshots": 3, "reviews": 2 },
-  "stats": { "fileCount": 42, "totalBytes": 3811200 }
-}
-```
+### 2.3 `projects/{projectId}/files/{fileId}`
 
-### 2.2 `projects/{projectId}/files/{fileId}`
-
-Rascunho vivo do autor. Texto até 512 KiB fica inline em `content` (o limite do documento é 1 MiB); binários e textos maiores vão para o Storage em `blobs/{sha256}`.
+Rascunho vivo. Texto até 512 KiB fica inline em `content`; binários e textos maiores vão para `blobs/{sha256}`. As **pastas são derivadas dos caminhos** (`path`): a árvore e a importação não criam documentos de pasta; `kind: 'folder'` fica reservado para pastas vazias.
 
 | Campo | Tipo | Notas |
 | --- | --- | --- |
 | `name`, `path` | string | `path` normalizado: `capitulos/introducao.tex` |
-| `parentId` | string ou null | Pasta pai |
-| `kind` | `folder, tex, bib, sty, cls, image, pdf, data, other` | |
+| `parentId` | string ou null | Nulo para arquivos criados pela importação |
+| `kind` | `folder, tex, bib, sty, cls, image, pdf, data, other` | Classificado pela extensão |
 | `content` | string ou null | Texto inline |
-| `blobPath` | string ou null | `projects/{id}/blobs/{sha256}` |
-| `contentHash` | string ou null | sha256 do conteúdo |
-| `size` | number | bytes |
-| `revision` | number | Incrementa a cada gravação; usado no autosave e no congelamento |
-| `updatedAt`, `updatedBy` | Timestamp, string | |
+| `blobPath`, `contentHash` | string ou null | `projects/{id}/blobs/{sha256}` |
+| `size`, `revision` | number | `revision` sobe a cada gravação |
+| `updatedAt`, `updatedBy` | | `updatedBy` precisa ser quem grava |
 
-O índice de `content` é desligado (`fieldOverrides`) para não pagar indexação de texto grande.
+### 2.4 `projects/{projectId}/documents/{documentId}`
 
-### 2.3 `projects/{projectId}/documents/{documentId}`
+Ponto de entrada compilável com PDF próprio (tese, apêndice, carta de resposta): `title`, `role` (`main` ou `secondary`), `rootFileId`, `rootPath`, `engine`, `order` e `lastBuild` (`{ status, pdfPath, logPath, sourceHash, durationMs, finishedAt }`), gravado pelo app depois da compilação no navegador.
 
-Documento compilável, isto é, um ponto de entrada `.tex` com PDF próprio (ex.: tese, apêndice, carta de resposta).
+### 2.5 `projects/{projectId}/snapshots/{snapshotId}` (imutável)
 
-| Campo | Tipo | Notas |
-| --- | --- | --- |
-| `title` | string | |
-| `role` | `'main' \| 'secondary'` | O revisor vê o `main`; `secondary` só com concessão |
-| `rootFileId`, `rootPath` | string | |
-| `engine` | motor ou null | Nulo herda do projeto |
-| `order` | number | |
-| `lastBuild` | objeto ou null | `{ status, pdfPath, logPath, sourceHash, durationMs, finishedAt }`, escrito pelo worker |
-
-### 2.4 `projects/{projectId}/snapshots/{snapshotId}` (imutável)
-
-Criado uma única vez pelo servidor, depois de compilar todos os documentos. Nenhum cliente escreve aqui.
+Gravado uma vez, no lote que avança `counters.snapshots`, depois de enviar blobs e PDFs.
 
 ```json
 {
@@ -119,50 +105,46 @@ Criado uma única vez pelo servidor, depois de compilar todos os documentos. Nen
     }
   },
   "stats": { "words": 31250, "pages": 87 },
-  "createdBy": "uidAna"
+  "createdBy": "uidBia"
 }
 ```
 
-Por que `files` é array e não mapa: caminhos têm `/` e `.`, que exigiriam escape em field paths; o manifesto é lido inteiro, nunca consultado por campo.
+`files` é array porque caminhos têm `/` e `.`, que exigiriam escape em field paths, e o manifesto é sempre lido inteiro.
 
-### 2.5 `projects/{projectId}/snapshots/{snapshotId}/grants/{uid}`
+### 2.6 `snapshots/{snapshotId}/grants/{email}`
 
-A existência do documento libera a leitura do snapshot para um não membro. `documentIds` define quais PDFs ele pode abrir (o principal sempre incluso).
+O id é o e-mail do revisor em minúsculas. A existência do documento libera a leitura do snapshot para quem entrar com esse e-mail **verificado**; `documentIds` define quais PDFs ele abre.
 
 ```json
 { "documentIds": ["docMain", "docApendice"], "reviewIds": ["rev_0002"], "grantedBy": "uidAna", "expiresAt": null }
 ```
 
-### 2.6 `projects/{projectId}/reviews/{reviewId}`
-
-Uma rodada de revisão sobre um snapshot. O conjunto ordenado de revisões do projeto é a **fila de revisão**.
+### 2.7 `projects/{projectId}/reviews/{reviewId}`
 
 | Campo | Tipo | Notas |
 | --- | --- | --- |
-| `number` | number | Exibido como "#2" |
-| `title`, `description` | string | |
-| `projectName` | string | Denormalizado: o revisor não lê o projeto |
-| `snapshotId`, `snapshotLabel` | string | Versão revisada |
-| `baseSnapshotId` | string ou null | Versão anterior, base do diff |
-| `previousReviewId` | string ou null | Rodada anterior (threads pendentes) |
+| `number` | number | Sequencial ("#2"); igual ao `counters.reviews` do mesmo lote |
+| `title`, `description`, `projectName` | string | `projectName` denormalizado para o revisor |
+| `snapshotId`, `snapshotLabel`, `baseSnapshotId`, `previousReviewId` | | |
 | `requestedBy`, `requestedAt` | | |
-| `reviewerEmail` | string | Minúsculas |
-| `reviewerUid`, `reviewerName` | string ou null | Preenchidos ao aceitar o convite |
+| `reviewerEmail` | string | Minúsculas; chave da permissão do revisor |
+| `reviewerUid`, `reviewerName` | string ou null | Preenchidos pelo revisor ao abrir |
 | `status` | `invited, in_review, changes_requested, approved, closed` | |
 | `grantedDocumentIds` | string[] | |
-| `threadCounts` | `{ open, resolved, total }` | Mantido por trigger |
-| `lastActivityAt`, `closedAt` | Timestamp | |
+| `lastActivityAt`, `closedAt` | | |
 
-Máquina de estados:
+As contagens de threads abertas e resolvidas vêm de consultas de agregação (`getCountFromServer`), não de campos mantidos à mão.
 
 | De | Para | Quem |
 | --- | --- | --- |
-| `invited` | `in_review` | Função `acceptInvite` |
+| `invited` | `in_review` | Revisor, ao abrir |
 | `in_review` | `changes_requested` ou `approved` | Revisor |
-| `changes_requested` | `in_review` | Autor (reabre) ou nova rodada |
+| `changes_requested` | `in_review` | Autor ou nova rodada |
 | qualquer | `closed` | Autor |
 
-### 2.7 `reviews/{reviewId}/threads/{threadId}`
+### 2.8 `reviews/{reviewId}/threads/{threadId}` e `comments`
+
+A thread guarda a âncora (texto ou pin com desenho, coordenadas de 0 a 1), status, resolução, `sourceHint` (SyncTeX) e os contadores `commentCount`, `participantIds` e `lastCommentAt`, que o app atualiza no mesmo lote do comentário (as regras só aceitam +1 e a entrada do próprio autor nos participantes).
 
 ```json
 {
@@ -170,37 +152,6 @@ Máquina de estados:
   "reviewId": "rev_0002",
   "snapshotId": "snap_0003",
   "documentId": "docMain",
-  "kind": "text",
-  "anchor": {
-    "type": "text",
-    "page": 12,
-    "rects": [
-      { "x": 0.118, "y": 0.402, "width": 0.764, "height": 0.016 },
-      { "x": 0.118, "y": 0.420, "width": 0.312, "height": 0.016 }
-    ],
-    "quote": {
-      "exact": "os resultados indicam uma melhora significativa",
-      "prefix": "Conforme a Tabela 3, ",
-      "suffix": " em relação ao método"
-    },
-    "position": { "start": 1843, "end": 1890 }
-  },
-  "status": "open",
-  "resolution": null,
-  "sourceHint": { "path": "capitulos/resultados.tex", "line": 48, "column": null },
-  "carriedFromThreadId": null,
-  "createdBy": "uidRevisor",
-  "createdByRole": "reviewer",
-  "commentCount": 3,
-  "participantIds": ["uidRevisor", "uidAna"],
-  "lastCommentAt": "2026-10-30T14:02:11Z"
-}
-```
-
-Pin espacial com desenho livre:
-
-```json
-{
   "kind": "pin",
   "anchor": {
     "type": "pin",
@@ -209,44 +160,26 @@ Pin espacial com desenho livre:
     "drawing": {
       "bounds": { "x": 0.48, "y": 0.22, "width": 0.30, "height": 0.18 },
       "strokes": [
-        {
-          "tool": "pen",
-          "color": "annotation-2",
-          "width": 0.004,
-          "points": [0.50, 0.25, 0.55, 0.23, 0.70, 0.24, 0.76, 0.31, 0.70, 0.38, 0.52, 0.37, 0.49, 0.30]
-        }
+        { "tool": "pen", "color": "annotation-2", "width": 0.004, "points": [0.50, 0.25, 0.55, 0.23, 0.70, 0.24, 0.76, 0.31] }
       ]
     }
-  }
+  },
+  "status": "open",
+  "resolution": null,
+  "createdBy": "uidRevisor",
+  "createdByRole": "reviewer",
+  "commentCount": 1,
+  "participantIds": ["uidRevisor"]
 }
 ```
 
-Decisões da âncora:
+Decisões da âncora: coordenadas normalizadas (independem de zoom e tela); três seletores de texto (geometria, citação com contexto, posição) para reancorar; pontos achatados (`[x0, y0, x1, y1, ...]`, porque o Firestore não aceita array dentro de array), simplificados e limitados a 2.000 por desenho; cor como token (`annotation-2`).
 
-- **Coordenadas normalizadas (0 a 1)** relativas à página, origem no canto superior esquerdo: independem de zoom, DPI e tamanho de tela.
-- **Três seletores de texto** (geometria, citação com contexto, posição no texto da página). Se a posição não bater, a citação com prefixo e sufixo reencontra o trecho; se nada bater, a thread vira `outdated`.
-- **Pontos achatados** (`[x0, y0, x1, y1, ...]`): o Firestore não aceita array diretamente dentro de array. Traços são simplificados com Ramer-Douglas-Peucker (epsilon 0.002) e limitados a 2.000 pontos por desenho, mantendo a thread bem abaixo de 1 MiB.
-- **Cor como token** (`annotation-2`), nunca como valor de cor.
-- **`sourceHint`** vem do SyncTeX do snapshot e permite "Abrir no código" na linha certa.
-- O índice do campo `anchor` é desligado: não há consultas por ele.
+Resolução: o autor marca `resolved` com `fixed_next_version`; ao congelar a próxima versão, quem edita carimba `resolution.fixedInSnapshotId` (as regras só permitem mudar esse campo nesse caso).
 
-Resolução: o autor marca `status: 'resolved'` com `resolution.kind: 'fixed_next_version'`. Quando o próximo snapshot é congelado, a função preenche `resolution.fixedInSnapshotId` em todas as threads resolvidas desde o anterior.
+### 2.9 `projects/{projectId}/diffs/{diffKey}`
 
-### 2.8 `threads/{threadId}/comments/{commentId}`
-
-| Campo | Tipo | Notas |
-| --- | --- | --- |
-| `authorId`, `authorName`, `authorPhotoURL`, `authorRole` | | `authorId` precisa ser o próprio usuário |
-| `kind` | `comment, status_change, system` | Cliente só cria `comment` |
-| `body` | string (Markdown, até 10.000 caracteres) | Renderizado com `MarkdownContent` |
-| `statusChange` | `{ from, to }` ou null | Escrito pelo trigger ao mudar status |
-| `createdAt`, `editedAt`, `deletedAt` | | Exclusão lógica |
-
-A thread e o primeiro comentário são criados no mesmo `writeBatch`. Um trigger `onCommentCreated` atualiza `commentCount`, `participantIds`, `lastCommentAt`, `threadCounts` da revisão e as notificações.
-
-### 2.9 `projects/{projectId}/diffJobs/{diffKey}`
-
-`diffKey = sha256(base.sourceHash + ':' + target.sourceHash + ':' + documentId + ':' + engineVersion)`. Pedidos repetidos caem no mesmo documento e no mesmo PDF.
+Cache do PDF de diff gerado no navegador. `diffKey = base_alvo_documento_versãoDoMotor`; como snapshots são imutáveis, a mesma chave sempre produz o mesmo resultado. Gravado uma vez por quem edita; revisores leem quando têm grant na versão alvo.
 
 ```json
 {
@@ -254,77 +187,81 @@ A thread e o primeiro comentário são criados no mesmo `writeBatch`. Um trigger
   "baseSnapshotId": "snap_0002",
   "targetSnapshotId": "snap_0003",
   "engineVersion": "diff-1.0.0",
-  "status": "done",
   "granularity": "word",
-  "pdfPath": "projects/p1/diffs/5be0...c2.pdf",
-  "logPath": "projects/p1/diffs/5be0...c2.log",
+  "pdfPath": "projects/p1/snapshots/snap_0003/diffs/snap_0002/docMain/diff-1.0.0.pdf",
   "stats": { "insertedWords": 412, "deletedWords": 157, "changedBlocks": 23 },
   "changes": [{ "id": "d17", "kind": "mod", "page": 12, "y": 0.41, "preview": "os resultados indicam" }],
-  "error": null
+  "createdBy": "uidBia"
 }
 ```
 
-### 2.10 `jobs`, `aiConversations`, `referenceChecks`
+### 2.10 Demais coleções
 
-- `jobs/{jobId}`: `{ type: 'compile' | 'snapshot', status, progress, result, error }`. O cliente acompanha com `onSnapshot`.
-- `aiConversations/{id}` e `messages/{id}`: privados do criador; mensagens gravadas pelo backend ao fim de cada stream, incluindo `structured` (já validado por Zod), `contextRefs` e `usage`.
-- `referenceChecks/{id}`: relatório final de `checkReferences` (mesmo formato de `ReferenceAuditSchema`).
-
-### 2.11 Coleções do servidor
-
-- `invites/{sha256(token)}`: `{ projectId, reviewId, email, expiresAt, acceptedAt, acceptedBy }`. O token puro só existe no e-mail.
-- `mail/{id}`: `{ to, message: { subject, text, html } }`, consumido pela extensão Trigger Email.
+- `aiConversations/{id}` e `messages/{id}`: privados do criador, gravados pelo app.
+- `referenceChecks/{id}`: relatório final de `checkReferences`, gravado por um membro.
+- `users/{uid}/notifications/{id}`: gravadas pelo app de quem age (membro do projeto ou revisor da revisão citada).
 
 ## 3. Storage
 
 | Caminho | Conteúdo | Escrita | Leitura |
 | --- | --- | --- | --- |
-| `projects/{id}/blobs/{sha256}` | Conteúdo por hash | owner/editor (create), imutável | membros |
-| `projects/{id}/builds/{documentId}/latest.pdf` e `.log` | Última compilação | worker | membros |
-| `projects/{id}/snapshots/{sid}/{documentId}.pdf` | PDF congelado | worker | membros e revisor com o documento no grant |
-| `.../{documentId}.synctex.gz`, `.pages.json` | SyncTeX e texto por página | worker | idem |
-| `projects/{id}/diffs/{diffKey}.pdf` e `.log` | PDF de diff | worker | membros; revisor via URL assinada |
+| `projects/{id}/blobs/{sha256}` | Conteúdo por hash | owner/editor (criar), imutável | membros |
+| `projects/{id}/builds/{documentId}/latest.pdf` | Última compilação | owner/editor | membros |
+| `projects/{id}/snapshots/{sid}/{documentId}.pdf` (e `.synctex.gz`, `.pages.json`) | Arquivos da versão | owner/editor, só **antes** do documento do snapshot existir | membros e revisor com o documento no grant |
+| `projects/{id}/snapshots/{sid}/diffs/{baseSid}/{documentId}/{versão}.pdf` | PDF de diff | owner/editor, imutável | membros e revisor com o documento no grant |
 
-## 4. Regras de segurança (resumo)
+As regras do Storage fazem no máximo duas leituras do Firestore por pedido.
+
+## 4. Gravações em lote validadas pelas regras
+
+| Fluxo | Documentos no mesmo lote | O que as regras conferem |
+| --- | --- | --- |
+| Congelar versão | `snapshots/{novo}` mais `projects/{id}` (`counters.snapshots`, `latestSnapshotId`) | Sequência igual ao contador anterior mais 1 e ao contador depois do lote; `latestSnapshotId` aponta para o snapshot criado |
+| Abrir revisão | `grants/{email}` mais `reviews/{nova}` mais `projects/{id}` (`counters.reviews`) | Número igual ao contador anterior mais 1; snapshot e grant existem depois do lote |
+| Comentar | `comments/{novo}` mais a thread (`commentCount`, `participantIds`) | Contador sobe exatamente 1; só o autor entra nos participantes |
+| Aceitar convite de coautoria | `projects/{id}` (`members`, `memberIds`, `pendingMembers`) | O usuário entra com o papel do convite do próprio e-mail verificado, e o convite some |
+| Carimbar correção | thread (`resolution.fixedInSnapshotId`) | Só esse campo, só em thread resolvida e ainda sem carimbo |
+
+## 5. Regras de segurança (resumo)
 
 | Recurso | Ler | Escrever |
 | --- | --- | --- |
-| `projects` | membros (`list` exige `memberIds array-contains uid`) | criar como dono; editar campos simples como owner/editor |
-| `files`, `documents` | membros | owner/editor; `lastBuild` só servidor |
-| `snapshots` | membros ou grant | ninguém (servidor) |
-| `reviews` | membros ou o revisor | servidor cria; autor e revisor mudam status permitido |
-| `threads` | membros ou o revisor | criar com âncora válida no snapshot e documento concedidos; atualizar só status e resolução |
-| `comments` | membros ou o revisor | criar como si mesmo; editar o próprio |
-| `diffJobs` | membros ou quem tem grant nos dois snapshots | servidor |
-| `aiConversations` | só o criador | servidor (mensagens) |
-| `invites`, `mail` | ninguém | servidor |
+| `users/{uid}/private/ai` | só o dono | só o dono |
+| `projects` | membros e convidados por e-mail (`list` exige `memberIds array-contains uid`) | criar como dono, com contadores zerados; detalhes por owner/editor; membros e convites pelo dono; aceite pelo convidado |
+| `files`, `documents` | membros | owner/editor |
+| `snapshots` | membros ou grant por e-mail | criar no lote de congelamento; nunca alterar |
+| `grants` | membros ou o próprio e-mail | owner/editor |
+| `reviews` | membros ou o revisor (e-mail) | criar no lote de abertura; autor e revisor mudam status permitido |
+| `threads`, `comments` | membros ou o revisor | criar com âncora válida; status, contador e carimbo conforme a seção 4 |
+| `diffs` | membros ou grant na versão alvo | owner/editor, uma vez |
+| `aiConversations`, `messages` | só o criador | só o criador |
+| `notifications` | só o destinatário | quem age, se participa do projeto ou da revisão |
 
-Os cenários ficam em `tests/rules/` e rodam com `npm run test:rules` nos emuladores. No ambiente onde a suíte foi criada, os 23 cenários do Firestore passaram (dono, editor, viewer, revisor e estranho). No Storage, os 3 cenários de negação passaram, mas os 2 de permissão que dependem de consulta ao Firestore (`firestore.get` e `firestore.exists`) falharam porque o emulador não executou nem o exemplo mínimo dessas funções. Confirmar esses dois cenários em máquina local ou homologação antes do primeiro deploy está em `10-manutencao-e-granularidade.md`.
+**Testes** (`npm run test:rules`): 47 de 47 cenários do Firestore aprovados no emulador. No Storage, 4 de 7: os 3 cenários de permissão que dependem de consulta ao Firestore (`firestore.get`, `firestore.exists`) não passaram no ambiente onde a suíte foi criada, porque lá o emulador não executou nem o exemplo mínimo dessas funções. O job `rules-tests` do CI é o primeiro ambiente limpo onde eles rodam.
 
-## 5. Índices
-
-Declarados em `firestore.indexes.json`:
+## 6. Índices
 
 | Coleção | Campos | Uso |
 | --- | --- | --- |
-| `projects` | `memberIds` (contains) + `updatedAt` desc | Lista "Meus projetos" |
-| `reviews` (collection group) | `reviewerUid` + `lastActivityAt` desc | Painel "Minhas revisões" |
+| `projects` | `memberIds` (contains) + `updatedAt` desc | "Meus projetos" |
+| `reviews` (collection group) | `reviewerEmail` + `lastActivityAt` desc | "Minhas revisões" |
 | `reviews` | `status` + `requestedAt` desc | Fila de revisão do projeto |
 | `threads` | `documentId` + `status` + `createdAt` | Threads da página atual |
-| `threads` (collection group) | `projectId` + `status` + `updatedAt` desc | Pendências do projeto e carimbo `fixedInSnapshotId` |
 | `notifications` | `read` + `createdAt` desc | Central de notificações |
 
-## 6. Invariantes
+Índices de campos grandes desligados (`fieldOverrides`): `files.content`, `snapshots.files`, `threads.anchor`.
 
-1. Snapshot nunca muda depois de criado; blobs por hash nunca mudam.
-2. `memberIds` é sempre igual às chaves de `members` (só funções alteram os dois).
-3. Toda thread pertence a exatamente um snapshot e um documento concedido na revisão.
-4. Contadores (`threadCounts`, `commentCount`, `counters`) só são escritos pelo servidor.
-5. Um revisor só enxerga o que está em `grants`: nunca o rascunho em `files`.
+## 7. Invariantes
 
-## 7. Retenção
+1. Snapshot nunca muda; blob por hash nunca muda; arquivos de uma versão só sobem antes de ela ser congelada.
+2. `memberIds` é sempre igual às chaves de `members`.
+3. Contadores só sobem de 1 em 1, no lote do documento que contam.
+4. Toda thread pertence a um snapshot e a um documento concedido na revisão.
+5. Um revisor só enxerga o que está nos grants do próprio e-mail verificado.
+6. Chaves de IA ficam só em `users/{uid}/private/ai` ou no navegador do usuário.
+
+## 8. Retenção
 
 - Rascunhos: enquanto o projeto existir.
-- Snapshots e blobs: permanentes (são o histórico auditável). Blobs sem referência em nenhum snapshot nem em `files` são coletados por job semanal.
+- Snapshots e blobs: permanentes (histórico auditável).
 - PDFs de diff: regeneráveis; regra de ciclo de vida do bucket remove após 90 dias sem acesso.
-- Convites: expiram em 14 dias.

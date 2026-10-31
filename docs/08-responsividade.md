@@ -21,6 +21,8 @@ A altura entra na condição do desktop porque um celular deitado tem mais de 10
 
 Breakpoints do Tailwind usados: `xs` (360px, próprio), `sm` (640px), `lg` (1024px) e `landscape-short` (variante `raw` com a mesma media query do modo paisagem).
 
+Cuidado com `xs`: ele já vale em 360px. Dentro de um diálogo, a largura útil é bem menor que a janela (em 360px sobram uns 300px depois das margens), então três botões com rótulo lado a lado a partir de `xs` transbordam. Para o que fica dentro de diálogo, use `sm`.
+
 ## 3. Código do layout
 
 ### 3.1 Casca (`src/features/editor/components/editor-shell.tsx`)
@@ -140,6 +142,16 @@ Em 360px a barra tem: Arquivos, título truncado, Compilar, IA e Mais.
 | Áreas seguras (notch, barra de gestos) | `.pt-safe` no cabeçalho, `.pb-safe` no Sheet inferior e `viewport-fit=cover` no `index.html` |
 
 O caso do grid foi encontrado pelo verificador automático: a lista de projetos chegava a 418px em uma tela de 360px.
+
+### Formulário longo em modal: cabeçalho e rodapé fixos
+
+O diálogo "Usar a minha própria IA" e o de importação são mais altos que a janela. Rolar o modal inteiro levaria junto o título e os botões. O desenho:
+
+- `DialogContent` com `flex flex-col gap-0 overflow-hidden p-0`, altura `h-[calc(100dvh-1rem)]` no celular e `sm:h-auto sm:max-h-[88vh]` na janela larga (o `flex` substitui o `grid` padrão; o `p-0` passa o respiro para as faixas);
+- `DialogHeader` com `shrink-0 border-b px-5 pb-4 pt-5` (e `pr-8` embutido, para o título não passar por baixo do botão de fechar);
+- corpo com `flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden px-5 py-4`: a ÚNICA área que rola;
+- `DialogFooter` com `shrink-0 border-t bg-background px-5 py-4`; no celular os botões empilham por `flex-col-reverse`, com a ação principal em cima;
+- grupos de campos lado a lado (Provedor e Modelo) usam `grid grid-cols-1 sm:grid-cols-2`, e cada coluna tem `min-w-0`, senão um texto `truncate` estica o diálogo.
 
 ## 5. Teclado virtual e toque
 

@@ -28,11 +28,11 @@ EditorPage                               pages/editor-page.tsx
         │   ├── Solicitar revisão        visível a partir de sm
         │   ├── Versões, Ver alterações  visíveis a partir de lg
         │   ├── Assistente de IA         botão alternável
-        │   └── DropdownMenu "Mais"      recebe o que a largura escondeu
+        │   └── DropdownMenu "Mais"      o que a largura escondeu, mais Importar e Exportar (.zip)
         ├── main
         │   ├── DesktopWorkspace         layoutMode = desktop
         │   │   └── ResizablePanelGroup  layout salvo em localStorage
-        │   │       ├── FileTreePanel
+        │   │       ├── FileTreePanel    com Importar e Exportar (.zip) na barra
         │   │       ├── CodeEditorPanel  Monaco
         │   │       └── PdfPreviewPanel
         │   └── MobileWorkspace          layoutMode = mobile-portrait | mobile-landscape
@@ -40,11 +40,15 @@ EditorPage                               pages/editor-page.tsx
         │       ├── CodeEditorPanel      montado sempre, oculto com `hidden`
         │       └── PdfPreviewPanel      montado sempre, oculto com `hidden`
         ├── FileTreeSheet                Sheet lateral (fora do desktop)
+        ├── ImportDialog                 .zip, arquivos ou pasta; destino e política de conflito
         └── AiAssistantPanel             painel flutuante (desktop) ou Sheet inferior (celular)
-            └── AiChat
-                ├── AiMessage            Markdown sanitizado, fontes, erros
-                │   └── StructuredResultView
-                └── AiComposer           seletor de tarefa, texto, enviar ou parar
+            ├── AiChat
+            │   ├── estado vazio         "Configurar a minha IA" quando não há modelo
+            │   ├── AiMessage            Markdown sanitizado, fontes, modelo que respondeu, erros
+            │   │   └── StructuredResultView
+            │   └── AiComposer           seletor de tarefa, texto, enviar ou parar
+            └── AiSettingsDialog         "Usar a minha própria IA"
+                └── ModelEntryCard       provedor, modelo (lista ao vivo) e chave, por item da fila
 ```
 
 ### 2.2 Responsabilidades e dono de cada estado
@@ -52,7 +56,7 @@ EditorPage                               pages/editor-page.tsx
 | Componente | Responsabilidade | Estado que possui | Dados que lê |
 | --- | --- | --- | --- |
 | `EditorPage` | Ler `projectId` da rota e montar o provider | nenhum | parâmetros da rota |
-| `EditorStoreProvider` | Estado de interface compartilhado | arquivo ativo, painel ativo no celular, Sheet de arquivos aberto, IA aberta | nenhum |
+| `EditorStoreProvider` | Estado de interface compartilhado | projeto, arquivo ativo, painel ativo no celular, Sheet de arquivos, IA e importação abertas | nenhum |
 | `EditorShell` | Decidir o layout pelo `useLayoutMode()` | nenhum | media queries |
 | `EditorHeader` | Ações do projeto com regra de transbordo | nenhum | store |
 | `DesktopWorkspace` | Três colunas redimensionáveis | layout (pela biblioteca, persistido) | nenhum |
@@ -60,7 +64,9 @@ EditorPage                               pages/editor-page.tsx
 | `FileTreePanel` | Árvore indentada a partir dos caminhos | nenhum | `useProjectFiles` |
 | `CodeEditorPanel` | Monaco com LaTeX e tema dos tokens | modelos do Monaco (por `path`) | `useProjectFiles`, store |
 | `PdfPreviewPanel` | Páginas do PDF e zoom | zoom | (planejado) `useLatestBuild` |
-| `AiAssistantPanel` | Conter o chat no formato certo para o layout | conversa (`useAiStream`) | store |
+| `AiAssistantPanel` | Conter o chat no formato certo para o layout | conversa (`useAiStream`), diálogo de configuração aberto | `useAiConfig`; `files`, `open` e `onOpenChange` vêm do `EditorShell` por props |
+| `AiSettingsDialog` | Editar e validar a fila de modelos | rascunho da fila, erros por item | `useAiConfig` |
+| `ImportDialog` | Ler a origem, montar e aplicar o plano de importação | origem lida, destino, política de conflito | `useProjectFiles`, `useProjectArchive` |
 
 Regras que esta divisão garante:
 
@@ -120,6 +126,9 @@ Pontos de atenção:
 | `Tabs` | Radix Tabs | Usado no `PaneSwitcher` |
 | `ResizablePanelGroup`, `ResizablePanel`, `ResizableHandle` | react-resizable-panels 4 | Área de arraste maior que a linha visível |
 | `Textarea` | nativo | Compositor da IA |
+| `Input` | nativo | Chaves de API, nomes de pasta, login |
+| `Dialog` | Radix Dialog | Largura e altura limitadas à janela; título com `pr-8` para o botão de fechar; rodapé empilha no celular |
+| `Select` | Radix Select | Lista em `popper` com a largura do gatilho; item marcado com fundo primário e ícone de check |
 
 ### Genéricos (`src/components/common`)
 
@@ -131,10 +140,22 @@ Pontos de atenção:
 
 | Feature | Componentes |
 | --- | --- |
-| `editor` | `EditorShell`, `EditorHeader`, `DesktopWorkspace`, `MobileWorkspace`, `PaneSwitcher`, `FileTreePanel`, `FileTreeSheet`, `CodeEditorPanel` |
+| `editor` | `EditorShell`, `EditorHeader`, `DesktopWorkspace`, `MobileWorkspace`, `PaneSwitcher`, `FileTreePanel`, `FileTreeSheet`, `CodeEditorPanel`, `ImportDialog` |
 | `pdf-viewer` | `PdfPreviewPanel` (planejado: `PdfViewer`, `PdfPage` e camadas) |
-| `ai-assistant` | `AiAssistantPanel`, `AiMessage`, `AiComposer`, `StructuredResultView` |
+| `ai-assistant` | `AiAssistantPanel`, `AiSettingsDialog`, `ModelEntryCard`, `AiMessage`, `AiComposer`, `StructuredResultView` |
 | `auth` | `AuthProvider` |
 | `review` (planejado) | `ReviewShell`, `ReviewToolbar`, `SelectionPopover`, `ThreadSidebar`, `ThreadSheet`, `ThreadCard`, `CommentComposer` |
 | `snapshots` (planejado) | `VersionHistorySheet`, `RequestReviewDialog` |
 | `diff` (planejado) | `DiffBar`, `DiffStatusBadge` |
+
+### Hooks de integração
+
+| Hook | Feature | O que faz |
+| --- | --- | --- |
+| `useProjectFiles` | editor | Arquivos do projeto em tempo real (ou de demonstração) |
+| `useProjectArchive` | editor | Exporta o .zip e aplica o plano de importação (Firestore e Storage, ou cache no modo demonstração) |
+| `useExportProject` | editor | Exportação do projeto aberto, usada pela árvore e pelo menu |
+| `useAiConfig` | ai-assistant | Configuração da IA na conta (`users/{uid}/private/ai`) ou no navegador |
+| `useAiStream` | ai-assistant | Conversa com a fila de modelos, deltas por quadro, troca de modelo |
+| `useProviderModels` | ai-assistant | Lista de modelos ao vivo do provedor, com catálogo de reserva |
+| `useAuth` | auth | Sessão e login |

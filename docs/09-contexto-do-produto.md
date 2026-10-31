@@ -4,6 +4,8 @@
 
 Uma plataforma web (PWA) para escrever documentos LaTeX e revisá-los como se revisa código: versões congeladas, comentários ancorados no ponto exato do PDF, threads de discussão com resolução e um diff visual que mostra, no próprio PDF, o que entrou e o que saiu entre uma versão e outra. Um assistente de IA ajuda a escrever, reorganizar e verificar referências usando o próprio conteúdo do projeto como contexto.
 
+A plataforma não tem servidor próprio nem IA própria: é um app estático com Firebase, e **a IA é sempre a do usuário**, configurada com a chave dele (Claude, OpenAI ou Gemini, inclusive chave gratuita).
+
 A interface une os painéis clássicos de editores LaTeX online (árvore de arquivos, código e PDF lado a lado) com uma experiência limpa e centrada em IA, com um painel "pergunte qualquer coisa" sempre à mão.
 
 ## 2. Problema
@@ -28,7 +30,8 @@ A interface une os painéis clássicos de editores LaTeX online (árvore de arqu
 2. **Comentários estilo Pull Request:** selecionar um trecho no PDF, comentar, discutir em thread e marcar como corrigido para a próxima versão.
 3. **Pins com desenho livre:** circular um erro em um gráfico e deixar um comentário espacial.
 4. **Diff visual no PDF:** um PDF recompilado com o texto removido em vermelho e o inserido em verde, com as quebras de linha refeitas.
-5. **IA contextual:** reescrita, paráfrase, rascunhos baseados nos capítulos, reorganização de tópicos, sumário e auditoria de referências com teste real dos links.
+5. **IA contextual com a sua chave:** reescrita, paráfrase, rascunhos baseados nos capítulos, reorganização de tópicos, sumário e auditoria de referências com teste real dos links, com modelos de reserva quando um atinge o limite.
+6. **Projeto portátil:** exportar tudo em .zip e importar .zip, arquivos ou pastas inteiras do dispositivo.
 
 ## 5. Escopo da primeira versão
 
@@ -40,7 +43,8 @@ Dentro:
 - Snapshots, convite por e-mail, revisão com comentários em texto e pins com desenho.
 - Threads com resposta, resolução e reabertura; pendências entre rodadas.
 - Diff visual entre snapshots.
-- Assistente de IA com as sete tarefas do contrato (`chat`, `rewriteText`, `paraphrase`, `generateDraft`, `reorganizeTopics`, `updateToc`, `checkReferences`).
+- Assistente de IA com as sete tarefas do contrato (`chat`, `rewriteText`, `paraphrase`, `generateDraft`, `reorganizeTopics`, `updateToc`, `checkReferences`), sempre com a chave do próprio usuário e fila de modelos de reserva.
+- Exportação do projeto em .zip e importação de .zip, arquivos avulsos ou pastas, para a raiz ou uma pasta interna, sobrescrevendo ou mantendo os dois arquivos (`nome-1`).
 - PWA instalável, utilizável em celular a partir de 360px.
 
 Fora (por enquanto):
@@ -80,8 +84,8 @@ Fora (por enquanto):
 
 | Fase | Entregas |
 | --- | --- |
-| 1. Fundação (este repositório) | Arquitetura, modelo de dados, regras, layout responsivo, contrato e backend de IA |
-| 2. Editor completo | Autosave, `latex-worker` de compilação, visualizador pdf.js, Monaco com navegação SyncTeX |
-| 3. Revisão | Snapshot, convite, ReviewPage, seleção, threads, desenho e pins, notificações |
-| 4. Diff | Motor de diff, degradação, navegação entre alterações |
-| 5. Refino | Limites de uso da IA, testes de regras em CI, ícones PNG do PWA, métricas |
+| 1. Fundação (este repositório) | Arquitetura sem servidor, modelo de dados, regras, layout responsivo, IA do usuário com fila de reserva, importação e exportação, CI e deploy |
+| 2. Editor completo | Autosave, motor LaTeX em WebAssembly, visualizador pdf.js, Monaco com navegação SyncTeX |
+| 3. Revisão | Snapshot, convite por link de e-mail, ReviewPage, seleção, threads, desenho e pins, notificações |
+| 4. Diff | Motor de diff no Web Worker, degradação, navegação entre alterações |
+| 5. Refino | Histórico das conversas de IA, ícones PNG do PWA, métricas |

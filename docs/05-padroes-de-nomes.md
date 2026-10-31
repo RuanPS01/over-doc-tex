@@ -56,15 +56,17 @@ queryKeys.files(projectId)                 // ['project', projectId, 'files']
 queryKeys.threads(projectId, reviewId)     // ['project', projectId, 'reviews', reviewId, 'threads']
 ```
 
-## 6. Backend
+## 6. IA, LaTeX e testes
 
 | Elemento | Padrão | Exemplo |
 | --- | --- | --- |
-| Cloud Functions exportadas | `camelCase`, verbo ou substantivo de ação | `aiStream`, `requestReview`, `acceptInvite` |
-| Triggers | `on` + recurso + evento | `onCommentCreated`, `onThreadUpdated` |
+| Id de provedor de IA | minúsculas, nome da empresa ou produto | `anthropic`, `openai`, `gemini` |
+| Arquivo de provedor | `src/lib/ai/providers/<id>.ts` | `gemini.ts` |
 | Tarefas de IA | `camelCase`, verbo | `rewriteText`, `checkReferences`, `updateToc` |
-| Segredos e parâmetros | `UPPER_SNAKE_CASE` | `ANTHROPIC_API_KEY`, `ALLOWED_ORIGINS` |
+| Eventos do motor de IA | substantivo curto em minúsculas | `status`, `delta`, `switch`, `done` |
 | Macros LaTeX do diff | prefixo `\DIF` | `\DIFadd`, `\DIFdelenv` |
+| Testes unitários | `tests/unit/<assunto>.test.ts` | `ai-engine.test.ts` |
+| Cenários de teste | frase que descreve o comportamento | `'revisor não amplia os documentos concedidos'` |
 
 ## 7. CSS e design system
 
@@ -82,7 +84,7 @@ queryKeys.threads(projectId, reviewId)     // ['project', projectId, 'reviews', 
   - `fix(projetos): evita transbordo da lista em 360px`
   - `docs(banco): documenta coleção diffJobs`
 - Tipos aceitos: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `perf`, `build`, `ci`.
-- Escopos usuais: `editor`, `revisao`, `diff`, `ia`, `banco`, `regras`, `pwa`, `functions`, `worker`.
+- Escopos usuais: `editor`, `revisao`, `diff`, `ia`, `banco`, `regras`, `pwa`, `importacao`, `ci`.
 
 ## 9. Textos da interface
 
