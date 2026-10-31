@@ -3,9 +3,11 @@
 # Pull request: verificações do código e testes das regras de segurança.
 # Push na main (ou execução manual):
 #   1. verificações e testes das regras (em paralelo);
-#   2. deploy das configurações do Firebase (regras, índices e, opcionalmente, Functions)
-#      em paralelo com o build do PWA para o GitHub Pages;
+#   2. deploy das configurações do Firebase (regras do Firestore, índices e regras do
+#      Storage) em paralelo com o build do PWA para o GitHub Pages;
 #   3. publicação no GitHub Pages, somente depois do deploy do Firebase dar certo.
+#
+# Não há Cloud Functions: o app é estático e a IA usa a chave de cada usuário.
 #
 # Configuração necessária: docs/02-tecnologias.md, seção "Deploy".
 
@@ -40,23 +42,19 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            functions/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Instalar dependências
-        run: |
-          npm ci
-          npm ci --prefix functions
+        run: npm ci
 
       - name: Convenções (docs/00-regras-para-ia.md)
         run: npm run check:conventions
 
+      - name: Testes unitários (motor de IA, importação e exportação)
+        run: npm test
+
       - name: Build do frontend (typecheck e PWA)
         run: npm run build
-
-      - name: Build das Cloud Functions
-        run: npm run build --prefix functions
 
       - name: Instalar Playwright
         run: |
@@ -114,15 +112,12 @@ jobs:
       id-token: write # necessário para Workload Identity Federation
     env:
       FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
-      DEPLOY_FUNCTIONS: ${{ vars.DEPLOY_FUNCTIONS }}
     steps:
       - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          cache-dependency-path: functions/package-lock.json
 
       - name: Conferir configuração
         env:
@@ -149,25 +144,10 @@ jobs:
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
 
-      - name: Preparar Cloud Functions
-        if: env.DEPLOY_FUNCTIONS == 'true'
-        env:
-          ALLOWED_ORIGINS: ${{ vars.ALLOWED_ORIGINS }}
-          OWNER: ${{ github.repository_owner }}
-        run: |
-          npm ci --prefix functions
-          # CORS do aiStream: por padrão, a origem do GitHub Pages do dono do repositório.
-          origins="${ALLOWED_ORIGINS:-https://${OWNER,,}.github.io}"
-          echo "ALLOWED_ORIGINS=${origins}" > functions/.env
-          echo "Origens liberadas: ${origins}"
-
       - name: Deploy no Firebase
         run: |
-          targets="firestore:rules,firestore:indexes,storage"
-          if [ "$DEPLOY_FUNCTIONS" = "true" ]; then targets="${targets},functions"; fi
-          echo "Alvos: ${targets}"
           npx -y "firebase-tools@${FIREBASE_TOOLS_VERSION}" deploy \
-            --only "${targets}" \
+            --only "firestore:rules,firestore:indexes,storage" \
             --project "${FIREBASE_PROJECT_ID}" \
             --non-interactive
 
@@ -206,7 +186,6 @@ jobs:
           VITE_FIREBASE_STORAGE_BUCKET: ${{ vars.FIREBASE_STORAGE_BUCKET }}
           VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.FIREBASE_MESSAGING_SENDER_ID }}
           VITE_FIREBASE_APP_ID: ${{ vars.FIREBASE_APP_ID }}
-          VITE_API_BASE_URL: ${{ vars.API_BASE_URL || format('https://southamerica-east1-{0}.cloudfunctions.net', vars.FIREBASE_PROJECT_ID) }}
           VITE_USE_FIREBASE_EMULATORS: 'false'
         # build:pages também gera o 404.html que faz as rotas do SPA funcionarem no Pages.
         run: npm run build:pages

@@ -6,7 +6,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 
 const ROOT = process.cwd();
-const IGNORED_DIRS = new Set(['node_modules', 'dist', 'lib', 'dev-dist', '.git', 'dist-screenshots']);
+const IGNORED_DIRS = new Set(['node_modules', 'dist', 'dev-dist', '.git', 'dist-screenshots']);
 
 function walk(dir, extensions) {
   return readdirSync(dir).flatMap((name) => {
@@ -36,14 +36,15 @@ function check(files, pattern, message, allow = () => false, { codeOnly = false 
 
 const frontend = walk(join(ROOT, 'src'), ['.ts', '.tsx']);
 const shared = walk(join(ROOT, 'shared'), ['.ts']);
-const functions = walk(join(ROOT, 'functions', 'src'), ['.ts']);
-const code = [...frontend, ...shared, ...functions];
+const tests = walk(join(ROOT, 'tests'), ['.ts', '.mjs']);
+const code = [...frontend, ...shared];
 const texts = [
   ...walk(join(ROOT, 'docs'), ['.md']),
   join(ROOT, 'README.md'),
   ...code,
   ...walk(join(ROOT, 'src'), ['.css']),
   ...walk(join(ROOT, '.github'), ['.yml']),
+  ...tests,
 ];
 
 check(frontend, /#[0-9a-fA-F]{3,8}\b/, 'cor hexadecimal fixa: use tokens semânticos');
@@ -54,6 +55,7 @@ check(
   /dangerouslySetInnerHTML/,
   'HTML bruto só em MarkdownContent',
   (path) => path === 'src/components/common/markdown-content.tsx',
+  { codeOnly: true },
 );
 check(
   frontend,
