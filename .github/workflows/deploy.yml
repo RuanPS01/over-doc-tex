@@ -3,13 +3,14 @@
 # Pull request: verificações do código e testes das regras de segurança.
 # Push na main (ou execução manual):
 #   1. verificações e testes das regras (em paralelo);
-#   2. deploy das configurações do Firebase (regras do Firestore, índices e regras do
-#      Storage) em paralelo com o build do site, feito duas vezes: com o subcaminho do
-#      GitHub Pages e na raiz do domínio para o Firebase Hosting;
+#   2. deploy das configurações do Firebase (regras e índices do Firestore) em paralelo
+#      com o build do site, feito duas vezes: com o subcaminho do GitHub Pages e na raiz
+#      do domínio para o Firebase Hosting;
 #   3. publicação no GitHub Pages e no Firebase Hosting (em paralelo), somente depois
 #      do deploy das regras dar certo: o site nunca vai ao ar contra regras antigas.
 #
-# Não há Cloud Functions: o app é estático e a IA usa a chave de cada usuário.
+# Não há Cloud Functions nem Cloud Storage: o app é estático, os binários ficam no
+# Firestore em pedaços e a IA usa a chave de cada usuário. Tudo cabe no plano Spark.
 #
 # Configuração necessária: docs/02-tecnologias.md, seção "Deploy".
 
@@ -100,7 +101,7 @@ jobs:
       - name: Instalar dependências dos testes
         run: npm ci --prefix tests/rules
 
-      - name: Regras do Firestore e do Storage nos emuladores
+      - name: Regras do Firestore no emulador
         run: npm run test:rules
 
   firebase-deploy:
@@ -129,10 +130,10 @@ jobs:
           workload-identity-provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service-account: ${{ vars.GCP_SERVICE_ACCOUNT }}
 
-      - name: Deploy das regras, índices e Storage
+      - name: Deploy das regras e índices do Firestore
         run: |
           npx -y "firebase-tools@${FIREBASE_TOOLS_VERSION}" deploy \
-            --only "firestore:rules,firestore:indexes,storage" \
+            --only "firestore:rules,firestore:indexes" \
             --project "${FIREBASE_PROJECT_ID}" \
             --non-interactive
 
@@ -149,7 +150,6 @@ jobs:
       VITE_FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
       VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.FIREBASE_AUTH_DOMAIN }}
       VITE_FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
-      VITE_FIREBASE_STORAGE_BUCKET: ${{ vars.FIREBASE_STORAGE_BUCKET }}
       VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.FIREBASE_MESSAGING_SENDER_ID }}
       VITE_FIREBASE_APP_ID: ${{ vars.FIREBASE_APP_ID }}
       VITE_USE_FIREBASE_EMULATORS: 'false'
