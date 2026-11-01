@@ -263,6 +263,31 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
     </div>
   ) : null;
 
+  // Dica da ferramenta e mensagem de quem pediu a revisão: no espaço livre da barra do PDF, ao lado do
+  // título (sem faixa nova acima do PDF). No celular a barra não tem espaço: a dica flutua sobre o PDF
+  // e a mensagem vai para o topo do painel de comentários.
+  const toolHint =
+    tool === 'pin' ? t('Clique no ponto do PDF que quer comentar.') : tool === 'draw' ? t('Desenhe sobre a página; depois escreva o comentário ao lado.') : null;
+  const authorMessage = review.description ? (
+    <>
+      <span className="font-medium text-foreground">{t('Mensagem:')}</span> {review.description}
+    </>
+  ) : null;
+  const toolbarTitle = (
+    <div className="flex min-w-0 items-center gap-3">
+      <div className="shrink-0">{title}</div>
+      {(toolHint || authorMessage) && (
+        <p
+          role={toolHint ? 'status' : undefined}
+          title={toolHint ?? review.description ?? undefined}
+          className="hidden min-w-0 truncate text-xs font-normal text-muted-foreground md:block"
+        >
+          {toolHint ?? authorMessage}
+        </p>
+      )}
+    </div>
+  );
+
   // Desktop: botão na barra do PDF que recolhe e reabre o painel de comentários.
   const commentsToggle = isDesktop ? (
     <Button
@@ -284,7 +309,7 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
       pdf={pdf}
       error={pdfError}
       scrollRef={scrollRef}
-      title={title}
+      title={toolbarTitle}
       actions={
         <>
           {tools}
@@ -331,16 +356,15 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
           {actionError}
         </p>
       )}
-      {(tool !== 'select' || review.description) && (
-        <p className="shrink-0 truncate border-b px-3 py-1.5 text-xs text-muted-foreground" title={review.description ?? undefined}>
-          {tool === 'pin'
-            ? t('Clique no ponto do PDF que quer comentar.')
-            : tool === 'draw'
-              ? t('Desenhe sobre a página; depois escreva o comentário ao lado.')
-              : review.description}
-        </p>
-      )}
       <main className="relative flex min-h-0 flex-1">
+        {toolHint && (
+          <p
+            role="status"
+            className="pointer-events-none absolute left-1/2 top-12 z-10 max-w-[calc(100%-2rem)] -translate-x-1/2 truncate rounded-full border bg-background/95 px-3 py-1 text-xs text-muted-foreground shadow-sm md:hidden"
+          >
+            {toolHint}
+          </p>
+        )}
         {isDesktop ? (
           <ResizablePanelGroup orientation="horizontal" defaultLayout={defaultLayout} onLayoutChanged={onLayoutChanged}>
             <ResizablePanel id="document" minSize="35%">
@@ -388,6 +412,7 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
           <SheetContent side="bottom" className="h-[75dvh] gap-0 p-0">
             <SheetTitle className="px-4 pt-4">{t('Comentários')}</SheetTitle>
             <SheetDescription className="sr-only">{t('Comentários da revisão, por página.')}</SheetDescription>
+            {authorMessage && <p className="px-4 pt-1 text-xs text-muted-foreground md:hidden">{authorMessage}</p>}
             {threadList}
           </SheetContent>
         </Sheet>
