@@ -1,12 +1,13 @@
-import { Loader2, PauseCircle, Trash2 } from 'lucide-react';
-import { useId } from 'react';
+import { CheckCircle2, FlaskConical, Loader2, PauseCircle, RefreshCw, Trash2, XCircle } from 'lucide-react';
+import { useId, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { maskApiKey } from '@/lib/ai/local-config-storage';
 import type { ModelHealth } from '@/lib/ai/model-chain';
-import { PROVIDERS, PROVIDER_IDS, detectProvider, type AiProviderId } from '@/lib/ai/providers';
-import { useProviderModels } from '../hooks/use-provider-models';
+import { PROVIDERS, PROVIDER_IDS, detectProvider, resolveModel, type AiProviderId } from '@/lib/ai/providers';
+import { useModelTest, type ModelTestState } from '../hooks/use-model-test';
+import { useProviderModels, type ProviderModelsState } from '../hooks/use-provider-models';
 
 const DEFAULT_VALUE = '__default__';
 const CUSTOM_VALUE = '__custom__';
@@ -38,6 +39,58 @@ interface ModelEntryCardProps {
   onRemove?: () => void;
 }
 
+const dateTime = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+
+/** De onde veio a lista do campo Modelo, em uma frase. */
+function listCaption({ source, checkedAt, isFetching, error, canRefresh }: ProviderModelsState): string {
+  if (isFetching) return 'Consultando os modelos disponíveis no provedor...';
+  const when = checkedAt ? dateTime.format(checkedAt) : '';
+  const failure = error ? `Não foi possível consultar o provedor (${error}). ` : '';
+  switch (source) {
+    case 'live':
+      return `Modelos disponíveis para a sua chave, consultados no provedor em ${when}.`;
+    case 'remembered':
+      return `${failure}Última lista do provedor, de ${when}.${canRefresh ? '' : ' Informe a chave para atualizar.'}`;
+    case 'catalog':
+      return `${failure}Lista pública de modelos, atualizada em ${when}.${canRefresh ? '' : ' Informe a chave para ver os disponíveis para você.'}`;
+    case 'embedded':
+      return `${failure}Lista conhecida pelo app.${canRefresh ? '' : ' Informe a chave para consultar o provedor.'}`;
+  }
+}
+
+const SOURCE_LABELS: Record<ProviderModelsState['source'], string> = {
+  live: 'Disponíveis no provedor',
+  remembered: 'Última lista do provedor',
+  catalog: 'Lista pública',
+  embedded: 'Conhecidos pelo app',
+};
+
+function TestResult({ state }: { state: ModelTestState }) {
+  if (state.status === 'ok') {
+    const { result } = state;
+    const elapsed =
+      result.durationMs < 1000 ? `${result.durationMs} ms` : `${(result.durationMs / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} s`;
+    return (
+      <p className="flex min-w-0 items-start gap-1.5 text-xs text-success" role="status">
+        <CheckCircle2 className="mt-0.5 size-3.5 shrink-0" />
+        <span className="min-w-0 break-words">
+          {result.model} respondeu em {elapsed}{result.reply ? `: "${result.reply}"` : ', sem texto'}.
+          {result.usedFallback && ' O provedor usou um modelo alternativo para responder.'}
+        </span>
+      </p>
+    );
+  }
+  if (state.status === 'error') {
+    return (
+      <p className="flex min-w-0 items-start gap-1.5 text-xs text-destructive" role="alert">
+        <XCircle className="mt-0.5 size-3.5 shrink-0" />
+        <span className="min-w-0 break-words">{state.message}</span>
+      </p>
+    );
+  }
+  return null;
+}
+
 function pauseLabel(health: ModelHealth): string {
   const minutes = Math.max(1, Math.ceil((health.until - Date.now()) / 60_000));
   return `Em pausa por ${minutes} min: ${health.message}`;
@@ -48,10 +101,17 @@ export function ModelEntryCard({ index, entry, inheritFrom, effectiveKey, health
   const modelId = useId();
   const keyId = useId();
   const info = PROVIDERS[entry.provider];
-  const { models, live, isFetching, failed } = useProviderModels(entry.provider, effectiveKey);
+  const list = useProviderModels(entry.provider, effectiveKey);
+  const testEntry = useMemo(() => ({ provider: entry.provider, model: entry.model, apiKey: effectiveKey }), [entry.provider, entry.model, effectiveKey]);
+  const test = useModelTest(testEntry);
 
   const selectValue = entry.customModel ? CUSTOM_VALUE : (entry.model ?? DEFAULT_VALUE);
-  const options = entry.model && !entry.customModel && !models.includes(entry.model) ? [entry.model, ...models] : models;
+  // O modelo salvo continua na lista mesmo que a fonte atual não o traga.
+  const options =
+    entry.model && !entry.customModel && !list.models.some((model) => model.id === entry.model)
+      ? [{ id: entry.model, label: null, released: null }, ...list.models]
+      : list.models;
+  const canTest = Boolean(effectiveKey) && !(entry.customModel && !entry.model);
 
   const handleKeyInput = (value: string) => {
     // Colar uma chave de outro provedor troca o provedor do item.
@@ -63,13 +123,6 @@ export function ModelEntryCard({ index, entry, inheritFrom, effectiveKey, health
     }
   };
 
-  const modelCaption = isFetching
-    ? 'Consultando modelos no provedor...'
-    : live
-      ? 'Lista consultada agora no provedor.'
-      : failed
-        ? 'Não foi possível consultar o provedor; mostrando a lista conhecida.'
-        : 'Informe a chave para consultar a lista no provedor.';
 
   return (
     <section className="flex min-w-0 flex-col gap-3 rounded-xl border bg-card p-4">
@@ -137,18 +190,33 @@ export function ModelEntryCard({ index, entry, inheritFrom, effectiveKey, health
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={CUSTOM_VALUE}>Nome customizado</SelectItem>
               <SelectItem value={DEFAULT_VALUE}>Padrão do provedor ({info.defaultModel})</SelectItem>
-              {options.map((model) => (
-                <SelectItem key={model} value={model}>
-                  {model}
-                </SelectItem>
-              ))}
+              <SelectItem value={CUSTOM_VALUE}>Nome personalizado...</SelectItem>
+              <SelectSeparator />
+              <SelectGroup>
+                <SelectLabel>{SOURCE_LABELS[list.source]}</SelectLabel>
+                {options.map((model) => (
+                  <SelectItem key={model.id} value={model.id} description={model.label && model.label !== model.id ? model.id : undefined}>
+                    {model.label ?? model.id}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
             </SelectContent>
           </Select>
-          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            {isFetching && <Loader2 className="size-3 animate-spin" />}
-            {modelCaption}
+          <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+            {list.isFetching && <Loader2 className="mt-0.5 size-3 shrink-0 animate-spin" />}
+            <span className="min-w-0">
+              {listCaption(list)}
+              {list.canRefresh && !list.isFetching && (
+                <>
+                  {' '}
+                  <button type="button" className="inline-flex items-center gap-1 text-primary underline" onClick={list.refresh}>
+                    <RefreshCw className="size-3" />
+                    Atualizar
+                  </button>
+                </>
+              )}
+            </span>
           </p>
         </div>
       </div>
@@ -202,6 +270,22 @@ export function ModelEntryCard({ index, entry, inheritFrom, effectiveKey, health
             </p>
           </>
         )}
+      </div>
+
+      <div className="flex min-w-0 flex-col gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="self-start"
+          disabled={!canTest || test.state.status === 'running'}
+          title={canTest ? `Manda um pedido curto para ${resolveModel(testEntry)}` : 'Informe a chave e o modelo para testar'}
+          onClick={() => void test.run()}
+        >
+          {test.state.status === 'running' ? <Loader2 className="animate-spin" /> : <FlaskConical />}
+          {test.state.status === 'running' ? 'Testando' : 'Testar modelo'}
+        </Button>
+        <TestResult state={test.state} />
       </div>
 
       {info.note && <p className="text-xs text-muted-foreground">{info.note}</p>}

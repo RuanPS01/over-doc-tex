@@ -16,7 +16,8 @@ function toDraft(config: AiConfig | null): DraftEntry[] {
     id: crypto.randomUUID(),
     provider: entry.provider,
     model: entry.model,
-    customModel: entry.model !== null && !PROVIDERS[entry.provider].catalog.includes(entry.model),
+    // O modelo salvo aparece como item da lista (mesmo fora dela); o campo de nome só abre por escolha.
+    customModel: false,
     storedKey: entry.apiKey,
     keyInput: '',
     inherit: !entry.apiKey && inheritedKeySource(config.models, index) !== null,

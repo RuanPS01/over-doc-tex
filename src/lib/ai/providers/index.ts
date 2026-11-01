@@ -1,3 +1,4 @@
+import type { ProviderModel } from '../model-list';
 import { AiTaskError, type AiConfig, type AiModelConfig } from '../schemas';
 import { ANTHROPIC_MODEL, GEMINI_DEFAULT_MODEL, OPENAI_DEFAULT_MODEL } from './defaults';
 import type { AiProvider, AiProviderId, ProviderOptions } from './types';
@@ -16,7 +17,8 @@ interface ProviderInfo {
   /** Observação exibida no formulário. */
   note: string | null;
   verifyKey: (apiKey: string, model: string) => Promise<void>;
-  listModels: (apiKey: string) => Promise<string[]>;
+  /** Modelos da chave, como o provedor devolve (filtro e ordem em model-list.ts). */
+  listModels: (apiKey: string) => Promise<ProviderModel[]>;
   create: (apiKey: string, model: string, options: ProviderOptions) => Promise<AiProvider>;
 }
 

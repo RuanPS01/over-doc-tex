@@ -33,7 +33,10 @@ A IA do OverDocTeX é **sempre a do usuário**: cada pessoa configura o próprio
 | `src/lib/ai/local-config-storage.ts` | Configuração no navegador (sem login) |
 | `src/features/ai-assistant/hooks/use-ai-config.ts` | Configuração na conta (`users/{uid}/private/ai`) ou no navegador |
 | `src/features/ai-assistant/hooks/use-ai-stream.ts` | Conversa: consome `runAiTask` e acumula deltas por quadro |
-| `src/features/ai-assistant/hooks/use-provider-models.ts` | Lista de modelos ao vivo |
+| `src/features/ai-assistant/hooks/use-provider-models.ts` | Lista do campo Modelo: provedor ao vivo, última lista, catálogo do deploy ou embutida |
+| `src/features/ai-assistant/hooks/use-model-test.ts`, `src/lib/ai/test-model.ts` | Botão "Testar modelo" |
+| `src/lib/ai/model-list.ts` | Filtro, ordem e leitura do catálogo de modelos (puro) |
+| `scripts/ai-models-catalog.mjs` | Gera `public/ai-models.json` no deploy (models.dev) |
 | `src/features/ai-assistant/components/` | Painel, diálogo "Usar a minha própria IA", cartão de modelo, mensagens |
 
 ## 11.3 Provedores
@@ -62,9 +65,18 @@ Cada implementação converte os próprios erros em `AiTaskError` com uma mensag
 
 O padrão do Gemini é o Flash-Lite porque, medido em 31/10/2026 no nível gratuito, ele respondeu em cerca de 1 s, enquanto o Flash completo passou de 1 min e devolveu 503 em horário de pico.
 
-### 11.3.3 Lista de modelos ao vivo
+### 11.3.3 Lista de modelos e teste
 
-Com a chave em mãos, o diálogo consulta a API de listagem do provedor (`listModels`). O hook espera 700 ms depois da digitação, usa o catálogo embutido enquanto isso (e se a consulta falhar), guarda o resultado por 10 min e põe na chave de cache só o tamanho e os 6 últimos caracteres da chave de API. Modelos que não conversam por texto (voz, imagem, transcrição, agentes) são filtrados. A opção "Nome customizado" cobre o que não aparecer.
+O campo "Modelo" mostra, nesta ordem de preferência (`useProviderModels`):
+
+1. **Provedor ao vivo:** com a chave (a digitada, a salva ou a herdada), o diálogo consulta a API de listagem do provedor (`listModels`), 700 ms depois da digitação, e guarda o resultado por 10 min. A chave de cache leva só o tamanho e os 6 últimos caracteres da chave de API. O botão "Atualizar" refaz a consulta.
+2. **Última lista do provedor:** cada consulta bem-sucedida fica no localStorage (`overdoctex.ai-models`, só os nomes, nunca a chave) e aparece quando ainda não há chave, com a data da consulta.
+3. **Lista pública:** `public/ai-models.json`, gerado a cada deploy por `scripts/ai-models-catalog.mjs` a partir do models.dev (banco aberto de modelos por provedor; o arquivo de lá passa de 5 MB e aqui vira cerca de 6 kB, só com modelos que respondem em texto). Se a fonte falhar no deploy, o passo só avisa.
+4. **Lista embutida:** o `catalog` de cada provedor em `PROVIDERS`.
+
+Toda lista passa por `src/lib/ai/model-list.ts`: ficam só os modelos que conversam por texto (sem voz, imagem, vídeo, transcrição, embeddings e agentes), sem repetidos e dos mais novos para os mais antigos (pela data de lançamento quando a fonte informa; senão apelidos `latest` primeiro, depois a versão no nome). Cada item mostra o nome legível do provedor ("Gemini 3.8 Flash") e o identificador da API ao lado. "Padrão do provedor" e "Nome personalizado..." vêm no topo; o modelo salvo aparece na lista mesmo que a fonte atual não o traga.
+
+**Testar modelo:** cada item da fila tem o botão "Testar modelo" (`useModelTest`, `src/lib/ai/test-model.ts`). Ele manda um pedido curto de verdade ("responda OK", esforço baixo, até 1024 tokens para modelos que raciocinam) com a chave efetiva do item e sem novas tentativas automáticas, e mostra o tempo e a resposta, ou o erro do provedor (cota, chave, modelo inexistente). É diferente da conferência do "Salvar", que só pergunta ao provedor se o modelo existe, sem gerar texto.
 
 ## 11.4 Fila de modelos
 

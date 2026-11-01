@@ -11,6 +11,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
 import type { z } from 'zod';
+import type { ProviderModel } from '../model-list';
 import { FETCH_LINKS_PROMPT } from '../prompts';
 import { AiTaskError } from '../schemas';
 import {
@@ -89,11 +90,14 @@ export const verifyAnthropicKey = guarded(async (apiKey: string, model: string) 
   await createClient(apiKey).models.retrieve(model);
 });
 
-/** Modelos disponíveis para a chave (consultados ao vivo). */
-export const listAnthropicModels = guarded(async (apiKey: string): Promise<string[]> => {
-  const names: string[] = [];
-  for await (const model of createClient(apiKey).models.list()) names.push(model.id);
-  return names.sort();
+/** Modelos disponíveis para a chave (consultados ao vivo), com nome e data de lançamento. */
+export const listAnthropicModels = guarded(async (apiKey: string): Promise<ProviderModel[]> => {
+  const models: ProviderModel[] = [];
+  for await (const model of createClient(apiKey).models.list()) {
+    const released = Date.parse(model.created_at);
+    models.push({ id: model.id, label: model.display_name || null, released: Number.isNaN(released) ? null : released });
+  }
+  return models;
 });
 
 function toFetchedPage(content: Anthropic.Beta.BetaWebFetchToolResultBlock['content']): FetchedPage {

@@ -8,6 +8,7 @@
  */
 import { ApiError, FinishReason, GoogleGenAI, UrlRetrievalStatus, type Content } from '@google/genai';
 import { z } from 'zod';
+import type { ProviderModel } from '../model-list';
 import { AiTaskError } from '../schemas';
 import {
   normalizeUrl,
@@ -91,19 +92,16 @@ export const verifyGeminiKey = guarded(async (apiKey: string, model: string) => 
   await new GoogleGenAI({ apiKey }).models.get({ model });
 });
 
-/** Modelos de texto disponíveis para a chave (consultados ao vivo). */
-export const listGeminiModels = guarded(async (apiKey: string): Promise<string[]> => {
+/** Modelos disponíveis para a chave (consultados ao vivo); o Gemini não informa data, só o nome. */
+export const listGeminiModels = guarded(async (apiKey: string): Promise<ProviderModel[]> => {
   const pager = await new GoogleGenAI({ apiKey }).models.list({ config: { pageSize: 200 } });
-  const names: string[] = [];
+  const models: ProviderModel[] = [];
   for await (const model of pager) {
-    const name = model.name?.replace(/^models\//, '');
-    // Fora da lista: voz, imagem, transcrição e agentes que não conversam por texto.
-    const textModel =
-      model.supportedActions?.includes('generateContent') &&
-      !/tts|image|banana|transcribe|robotics|computer-use|antigravity|deep-research/i.test(name ?? '');
-    if (name && textModel) names.push(name);
+    const id = model.name?.replace(/^models\//, '');
+    // Só os que geram conteúdo; voz, imagem e agentes saem pelo filtro de model-list.ts.
+    if (id && model.supportedActions?.includes('generateContent')) models.push({ id, label: model.displayName || null, released: null });
   }
-  return names.sort();
+  return models;
 });
 
 // O SDK do Gemini não repete pedidos sozinho; `_options` existe pela interface comum.

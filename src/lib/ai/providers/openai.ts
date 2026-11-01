@@ -8,6 +8,7 @@
 import OpenAI from 'openai';
 import { zodTextFormat } from 'openai/helpers/zod';
 import type { z } from 'zod';
+import type { ProviderModel } from '../model-list';
 import { AiTaskError } from '../schemas';
 import {
   pagesForRequestedUrls,
@@ -76,14 +77,13 @@ export const verifyOpenAiKey = guarded(async (apiKey: string, model: string) => 
   await createClient(apiKey).models.retrieve(model);
 });
 
-export const listOpenAiModels = guarded(async (apiKey: string): Promise<string[]> => {
-  const names: string[] = [];
+/** Modelos disponíveis para a chave (consultados ao vivo); o filtro de texto fica em model-list.ts. */
+export const listOpenAiModels = guarded(async (apiKey: string): Promise<ProviderModel[]> => {
+  const models: ProviderModel[] = [];
   for await (const model of createClient(apiKey).models.list()) {
-    if (/^(gpt-|o\d)/.test(model.id) && !/audio|realtime|transcribe|tts|image|search|embedding/i.test(model.id)) {
-      names.push(model.id);
-    }
+    models.push({ id: model.id, label: null, released: model.created ? model.created * 1000 : null });
   }
-  return names.sort();
+  return models;
 });
 
 export function createOpenAiProvider(apiKey: string, model: string, options: ProviderOptions): AiProvider {

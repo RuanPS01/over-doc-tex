@@ -57,7 +57,7 @@ EditorPage                               pages/editor-page.tsx (papel, convite p
             │   │   └── StructuredResultView
             │   └── AiComposer           seletor de tarefa, texto, enviar ou parar
             └── AiSettingsDialog         "Usar a minha própria IA"
-                └── ModelEntryCard       provedor, modelo (lista ao vivo) e chave, por item da fila
+                └── ModelEntryCard       provedor, modelo (lista do provedor) e chave, por item da fila; botão Testar modelo
 ```
 
 ### 2.2 Responsabilidades e dono de cada estado
@@ -195,5 +195,6 @@ Pontos de atenção:
 | `useExportProject` | editor | Exportação do projeto aberto, usada pela árvore e pelo menu |
 | `useAiConfig` | ai-assistant | Configuração da IA na conta (`users/{uid}/private/ai`) ou no navegador |
 | `useAiStream` | ai-assistant | Conversa com a fila de modelos, deltas por quadro, troca de modelo |
-| `useProviderModels` | ai-assistant | Lista de modelos ao vivo do provedor, com catálogo de reserva |
+| `useProviderModels` | ai-assistant | Lista de modelos do provedor (ao vivo com a chave; senão a última consultada, a pública do deploy ou a embutida) |
+| `useModelTest` | ai-assistant | Pedido curto ao modelo escolhido para saber se ele responde |
 | `useAuth` | auth | Sessão e login |
