@@ -1,10 +1,13 @@
 import { AlertTriangle, ChevronDown, CircleX, Download, FileText, Loader2, Play, ZoomIn, ZoomOut } from 'lucide-react';
+import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useT } from '@/hooks/use-t';
 import { downloadBytes } from '@/lib/download';
 import type { TexIssue } from '@/lib/latex/prepare';
 import { cn } from '@/lib/utils';
+import { usePdfOutline } from '../hooks/use-pdf-outline';
+import { PdfOutlinePanel, PdfOutlineToggle } from './pdf-outline';
 import { PdfPages } from './pdf-pages';
 
 const ZOOM_STEPS = [50, 75, 100, 125, 150, 200] as const;
@@ -33,7 +36,8 @@ const ISSUE_ICONS = { error: CircleX, 'missing-package': CircleX, warning: Alert
 
 /**
  * Visualizador do PDF compilado (pdf.js). A largura das páginas acompanha o
- * painel e o zoom acima de 100% rola apenas DENTRO dele, nunca no body.
+ * painel e o zoom acima de 100% rola apenas DENTRO dele, nunca no body. O
+ * índice do documento começa fechado: a tela do editor já está dividida.
  */
 export function PdfPreviewPanel({
   pdf,
@@ -56,6 +60,16 @@ export function PdfPreviewPanel({
   const [issuesOpen, setIssuesOpen] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [availableWidth, setAvailableWidth] = useState(0);
+  const frameRef = useRef<HTMLDivElement>(null);
+  const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
+  const outline = usePdfOutline({
+    doc,
+    scrollRef,
+    frameRef,
+    storageKey: 'overdoctex.pdf-outline.editor',
+    defaultOpen: false,
+    layoutKey: `${zoom}:${availableWidth}`,
+  });
 
   useEffect(() => {
     const element = scrollRef.current;
@@ -91,7 +105,11 @@ export function PdfPreviewPanel({
   return (
     <section aria-label={t('Pré-visualização do PDF')} className="flex h-full min-w-0 flex-col bg-pdf-canvas">
       <div className="flex h-9 shrink-0 items-center gap-1 border-b bg-background px-2 text-xs text-muted-foreground">
-        <FileText className="size-3.5 shrink-0" />
+        {outline.available ? (
+          <PdfOutlineToggle open={outline.open} className="size-7" onToggle={() => outline.setOpen(!outline.open)} />
+        ) : (
+          <FileText className="size-3.5 shrink-0" />
+        )}
         <span className="min-w-0 truncate">{fileName}</span>
         <span
           role="status"
@@ -132,52 +150,65 @@ export function PdfPreviewPanel({
         </Button>
       </div>
 
-      <div ref={scrollRef} className="relative min-h-0 flex-1 overflow-auto p-3 sm:p-4">
-        {pdf && !viewerError ? (
-          <PdfPages
-            data={pdf}
-            availableWidth={availableWidth}
-            zoom={zoom}
-            onError={setViewerError}
-            onPageSizes={onPageSizes}
-            onPageDoubleClick={onPageDoubleClick}
-            renderOverlay={(page) =>
-              marker?.page === page ? (
-                <span
-                  aria-hidden
-                  style={{ top: `${marker.y * 100}%` }}
-                  className="pointer-events-none absolute inset-x-2 h-5 -translate-y-1/2 animate-pulse rounded bg-annotation-1/40"
-                />
-              ) : null
-            }
+      <div ref={frameRef} className="relative flex min-h-0 flex-1">
+        {outline.open && (
+          <PdfOutlinePanel
+            items={outline.items}
+            activeId={outline.activeId}
+            parents={outline.parents}
+            overlay={outline.overlay}
+            onSelect={outline.goTo}
+            onClose={() => outline.setOpen(false)}
           />
-        ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center text-sm text-muted-foreground">
-            {viewerError ? (
-              <p className="text-destructive">{viewerError}</p>
-            ) : isCompiling ? (
-              <>
-                <Loader2 className="size-6 animate-spin" aria-hidden />
-                <p>{statusLabel}</p>
-              </>
-            ) : (
-              <>
-                <p>{t('O PDF aparece aqui depois da compilação.')}</p>
-                <Button size="sm" onClick={onCompile}>
-                  <Play />
-                  {t('Compilar')}
-                </Button>
-                <p className="text-xs">{t('Atalho: Ctrl+S ou Ctrl+Enter (Cmd no Mac).')}</p>
-              </>
-            )}
-          </div>
         )}
-        {pdf && isCompiling && (
-          <div className="pointer-events-none absolute right-3 top-3 flex items-center gap-2 rounded-md border bg-background px-2 py-1 text-xs shadow-sm">
-            <Loader2 className="size-3.5 animate-spin" aria-hidden />
-            {statusLabel}
-          </div>
-        )}
+        <div ref={scrollRef} className="relative min-h-0 min-w-0 flex-1 overflow-auto p-3 sm:p-4">
+          {pdf && !viewerError ? (
+            <PdfPages
+              data={pdf}
+              availableWidth={availableWidth}
+              zoom={zoom}
+              onError={setViewerError}
+              onPageSizes={onPageSizes}
+              onPageDoubleClick={onPageDoubleClick}
+              onDocument={setDoc}
+              renderOverlay={(page) =>
+                marker?.page === page ? (
+                  <span
+                    aria-hidden
+                    style={{ top: `${marker.y * 100}%` }}
+                    className="pointer-events-none absolute inset-x-2 h-5 -translate-y-1/2 animate-pulse rounded bg-annotation-1/40"
+                  />
+                ) : null
+              }
+            />
+          ) : (
+            <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center text-sm text-muted-foreground">
+              {viewerError ? (
+                <p className="text-destructive">{viewerError}</p>
+              ) : isCompiling ? (
+                <>
+                  <Loader2 className="size-6 animate-spin" aria-hidden />
+                  <p>{statusLabel}</p>
+                </>
+              ) : (
+                <>
+                  <p>{t('O PDF aparece aqui depois da compilação.')}</p>
+                  <Button size="sm" onClick={onCompile}>
+                    <Play />
+                    {t('Compilar')}
+                  </Button>
+                  <p className="text-xs">{t('Atalho: Ctrl+S ou Ctrl+Enter (Cmd no Mac).')}</p>
+                </>
+              )}
+            </div>
+          )}
+          {pdf && isCompiling && (
+            <div className="pointer-events-none absolute right-3 top-3 flex items-center gap-2 rounded-md border bg-background px-2 py-1 text-xs shadow-sm">
+              <Loader2 className="size-3.5 animate-spin" aria-hidden />
+              {statusLabel}
+            </div>
+          )}
+        </div>
       </div>
 
       {issues.length > 0 && (

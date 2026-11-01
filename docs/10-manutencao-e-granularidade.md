@@ -33,6 +33,7 @@ Não há servidor: todo código de produto roda no navegador. O que antes seria 
 | Arquivos soltos e revisão do repositório de pacotes | `src/lib/latex/texlive-files.ts` |
 | Reancoragem de trechos entre versões | `src/lib/pdf/reanchor.ts`; geometria do texto em `src/lib/pdf/page-text.ts` |
 | Âncoras de trecho e desenho (puro) | `src/lib/pdf/text-anchor.ts`, `src/lib/pdf/drawing.ts` |
+| Índice do PDF (marcadores, seção atual) | `src/lib/pdf/outline.ts`; estado e rolagem em `src/features/pdf-viewer/hooks/use-pdf-outline.ts` |
 | Texto das páginas e carregamento do pdf.js | `src/lib/pdf` |
 | Componente que junta várias features (ex.: os diálogos do editor) | Na página da rota (`EditorDialogs` em `src/pages/editor-page.tsx`) ou por slot de props, nunca chamando hook de outra feature num componente |
 | Um pacote LaTeX que o compilador não tem | Nome do pacote do TeX Live em `ROOT_PACKAGES` de `scripts/latex-packages.mjs` (as dependências entram sozinhas). Se for idioma do babel, também em `BABEL_LANGUAGE_PACKAGES` de `src/lib/latex/prepare.ts`; se a versão atual não combinar com o Siglum, um ano em `PINNED_YEARS` |

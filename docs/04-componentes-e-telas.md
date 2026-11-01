@@ -74,7 +74,7 @@ EditorPage                               pages/editor-page.tsx (papel, convite p
 | `CodeEditorPanel` | Monaco com LaTeX e tema dos tokens | modelos do Monaco (por `path`) | `useProjectFiles`, store |
 | `CompileStoreProvider` | Compilar o projeto e guardar o resultado | compilando, etapa, último PDF bom, último resultado | `useLatexCompile` |
 | `PdfPane` | Passar estado e ações da compilação ao visualizador | nenhum | `useCompileStore`, `useProjectFiles` |
-| `PdfPreviewPanel` | Páginas do PDF (pdf.js), zoom, download, andamento e lista de erros com arquivo e linha | zoom, lista aberta | props |
+| `PdfPreviewPanel` | Páginas do PDF (pdf.js), zoom, download, andamento e lista de erros com arquivo e linha. Índice do documento (`PdfOutlinePanel`) recolhível pelo botão no começo da barra, fechado por padrão porque a tela já está dividida | zoom, lista aberta, índice aberto (lembrado em `overdoctex.pdf-outline.editor`) | props |
 | `AiAssistantPanel` | Conter o chat no formato certo para o layout. O botão "Assistente de IA" do cabeçalho liga e desliga o assistente. No desktop, ligado e encaixado no rodapé (à direita por padrão, à esquerda ou no meio), ele é uma aba (`DockedAssistant`, veja abaixo); solto, é uma janela de até 420 x 640 arrastada pelo título, sem sair da tela nem subir sobre o cabeçalho. O botão de encaixe escolhe a posição ou "Janela solta" (também pelo teclado). Posição lembrada neste navegador (`overdoctex.ai-window`); lógica pura em `model/assistant-window.ts` | conversa (`useAiStream`), diálogo de configuração aberto, posição da janela (`useAssistantWindow`) | `useAiConfig`; `files`, `open` e `onOpenChange` vêm do `EditorShell` por props |
 | `DockedAssistant` | Assistente encaixado como aba no rodapé. Só a aba ("Assistente", 28px de altura) fica na tela; o mouse em cima faz a aba crescer até virar a janela (a aba e a janela são o mesmo elemento, e o conteúdo já está na largura final, revelado pelo recorte com opacidade e desfoque), e ela volta à aba se o mouse sair sem interação (350 ms de espera). Os controles laterais ficam no lugar final e só aparecem e somem, sem acompanhar o crescimento. Ligar pelo cabeçalho também anima a aba crescendo. Clique, foco ou digitação dentro fixam a janela até "Ocultar" (botão ao lado) ou Esc; clicar na aba abre fixada com o cursor no campo. Aberta, ocupa pouco: até 560px de largura, altura pelo conteúdo (151px sem conversa), conversa com teto de 45% da tela (até 380px), sugestões de tarefa antes da primeira mensagem e campo de uma linha. Ao lado ficam Ocultar, o encaixe e "Mais" (Nova conversa, Configurar a minha IA, Desligar o assistente). A aba mostra quando a IA está respondendo e acende um ponto quando chega resposta com a janela oculta. Arrastar a alça de cima solta a janela: o arraste só começa depois de o ponteiro andar 4px (um clique na alça não solta nada), a janela solta nasce com o cabeçalho debaixo do cursor e acompanha até o botão ser solto. O arraste ouve o ponteiro na janela do navegador, não no elemento clicado, porque a alça sai da tela quando a janela vira solta; ele também termina se o botão já estiver solto ou o navegador perder o foco. Estados em `nextDockReveal` (puro) e `useDockReveal` | revelação (aba, espiando, fixada), tarefa escolhida, última resposta vista | conversa e posição vêm do `AiAssistantPanel` |
 | `AiSettingsDialog` | Editar e validar a fila de modelos | rascunho da fila, erros por item | `useAiConfig` |
@@ -104,7 +104,7 @@ O código está em `src/features/editor/components/` e as regras completas em `0
 ReviewPage                               pages/review-page.tsx: membro entra como autor, quem não é membro como revisor
 └── ReviewWorkspace                      .h-viewport, mesma casca do editor
     ├── ReviewHeader                     "#1 título", versão, status; aprovar, pedir alterações, encerrar ou reabrir; Envio (dono e editores); nome do visitante; ThemeMenu; NotificationBell
-    ├── PdfDocumentView                  features/pdf-viewer (pdf.js) com a camada de texto ligada, zoom e download
+    ├── PdfDocumentView                  features/pdf-viewer (pdf.js) com a camada de texto ligada, zoom, download e o índice do documento aberto por padrão
     │   ├── título                       seletor de documento quando a revisão concede mais de um
     │   ├── ferramentas                  Selecionar texto | Ponto | Desenhar (na barra do PDF)
     │   └── AnnotationLayer (por página) destaques dos trechos, desenhos em SVG, pins numerados e a marcação pendente
@@ -118,6 +118,7 @@ ReviewPage                               pages/review-page.tsx: membro entra com
 
 Pontos de atenção:
 
+- **Índice do documento:** na revisão, o índice (marcadores do PDF) abre por padrão ao lado das páginas para guiar a leitura; a escolha de fechar fica lembrada neste navegador (`overdoctex.pdf-outline.review`). Num visualizador estreito (celular), começa fechado e abre por cima do PDF.
 - **Coordenadas normalizadas:** destaques, traços e pins usam valores de 0 a 1, então zoom e tamanho de tela não exigem recalcular nada no banco. Os traços são SVG com `vector-effect: non-scaling-stroke`.
 - **Camadas:** canvas, camada de texto do pdf.js (spans transparentes) e `AnnotationLayer` por cima. Em "Selecionar texto" a camada de anotação deixa o ponteiro passar (`pointer-events: none`), menos nos pins; em "Desenhar" ela captura o ponteiro com `touch-action: none` só sobre a página.
 - **Comentário em trecho:** a âncora junta os retângulos da seleção (por linha), a citação com 32 caracteres de contexto e a posição no texto da página (o mesmo `.pages` da versão).
@@ -139,7 +140,7 @@ Pontos de atenção:
 | `ResizablePanelGroup`, `ResizablePanel`, `ResizableHandle` | react-resizable-panels 4 | Área de arraste maior que a linha visível |
 | `Textarea` | nativo | Compositor da IA |
 | `Input` | nativo | Chaves de API, nomes de pasta, login |
-| `Dialog` | Radix Dialog | Largura e altura limitadas à janela; título com `pr-8` para o botão de fechar; rodapé empilha no celular |
+| `Dialog` | Radix Dialog | Largura e altura limitadas à janela; título com `pr-8` para o botão de fechar; rodapé empilha no celular. `closeClassName` reposiciona o X quando o diálogo tem barra própria no topo (no PDF da versão, o X fica no meio da barra de 40px) |
 | `Select` | Radix Select | Lista em `popper` com a largura do gatilho; item marcado com fundo primário e ícone de check |
 
 ### Genéricos (`src/components/common`)
@@ -158,7 +159,7 @@ Pontos de atenção:
 | Feature | Componentes |
 | --- | --- |
 | `editor` | `EditorShell`, `EditorHeader`, `DesktopWorkspace`, `MobileWorkspace`, `PaneSwitcher`, `FileTreePanel`, `FileTreeSheet`, `FileActionsDialogs`, `FileNameDialog`, `CodeEditorPanel`, `PdfPane`, `ImportDialog` |
-| `pdf-viewer` | `PdfPreviewPanel` (compilação, marca da busca do SyncTeX, duplo clique), `PdfDocumentView` (PDF pronto, com zoom e download), `PdfPages` (pdf.js, páginas desenhadas perto da área visível, camada de texto opcional, camada por página via `renderOverlay`, tamanhos das páginas e duplo clique) |
+| `pdf-viewer` | `PdfPreviewPanel` (compilação, marca da busca do SyncTeX, duplo clique), `PdfDocumentView` (PDF pronto, com zoom e download), `PdfPages` (pdf.js, páginas desenhadas perto da área visível, camada de texto opcional, camada por página via `renderOverlay`, tamanhos das páginas, duplo clique e o documento aberto via `onDocument`), `PdfOutlinePanel` e `PdfOutlineToggle` (índice do documento, como o do leitor do Chrome: hierarquia recolhível, seção atual marcada, níveis acima dela abertos sozinhos e a seção visível na lista; o clique rola até ela, que continua marcada até a rolagem chegar; ao lado das páginas a partir de 520px de largura, por cima delas abaixo disso, fechando ao escolher). Estado em `usePdfOutline`; leitura e regras puras em `src/lib/pdf/outline.ts` |
 | `ai-assistant` | `AiAssistantPanel`, `DockedAssistant`, `DockMenu`, `AiSettingsDialog`, `ModelEntryCard`, `AiMessage`, `AiComposer`, `StructuredResultView` |
 | `auth` | `AuthProvider`, `RequireAuth` |
 | `projects` | `ProjectList`, `DemoProjectList`, `NewProjectDialog`, `ProjectSettingsDialog`, `ProjectDocumentsSection` |

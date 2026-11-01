@@ -289,6 +289,8 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
             actions={tools}
             textLayer
             onPageSizes={setPageSizes}
+            outlineKey="review"
+            outlineDefaultOpen
             fileName={`${slugify(review.projectName)}-v${review.snapshotLabel}${documentId === 'main' ? '' : `-${slugify(currentDocument?.title ?? documentId)}`}.pdf`}
             renderOverlay={(page) => (
               <AnnotationLayer
