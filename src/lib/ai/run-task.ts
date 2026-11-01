@@ -1,5 +1,6 @@
+import { t } from '@/lib/i18n';
 import { orderByHealth, recordFailure, recordSuccess } from './model-chain';
-import { SYSTEM_PROMPTS, buildUserMessage } from './prompts';
+import { buildUserMessage, systemPrompt } from './prompts';
 import { PROVIDERS, createProvider, resolveChain, resolveModel } from './providers';
 import type { AiProvider } from './providers/types';
 import { buildOutline, chunkSource, rankChunks, selectSectionLeads, selectWithinBudget, toTextSources } from './rag';
@@ -31,9 +32,9 @@ const entryLabel = (entry: AiModelConfig) => `${PROVIDERS[entry.provider].label}
 function toFailure(error: unknown, attemptSignal: AbortSignal): AiTaskError {
   if (attemptSignal.aborted) {
     // Estouro de prazo conta como indisponibilidade: o item pausa e a reserva assume.
-    return new AiTaskError('upstream', 'O modelo demorou demais para responder.', true);
+    return new AiTaskError('upstream', t('O modelo demorou demais para responder.'), true);
   }
-  return error instanceof AiTaskError ? error : new AiTaskError('internal', 'Erro inesperado ao gerar a resposta.', false);
+  return error instanceof AiTaskError ? error : new AiTaskError('internal', t('Erro inesperado ao gerar a resposta.'), false);
 }
 
 /**
@@ -49,7 +50,7 @@ function toFailure(error: unknown, attemptSignal: AbortSignal): AiTaskError {
 export async function* runAiTask(options: RunAiTaskOptions): AsyncGenerator<AiEvent> {
   const chain = orderByHealth(resolveChain(options.config));
   if (chain.length === 0) {
-    throw new AiTaskError('not_configured', 'Configure a sua IA para usar o assistente.', false);
+    throw new AiTaskError('not_configured', t('Configure a sua IA para usar o assistente.'), false);
   }
 
   let firstFailure: AiTaskError | null = null;
@@ -69,7 +70,7 @@ export async function* runAiTask(options: RunAiTaskOptions): AsyncGenerator<AiEv
         if (options.signal.aborted) throw error;
         const failure = toFailure(error, attemptSignal);
         if (failure.code === 'invalid_output' && attempt === 0) {
-          yield { type: 'status', stage: 'validating', message: 'Formato inválido na resposta. Pedindo de novo.' };
+          yield { type: 'status', stage: 'validating', message: t('Formato inválido na resposta. Pedindo de novo.') };
           continue;
         }
         firstFailure ??= failure;
@@ -77,19 +78,19 @@ export async function* runAiTask(options: RunAiTaskOptions): AsyncGenerator<AiEv
         // Resposta longa demais se repetiria em outro modelo: para aqui.
         if (failure.code === 'truncated') throw failure;
         if (!next) throw firstFailure;
-        yield { type: 'switch', message: `${entryLabel(entry)}: ${failure.message} Tentando ${entryLabel(next)}.` };
+        yield { type: 'switch', message: t('{model}: {reason} Tentando {next}.', { model: entryLabel(entry), reason: failure.message, next: entryLabel(next) }) };
         break;
       }
     }
   }
-  throw firstFailure ?? new AiTaskError('internal', 'Nenhum modelo respondeu.', false);
+  throw firstFailure ?? new AiTaskError('internal', t('Nenhum modelo respondeu.'), false);
 }
 
 async function* execute({ input, files, signal }: RunAiTaskOptions, provider: AiProvider): AsyncGenerator<AiEvent> {
   const config = TASKS[input.task];
   const servedBy = { provider: PROVIDERS[provider.id].label, model: provider.model };
 
-  yield { type: 'status', stage: 'retrieving', message: 'Buscando trechos relevantes do projeto' };
+  yield { type: 'status', stage: 'retrieving', message: t('Buscando trechos relevantes do projeto') };
   const sources = toTextSources(files);
 
   if (input.task === 'checkReferences') {
@@ -116,7 +117,7 @@ async function* execute({ input, files, signal }: RunAiTaskOptions, provider: Ai
   };
 
   const generation = {
-    system: SYSTEM_PROMPTS[input.task],
+    system: systemPrompt(input.task),
     messages: [
       ...input.history,
       { role: 'user' as const, content: buildUserMessage({ request: input, chunks: selected, outline }) },
@@ -126,19 +127,19 @@ async function* execute({ input, files, signal }: RunAiTaskOptions, provider: Ai
   };
 
   if (input.task === 'reorganizeTopics' || input.task === 'updateToc') {
-    yield { type: 'status', stage: 'generating', message: 'Analisando a estrutura do documento' };
+    yield { type: 'status', stage: 'generating', message: t('Analisando a estrutura do documento') };
     const { data, usage } = await provider.generateStructured(generation, OutlineProposalSchema, signal);
-    yield { type: 'status', stage: 'validating', message: 'Validando a proposta' };
+    yield { type: 'status', stage: 'validating', message: t('Validando a proposta') };
     yield { type: 'result', result: AiStructuredResultSchema.parse({ task: input.task, data }) };
     yield { type: 'done', stopReason: 'end_turn', usage, servedBy };
     return;
   }
 
-  yield { type: 'status', stage: 'generating', message: 'Escrevendo' };
+  yield { type: 'status', stage: 'generating', message: t('Escrevendo') };
   for await (const event of provider.streamText(generation, signal)) {
     if (event.type === 'delta') yield event;
     else if (event.type === 'fallback') {
-      yield { type: 'status', stage: 'fallback', message: 'Continuando com um modelo alternativo do provedor' };
+      yield { type: 'status', stage: 'fallback', message: t('Continuando com um modelo alternativo do provedor') };
     } else yield { type: 'done', stopReason: event.stopReason, usage: event.usage, servedBy };
   }
 }

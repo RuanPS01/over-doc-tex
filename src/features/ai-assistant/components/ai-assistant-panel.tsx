@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet';
 import type { LayoutMode } from '@/hooks/use-layout-mode';
+import { useT } from '@/hooks/use-t';
 import { isConfigUsable } from '@/lib/ai/providers';
 import type { AiSourceFile } from '@/lib/ai/schemas';
 import { cn } from '@/lib/utils';
@@ -38,6 +39,7 @@ interface AiChatProps {
 }
 
 function AiChat({ chat, state, onOpenSettings, onClose, compact = false, headerProps, windowControls }: AiChatProps) {
+  const { t } = useT();
   const listRef = useRef<HTMLDivElement>(null);
   const lastText = chat.messages.at(-1)?.text;
 
@@ -54,15 +56,15 @@ function AiChat({ chat, state, onOpenSettings, onClose, compact = false, headerP
       >
         {headerProps && <GripHorizontal className="size-4 shrink-0 text-muted-foreground" aria-hidden />}
         <Sparkles className="size-4 shrink-0 text-primary" />
-        <h2 className={cn('min-w-0 flex-1 truncate pl-1 font-semibold', compact ? 'text-xs' : 'text-sm')}>Assistente</h2>
+        <h2 className={cn('min-w-0 flex-1 truncate pl-1 font-semibold', compact ? 'text-xs' : 'text-sm')}>{t('Assistente')}</h2>
         {windowControls}
-        <Button variant="ghost" size="icon" className={cn(compact && 'size-8')} aria-label="Configurar a minha IA" onClick={onOpenSettings}>
+        <Button variant="ghost" size="icon" className={cn(compact && 'size-8')} aria-label={t('Configurar a minha IA')} onClick={onOpenSettings}>
           <Settings2 />
         </Button>
-        <Button variant="ghost" size="icon" className={cn(compact && 'size-8')} aria-label="Nova conversa" onClick={chat.reset}>
+        <Button variant="ghost" size="icon" className={cn(compact && 'size-8')} aria-label={t('Nova conversa')} onClick={chat.reset}>
           <RotateCcw />
         </Button>
-        <Button variant="ghost" size="icon" className={cn(compact && 'size-8')} aria-label="Fechar assistente" onClick={onClose}>
+        <Button variant="ghost" size="icon" className={cn(compact && 'size-8')} aria-label={t('Fechar assistente')} onClick={onClose}>
           <X />
         </Button>
       </div>
@@ -70,24 +72,22 @@ function AiChat({ chat, state, onOpenSettings, onClose, compact = false, headerP
       {state === 'loading' ? (
         <p className="m-auto flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="size-4 animate-spin" />
-          Carregando a sua configuração de IA
+          {t('Carregando a sua configuração de IA')}
         </p>
       ) : state === 'unconfigured' ? (
         <div className="m-auto flex max-w-xs flex-col items-center gap-3 p-4 text-center">
           <Sparkles className="size-6 text-primary" />
           <p className="text-sm text-muted-foreground">
-            O assistente usa a sua própria IA. Escolha o provedor (Claude, OpenAI ou Gemini) e cole a sua chave de API para
-            começar.
+            {t('O assistente usa a sua própria IA. Escolha o provedor (Claude, OpenAI ou Gemini) e cole a sua chave de API para começar.')}
           </p>
-          <Button onClick={onOpenSettings}>Configurar a minha IA</Button>
+          <Button onClick={onOpenSettings}>{t('Configurar a minha IA')}</Button>
         </div>
       ) : (
         <>
           <div ref={listRef} className={cn('flex min-h-0 flex-1 flex-col overflow-y-auto', compact ? 'gap-3 p-2 text-[13px]' : 'gap-4 p-3')}>
             {chat.messages.length === 0 && (
               <p className="m-auto max-w-xs text-center text-sm text-muted-foreground">
-                Peça para reescrever um trecho, gerar um rascunho a partir dos capítulos ou verificar se as
-                referências estão acessíveis.
+                {t('Peça para reescrever um trecho, gerar um rascunho a partir dos capítulos ou verificar se as referências estão acessíveis.')}
               </p>
             )}
             {chat.messages.map((message) => (
@@ -105,6 +105,7 @@ const DOCK_VALUE_FLOATING = 'floating';
 
 /** Encaixe da janela: rodapé à esquerda, no meio, à direita ou janela solta. */
 function DockMenu({ state, compact, onDock, onUndock }: { state: AssistantWindowState; compact: boolean; onDock: (dock: DockPosition) => void; onUndock: () => void }) {
+  const { t } = useT();
   const value = state.mode === 'docked' ? state.dock : DOCK_VALUE_FLOATING;
   return (
     <DropdownMenu>
@@ -113,14 +114,14 @@ function DockMenu({ state, compact, onDock, onUndock }: { state: AssistantWindow
           variant="ghost"
           size="icon"
           className={cn(compact && 'size-8')}
-          aria-label={state.mode === 'docked' ? 'Encaixe da janela (encaixada no rodapé)' : 'Encaixe da janela (solta)'}
-          title="Encaixar no rodapé ou soltar"
+          aria-label={state.mode === 'docked' ? t('Encaixe da janela (encaixada no rodapé)') : t('Encaixe da janela (solta)')}
+          title={t('Encaixar no rodapé ou soltar')}
         >
           {state.mode === 'docked' ? <PanelBottom /> : <AppWindow />}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuLabel>Posição do assistente</DropdownMenuLabel>
+        <DropdownMenuLabel>{t('Posição do assistente')}</DropdownMenuLabel>
         <DropdownMenuRadioGroup
           value={value}
           onValueChange={(next) => {
@@ -130,10 +131,10 @@ function DockMenu({ state, compact, onDock, onUndock }: { state: AssistantWindow
         >
           {DOCK_POSITIONS.map((position) => (
             <DropdownMenuRadioItem key={position.value} value={position.value}>
-              {position.label}
+              {t(position.label)}
             </DropdownMenuRadioItem>
           ))}
-          <DropdownMenuRadioItem value={DOCK_VALUE_FLOATING}>Janela solta (arraste pelo título)</DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value={DOCK_VALUE_FLOATING}>{t('Janela solta (arraste pelo título)')}</DropdownMenuRadioItem>
         </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -163,6 +164,7 @@ interface AiAssistantPanelProps {
  * Os hooks ficam acima do condicional, então fechar o painel não perde a conversa.
  */
 export function AiAssistantPanel({ layoutMode, open, onOpenChange, files }: AiAssistantPanelProps) {
+  const { t } = useT();
   const { config, isLoading } = useAiConfig();
   const chat = useAiStream({ config, files });
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -181,7 +183,7 @@ export function AiAssistantPanel({ layoutMode, open, onOpenChange, files }: AiAs
       <>
       {settings}
       <aside
-        aria-label="Assistente de IA"
+        aria-label={t('Assistente de IA')}
         data-dock={docked ?? 'floating'}
         style={{ width: windowState.size.width, height: windowState.size.height, ...(position ? { left: position.x, top: position.y } : {}) }}
         className={cn(
@@ -200,7 +202,7 @@ export function AiAssistantPanel({ layoutMode, open, onOpenChange, files }: AiAs
           headerProps={{
             ...windowState.dragHandleProps,
             className: cn('touch-none', windowState.isDragging ? 'cursor-grabbing' : 'cursor-grab'),
-            title: 'Arraste para mover a janela',
+            title: t('Arraste para mover a janela'),
           }}
           windowControls={
             <DockMenu state={windowState.state} compact={docked !== null} onDock={windowState.dock} onUndock={windowState.undock} />
@@ -217,8 +219,8 @@ export function AiAssistantPanel({ layoutMode, open, onOpenChange, files }: AiAs
     {settings}
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="bottom" showClose={false} className="h-[85dvh] gap-0 p-0">
-        <SheetTitle className="sr-only">Assistente de IA</SheetTitle>
-        <SheetDescription className="sr-only">Converse com a IA sobre o documento.</SheetDescription>
+        <SheetTitle className="sr-only">{t('Assistente de IA')}</SheetTitle>
+        <SheetDescription className="sr-only">{t('Converse com a IA sobre o documento.')}</SheetDescription>
         {content}
       </SheetContent>
     </Sheet>

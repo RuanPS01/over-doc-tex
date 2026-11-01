@@ -10,15 +10,17 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { Textarea } from '@/components/ui/textarea';
+import { useT } from '@/hooks/use-t';
+import { msg } from '@/lib/i18n';
 
 export const TASK_LABELS: Record<AiTask, string> = {
-  chat: 'Perguntar',
-  rewriteText: 'Reescrever',
-  paraphrase: 'Parafrasear',
-  generateDraft: 'Gerar rascunho',
-  reorganizeTopics: 'Reorganizar tópicos',
-  updateToc: 'Atualizar sumário',
-  checkReferences: 'Verificar referências',
+  chat: msg('Perguntar'),
+  rewriteText: msg('Reescrever'),
+  paraphrase: msg('Parafrasear'),
+  generateDraft: msg('Gerar rascunho'),
+  reorganizeTopics: msg('Reorganizar tópicos'),
+  updateToc: msg('Atualizar sumário'),
+  checkReferences: msg('Verificar referências'),
 };
 
 interface AiComposerProps {
@@ -30,6 +32,7 @@ interface AiComposerProps {
 }
 
 export function AiComposer({ compact = false, isStreaming, onSend, onStop }: AiComposerProps) {
+  const { t } = useT();
   const [task, setTask] = useState<AiTask>('chat');
   const [prompt, setPrompt] = useState('');
 
@@ -54,34 +57,34 @@ export function AiComposer({ compact = false, isStreaming, onSend, onStop }: AiC
         value={prompt}
         onChange={(event) => setPrompt(event.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder="Pergunte qualquer coisa sobre o documento"
+        placeholder={t('Pergunte qualquer coisa sobre o documento')}
         rows={compact ? 1 : 2}
         className={cn('resize-none', compact ? 'max-h-28 min-h-9 py-1.5 text-sm' : 'max-h-40')}
-        aria-label="Mensagem para o assistente"
+        aria-label={t('Mensagem para o assistente')}
       />
       <div className="flex items-center gap-2">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button type="button" variant="outline" size="sm" className={cn('min-w-0', compact && 'h-8 text-xs')}>
-              <span className="truncate">{TASK_LABELS[task]}</span>
+              <span className="truncate">{t(TASK_LABELS[task])}</span>
               <ChevronDown />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" side="top">
             {(Object.keys(TASK_LABELS) as AiTask[]).map((option) => (
               <DropdownMenuItem key={option} onSelect={() => setTask(option)}>
-                {TASK_LABELS[option]}
+                {t(TASK_LABELS[option])}
               </DropdownMenuItem>
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
         <span className="flex-1" />
         {isStreaming ? (
-          <Button type="button" size="icon" variant="secondary" className={cn(compact && 'size-8')} aria-label="Parar" onClick={onStop}>
+          <Button type="button" size="icon" variant="secondary" className={cn(compact && 'size-8')} aria-label={t('Parar')} onClick={onStop}>
             <Square />
           </Button>
         ) : (
-          <Button type="submit" size="icon" className={cn(compact && 'size-8')} aria-label="Enviar" disabled={!prompt.trim()}>
+          <Button type="submit" size="icon" className={cn(compact && 'size-8')} aria-label={t('Enviar')} disabled={!prompt.trim()}>
             <ArrowUp />
           </Button>
         )}

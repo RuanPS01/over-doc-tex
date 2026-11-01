@@ -1,4 +1,5 @@
-import { SYSTEM_PROMPTS } from '../prompts';
+import { t } from '@/lib/i18n';
+import { systemPrompt } from '../prompts';
 import { PROVIDERS } from '../providers';
 import { addUsage, type AiProvider, type FetchedPage } from '../providers/types';
 import type { TextSource } from '../rag';
@@ -30,7 +31,7 @@ export async function* runReferenceCheck(
   const references = collectReferences(sources, MAX_REFERENCES);
   const urls = [...new Set(references.flatMap((ref) => (ref.url ? [ref.url] : [])))];
 
-  yield { type: 'status', stage: 'checking_links', message: `Abrindo ${urls.length} links` };
+  yield { type: 'status', stage: 'checking_links', message: t('Abrindo {count} links', { count: urls.length }) };
   const fetched = urls.length > 0 ? await provider.fetchLinks(urls, signal) : null;
   const pageOf = (url: string | null): FetchedPage | null => (url ? (fetched?.pages.get(url) ?? null) : null);
 
@@ -45,10 +46,10 @@ export async function* runReferenceCheck(
     };
   });
 
-  yield { type: 'status', stage: 'generating', message: 'Comparando referências e conteúdo' };
+  yield { type: 'status', stage: 'generating', message: t('Comparando referências e conteúdo') };
   const { data, usage } = await provider.generateStructured(
     {
-      system: SYSTEM_PROMPTS.checkReferences,
+      system: systemPrompt('checkReferences'),
       messages: [
         {
           role: 'user',
@@ -62,7 +63,7 @@ export async function* runReferenceCheck(
     signal,
   );
 
-  yield { type: 'status', stage: 'validating', message: 'Validando o relatório' };
+  yield { type: 'status', stage: 'validating', message: t('Validando o relatório') };
   const judgements = new Map(data.judgements.map((item) => [item.key, item]));
   const results: ReferenceAudit['results'] = payload.map((item) => {
     const judgement = judgements.get(item.key);
@@ -78,7 +79,7 @@ export async function* runReferenceCheck(
         : item.link === 'ok'
           ? (judgement?.verdict ?? 'uncertain')
           : 'uncertain',
-      explanation: judgement?.explanation ?? 'Sem avaliação para esta referência.',
+      explanation: judgement?.explanation ?? t('Sem avaliação para esta referência.'),
     };
   });
   const audit = ReferenceAuditSchema.parse({

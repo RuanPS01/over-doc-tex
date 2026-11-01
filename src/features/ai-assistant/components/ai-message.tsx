@@ -1,10 +1,12 @@
 import { AlertCircle, Loader2 } from 'lucide-react';
 import { MarkdownContent } from '@/components/common/markdown-content';
+import { useT } from '@/hooks/use-t';
 import { cn } from '@/lib/utils';
 import type { AiChatMessage } from '../hooks/use-ai-stream';
 import { StructuredResultView } from './structured-result-view';
 
 export function AiMessage({ message }: { message: AiChatMessage }) {
+  const { t } = useT();
   if (message.role === 'user') {
     return (
       <div className="ml-8 self-end rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground">
@@ -25,10 +27,10 @@ export function AiMessage({ message }: { message: AiChatMessage }) {
       {message.result && <StructuredResultView result={message.result} />}
       {message.status === 'complete' && (message.sources.length > 0 || message.servedBy) && (
         <p className="truncate text-[11px] text-muted-foreground">
-          {message.servedBy && `Respondido por ${message.servedBy}`}
+          {message.servedBy && t('Respondido por {model}', { model: message.servedBy })}
           {message.servedBy && message.sources.length > 0 && '. '}
           {message.sources.length > 0 &&
-            `Fontes: ${message.sources.map((source) => `${source.path}:${source.startLine}`).join(', ')}`}
+            t('Fontes: {sources}', { sources: message.sources.map((source) => `${source.path}:${source.startLine}`).join(', ') })}
         </p>
       )}
       {message.error && (

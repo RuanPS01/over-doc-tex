@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { fromIds, parseModelCatalog, prepareModelList, type ModelCatalog, type ProviderModel } from '@/lib/ai/model-list';
 import { PROVIDERS, type AiProviderId } from '@/lib/ai/providers';
 import { AiTaskError } from '@/lib/ai/schemas';
+import { t } from '@/lib/i18n';
 
 /** De onde veio a lista mostrada, da mais confiável para a menos. */
 export type ModelListSource = 'live' | 'remembered' | 'catalog' | 'embedded';
@@ -91,7 +92,7 @@ export function useProviderModels(provider: AiProviderId, apiKey: string): Provi
   const catalog = useQuery({ queryKey: ['ai-model-catalog'], queryFn: loadCatalog, staleTime: Number.POSITIVE_INFINITY, retry: false });
 
   const base = { isFetching: live.isFetching, canRefresh, refresh: () => void live.refetch() };
-  const error = live.isError ? (live.error instanceof AiTaskError ? live.error.message : 'Não foi possível consultar o provedor.') : null;
+  const error = live.isError ? (live.error instanceof AiTaskError ? live.error.message : t('Não foi possível consultar o provedor.')) : null;
 
   if (live.data && live.data.length > 0) {
     return { ...base, models: live.data, source: 'live', checkedAt: live.dataUpdatedAt, error: null };

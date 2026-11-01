@@ -1,3 +1,4 @@
+import { msg, t } from '@/lib/i18n';
 import type { ProviderModel } from '../model-list';
 import { AiTaskError, type AiConfig, type AiModelConfig } from '../schemas';
 import { ANTHROPIC_MODEL, GEMINI_DEFAULT_MODEL, OPENAI_DEFAULT_MODEL } from './defaults';
@@ -31,7 +32,7 @@ interface ProviderInfo {
 function lazy<T>(load: () => Promise<T>): () => Promise<T> {
   return () =>
     load().catch(() => {
-      throw new AiTaskError('network', 'Não foi possível carregar o provedor de IA. Verifique a conexão e recarregue a página.', true);
+      throw new AiTaskError('network', t('Não foi possível carregar o provedor de IA. Verifique a conexão e recarregue a página.'), true);
     });
 }
 
@@ -58,7 +59,7 @@ export const PROVIDERS: Record<AiProviderId, ProviderInfo> = {
     catalog: [OPENAI_DEFAULT_MODEL, 'gpt-5-mini'],
     keyUrl: 'https://platform.openai.com/api-keys',
     matchesKey: (key) => key.startsWith('sk-') && !key.startsWith('sk-ant-'),
-    note: 'A verificação de links das referências não está disponível com a OpenAI.',
+    note: msg('A verificação de links das referências não está disponível com a OpenAI.'),
     verifyKey: async (apiKey, model) => (await loadOpenAi()).verifyOpenAiKey(apiKey, model),
     listModels: async (apiKey) => (await loadOpenAi()).listOpenAiModels(apiKey),
     create: async (apiKey, model, options) => (await loadOpenAi()).createOpenAiProvider(apiKey, model, options),
@@ -69,7 +70,7 @@ export const PROVIDERS: Record<AiProviderId, ProviderInfo> = {
     catalog: [GEMINI_DEFAULT_MODEL, 'gemini-flash-latest', 'gemini-pro-latest', 'gemini-2.5-flash', 'gemini-2.5-pro'],
     keyUrl: 'https://aistudio.google.com/apikey',
     matchesKey: (key) => key.startsWith('AIza') || key.startsWith('AQ.'),
-    note: 'No nível gratuito da API do Gemini, o Google pode usar o conteúdo enviado para melhorar os produtos dele. Evite textos confidenciais com chave gratuita.',
+    note: msg('No nível gratuito da API do Gemini, o Google pode usar o conteúdo enviado para melhorar os produtos dele. Evite textos confidenciais com chave gratuita.'),
     verifyKey: async (apiKey, model) => (await loadGemini()).verifyGeminiKey(apiKey, model),
     listModels: async (apiKey) => (await loadGemini()).listGeminiModels(apiKey),
     create: async (apiKey, model, options) => (await loadGemini()).createGeminiProvider(apiKey, model, options),

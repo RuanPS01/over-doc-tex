@@ -4,6 +4,8 @@
  * janela. Encaixada, ela tem o mesmo tamanho nas três posições.
  */
 
+import { msg } from '@/lib/i18n';
+
 export type DockPosition = 'left' | 'center' | 'right';
 
 export type AssistantWindowState = { mode: 'docked'; dock: DockPosition } | { mode: 'floating'; x: number; y: number };
@@ -11,9 +13,9 @@ export type AssistantWindowState = { mode: 'docked'; dock: DockPosition } | { mo
 export const DEFAULT_ASSISTANT_WINDOW: AssistantWindowState = { mode: 'docked', dock: 'right' };
 
 export const DOCK_POSITIONS: readonly { value: DockPosition; label: string }[] = [
-  { value: 'left', label: 'Encaixar à esquerda' },
-  { value: 'center', label: 'Encaixar no meio' },
-  { value: 'right', label: 'Encaixar à direita' },
+  { value: 'left', label: msg('Encaixar à esquerda') },
+  { value: 'center', label: msg('Encaixar no meio') },
+  { value: 'right', label: msg('Encaixar à direita') },
 ];
 
 interface Size {

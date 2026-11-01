@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AiModelConfig } from '@/lib/ai/providers';
 import { AiTaskError } from '@/lib/ai/schemas';
 import { testModel, type ModelTestResult } from '@/lib/ai/test-model';
+import { t } from '@/lib/i18n';
 
 export type ModelTestState =
   | { status: 'idle' }
@@ -36,7 +37,7 @@ export function useModelTest(entry: AiModelConfig) {
       if (!current.signal.aborted) setState({ status: 'ok', result });
     } catch (error) {
       if (current.signal.aborted) return;
-      setState({ status: 'error', message: error instanceof AiTaskError ? error.message : 'O modelo não respondeu. Confira a chave, o nome do modelo e a conexão.' });
+      setState({ status: 'error', message: error instanceof AiTaskError ? error.message : t('O modelo não respondeu. Confira a chave, o nome do modelo e a conexão.') });
     }
   }, [entry]);
 
