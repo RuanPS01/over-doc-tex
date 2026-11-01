@@ -7,6 +7,7 @@ import {
   dockedMessagesMaxHeight,
   dockedPanelWidth,
   dockedPosition,
+  dockMorphTransitions,
   nextDockReveal,
   parseAssistantWindow,
 } from '@/features/ai-assistant/model/assistant-window';
@@ -59,5 +60,25 @@ describe('janela do assistente', () => {
     expect(dockedMessagesMaxHeight(viewport)).toBe(360);
     expect(dockedMessagesMaxHeight({ width: 1280, height: 1200 })).toBe(380);
     expect(dockedMessagesMaxHeight({ width: 1280, height: 300 })).toBe(160);
+  });
+
+  it('a aba cresce até virar a janela: conteúdo depois do crescimento, controles parados só no fim', () => {
+    const delayOf = (transition: string, property: string) => {
+      const part = transition.split(/,\s*(?![^(]*\))/).find((item) => item.startsWith(property)) ?? '';
+      const times = part.match(/\d+(?:ms|s)/g) ?? [];
+      return times.length > 1 ? parseFloat(times[1]!) * (times[1]!.endsWith('ms') ? 1 : 1000) : 0;
+    };
+    const open = dockMorphTransitions(true);
+    expect(open.card).toMatch(/^width .*height .*/);
+    expect(delayOf(open.card, 'width')).toBe(0);
+    expect(delayOf(open.content, 'opacity')).toBeGreaterThan(0);
+    expect(delayOf(open.content, 'visibility')).toBe(0);
+    expect(delayOf(open.controls, 'opacity')).toBeGreaterThan(delayOf(open.content, 'opacity'));
+    expect(open.controls).not.toMatch(/transform|translate/);
+
+    const close = dockMorphTransitions(false);
+    expect(delayOf(close.card, 'width')).toBeGreaterThan(0);
+    expect(delayOf(close.content, 'visibility')).toBeGreaterThan(0);
+    expect(delayOf(close.tab, 'opacity')).toBeGreaterThan(delayOf(close.card, 'width'));
   });
 });

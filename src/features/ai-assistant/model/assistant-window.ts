@@ -74,6 +74,38 @@ export function nextDockReveal(current: DockReveal, event: DockRevealEvent): Doc
 /** Espera antes de encolher quando o mouse sai, para um desvio rápido não fechar a janela. */
 export const DOCK_LEAVE_DELAY_MS = 350;
 
+/** Altura da aba recolhida (a janela encaixada cresce a partir dela). */
+export const DOCK_TAB_HEIGHT = 28;
+
+/**
+ * Transições da aba que vira janela (como as abas do puter.com):
+ * - ao abrir, a própria aba cresce até o tamanho da janela, o rótulo da aba some
+ *   logo, o conteúdo aparece desfocado e ganha nitidez durante o crescimento, e
+ *   os controles laterais (parados no lugar final) aparecem no fim;
+ * - ao fechar, conteúdo e controles somem primeiro e a janela encolhe até a aba,
+ *   cujo rótulo volta no fim.
+ * A visibilidade troca na hora ao abrir (o campo de texto aceita foco) e só no
+ * fim do sumiço ao fechar. Valores no formato da propriedade CSS `transition`.
+ */
+export function dockMorphTransitions(revealed: boolean): { card: string; content: string; tab: string; controls: string } {
+  if (revealed) {
+    const grow = '280ms cubic-bezier(0.22, 1, 0.36, 1)';
+    return {
+      card: `width ${grow}, height ${grow}, border-radius ${grow}, box-shadow ${grow}`,
+      content: 'opacity 200ms ease-out 90ms, filter 220ms ease-out 90ms, visibility 0s linear 0s',
+      tab: 'opacity 90ms ease-out',
+      controls: 'opacity 160ms ease-out 220ms, visibility 0s linear 0s',
+    };
+  }
+  const shrink = '220ms cubic-bezier(0.4, 0, 0.2, 1) 70ms';
+  return {
+    card: `width ${shrink}, height ${shrink}, border-radius ${shrink}, box-shadow ${shrink}`,
+    content: 'opacity 110ms ease-in, filter 110ms ease-in, visibility 0s linear 110ms',
+    tab: 'opacity 140ms ease-out 200ms',
+    controls: 'opacity 90ms ease-in, visibility 0s linear 90ms',
+  };
+}
+
 /** Encaixada e aberta, a janela é mais baixa e mais larga que a solta: até 560 de largura. */
 export function dockedPanelWidth(viewport: Size): number {
   return Math.max(280, Math.min(560, viewport.width - WINDOW_MARGIN * 2 - 48));

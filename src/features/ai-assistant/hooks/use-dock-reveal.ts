@@ -9,11 +9,12 @@ const isOnTab = (target: EventTarget | null) => target instanceof Element && tar
 /**
  * Aba do assistente encaixado: o mouse em cima revela a janela; ao sair sem
  * interagir, ela encolhe depois de um instante; clique, foco ou digitação
- * dentro fixam a janela até "Ocultar" ou Esc. Começa fixada quando o
- * assistente acaba de ser ligado (`startPinned`).
+ * dentro fixam a janela até "Ocultar" ou Esc. Com `openOnMount` (assistente
+ * acabou de ser ligado), começa como aba e abre fixada no quadro seguinte, para
+ * a aba crescer até a janela também nesse caso.
  */
-export function useDockReveal(startPinned: boolean) {
-  const [reveal, setReveal] = useState<DockReveal>(startPinned ? 'pinned' : 'tab');
+export function useDockReveal(openOnMount: boolean) {
+  const [reveal, setReveal] = useState<DockReveal>('tab');
   const leaveTimer = useRef<number | null>(null);
 
   const cancelLeave = () => {
@@ -27,6 +28,13 @@ export function useDockReveal(startPinned: boolean) {
   }, []);
 
   useEffect(() => cancelLeave, []);
+
+  useEffect(() => {
+    if (!openOnMount) return;
+    const frame = requestAnimationFrame(() => setReveal((current) => nextDockReveal(current, 'open')));
+    return () => cancelAnimationFrame(frame);
+    // Só na montagem (sem openOnMount nas dependências): depois disso valem o mouse, a interação e o "Ocultar".
+  }, []);
 
   const containerProps = {
     onPointerEnter: (event: PointerEvent<HTMLElement>) => {
