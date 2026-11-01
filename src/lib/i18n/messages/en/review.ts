@@ -204,6 +204,7 @@ const messages: Record<string, string> = {
   'Com uma conta, você revisa com ela em qualquer aparelho, sem informar o nome.': 'With an account, you review with it on any device, without entering a name.',
   'Mostrar os comentários': 'Show comments',
   'Recolher os comentários': 'Collapse comments',
+  'Mensagem:': 'Message:',
 };
 
 export default messages;
