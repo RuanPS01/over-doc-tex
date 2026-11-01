@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   adaptBabel,
+  babelLanguagePackages,
   mainLineOffset,
   buildCompileInput,
   hasDocumentClass,
   parseTexLog,
   pickMainFile,
   relativeToMain,
+  withBackrefFromAux,
 } from '@/lib/latex/prepare';
 
 const tex = (path: string, content: string) => ({ path, content });
@@ -43,6 +45,24 @@ describe('babel', () => {
   });
 });
 
+describe('idiomas e backref', () => {
+  it('pede o .ldf dos idiomas da classe, do babel e o idioma fixo do abnTeX2', () => {
+    const abntex2 = '\\documentclass[12pt, english, french, spanish, brazilian]{abntex2}';
+    expect(babelLanguagePackages(abntex2)).toEqual(['babel-french', 'babel-spanish', 'babel-portuges']);
+    expect(babelLanguagePackages('\\documentclass{abntex2}')).toEqual(['babel-portuges']);
+    expect(babelLanguagePackages('\\documentclass{article}\n\\usepackage[english]{babel}')).toEqual([]);
+    expect(babelLanguagePackages('\\documentclass{article}\n% \\usepackage[french]{babel}')).toEqual([]);
+  });
+
+  it('refaz o .brf do backref na mesma linha do \\begin{document}', () => {
+    const source = '\\documentclass{abntex2}\n\\usepackage[brazilian,hyperpageref]{backref}\n\\begin{document}\nOi\n\\end{document}';
+    const adapted = withBackrefFromAux(source);
+    expect(adapted.split('\n')).toHaveLength(source.split('\n').length);
+    expect(adapted.split('\n')[2]).toMatch(/^\\ExplSyntaxOn .*\\AddToHook\{begindocument\/before\}.*\\ExplSyntaxOff\\begin\{document\}$/);
+    expect(withBackrefFromAux('\\documentclass{article}\n\\begin{document}\nbackref\n\\end{document}')).not.toContain('ExplSyntaxOn');
+  });
+});
+
 describe('entrada do compilador', () => {
   it('monta os caminhos a partir da pasta do arquivo principal', () => {
     expect(relativeToMain('tese/cap/um.tex', 'tese/main.tex')).toBe('cap/um.tex');
@@ -54,6 +74,15 @@ describe('entrada do compilador', () => {
     );
     expect(input.source).toContain('provide=*,brazilian');
     expect(Object.keys(input.additionalFiles).sort()).toEqual(['cap/um.tex', 'figuras/a.png']);
+  });
+
+  it('lista os pacotes cujos arquivos soltos vão junto: idiomas e pacotes pedidos no projeto', () => {
+    const input = buildCompileInput(
+      'main.tex',
+      [tex('main.tex', '\\documentclass[french]{abntex2}\n\\input{preambulo}'), tex('preambulo.tex', '\\usepackage{datatool,lastpage}\n% \\usepackage{comentado}')],
+      new Map(),
+    );
+    expect(input.texlivePackages).toEqual(['babel-french', 'babel-portuges', 'datatool', 'lastpage']);
   });
 });
 

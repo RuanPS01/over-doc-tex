@@ -4,11 +4,14 @@
  * citações (na ordem em que aparecem, seguindo \input) e do estilo. O TeX lê
  * o `.bbl` como sempre (\bibliography procura `\jobname.bbl`).
  *
- * Estilos: plain, abbrv, alpha e unsrt (rótulos numéricos ou alfabéticos) e,
- * com natbib (ou estilos *nat), rótulos autor-ano. Outros estilos caem em
- * plain. biblatex precisa do Biber e não entra aqui.
+ * Estilos: plain, abbrv, alpha e unsrt (rótulos numéricos ou alfabéticos);
+ * com natbib (ou estilos *nat), rótulos autor-ano; com abntex2cite (ou
+ * abntex2-alf/abntex2-num), o estilo ABNT do abnTeX2 (bibliography-abnt.ts).
+ * Outros estilos caem em plain. biblatex precisa do Biber e não entra aqui.
  */
 import { flattenLatex } from '@/lib/diff/latex-diff';
+import { initials, people, type Person } from './bib-names';
+import { ABNT_MONTHS, abntOptionsFrom, buildAbntBbl } from './bibliography-abnt';
 
 export interface BibEntry {
   key: string;
@@ -35,8 +38,8 @@ const MONTHS: Record<string, string> = {
   jul: 'July', aug: 'August', sep: 'September', oct: 'October', nov: 'November', dec: 'December',
 };
 
-/** Entradas de um .bib, com @string e concatenação (#) resolvidos. */
-export function parseBibFile(content: string, strings = new Map<string, string>()): BibEntry[] {
+/** Entradas de um .bib, com @string e concatenação (#) resolvidos; `months` traduz as macros jan, feb... */
+export function parseBibFile(content: string, strings = new Map<string, string>(), months: Record<string, string> = MONTHS): BibEntry[] {
   const entries: BibEntry[] = [];
   const entryRe = /@([a-zA-Z]+)\s*[{(]/g;
   let match: RegExpExecArray | null;
@@ -48,7 +51,7 @@ export function parseBibFile(content: string, strings = new Map<string, string>(
     if (type === 'comment' || type === 'preamble') continue;
     const comma = body.indexOf(',');
     const key = type === 'string' ? '' : body.slice(0, comma).trim();
-    const fields = parseFields(type === 'string' ? body : body.slice(comma + 1), strings);
+    const fields = parseFields(type === 'string' ? body : body.slice(comma + 1), strings, months);
     if (type === 'string') {
       for (const [name, value] of fields) strings.set(name, value);
       continue;
@@ -58,7 +61,7 @@ export function parseBibFile(content: string, strings = new Map<string, string>(
   return entries;
 }
 
-function parseFields(body: string, strings: ReadonlyMap<string, string>): Map<string, string> {
+function parseFields(body: string, strings: ReadonlyMap<string, string>, months: Record<string, string>): Map<string, string> {
   const fields = new Map<string, string>();
   let i = 0;
   while (i < body.length) {
@@ -88,7 +91,7 @@ function parseFields(body: string, strings: ReadonlyMap<string, string>): Map<st
       } else {
         const word = /^[^\s,#}]+/.exec(body.slice(i))?.[0] ?? '';
         const lower = word.toLowerCase();
-        parts.push(strings.get(lower) ?? (/^\d+$/.test(word) ? word : (MONTHS[lower] ?? word)));
+        parts.push(strings.get(lower) ?? (/^\d+$/.test(word) ? word : (months[lower] ?? word)));
         i += word.length;
       }
       while (/\s/.test(body[i] ?? '')) i++;
@@ -109,16 +112,23 @@ export interface CitationInfo {
   databases: string[];
   style: string | null;
   usesNatbib: boolean;
+  /** Opções do \usepackage{abntex2cite}; nulo sem o pacote. */
+  abntex2cite: string[] | null;
+  /** Opções dadas com \citeoption (abntex2cite), que não são citações. */
+  citeOptions: string[];
 }
 
-const CITE = /\\(no)?cite[a-zA-Z]*\*?\s*(?:\[[^\]]*\]\s*){0,2}\{([^}]*)\}/g;
+// \cite, \citeonline, \citeauthor, \nocite... e \apud{a}{b} do abntex2cite; \citeoption fica de fora.
+const CITE = /\\(?:(?:no)?cite(?!option)[a-zA-Z]*\*?|apud(?:online)?|Idem)\s*(?:\[[^\]]*\]\s*){0,2}\{([^}]*)\}(?:\s*\{([^}]*)\})?/g;
 
 /** Citações, bancos (\bibliography) e estilo do documento já achatado. */
 export function scanCitations(source: string): CitationInfo {
   const keys: string[] = [];
   const seen = new Set<string>();
   for (const match of source.matchAll(CITE)) {
-    for (const raw of match[2]!.split(',')) {
+    // O segundo grupo só vale para o \apud (duas obras).
+    const lists = match[0].startsWith('\\apud') ? [match[1]!, match[2] ?? ''] : [match[1]!];
+    for (const raw of lists.join(',').split(',')) {
       const key = raw.trim();
       if (key && !seen.has(key)) {
         seen.add(key);
@@ -131,69 +141,12 @@ export function scanCitations(source: string): CitationInfo {
   );
   const style = /\\bibliographystyle\s*\{([^}]*)\}/.exec(source)?.[1]?.trim() ?? null;
   const usesNatbib = /\\usepackage\s*(\[[^\]]*\])?\s*\{[^}]*\bnatbib\b[^}]*\}/.test(source) || Boolean(style && /nat$/.test(style));
-  return { keys, databases, style, usesNatbib };
+  const abntex2citeMatch = /\\usepackage\s*(?:\[([^\]]*)\])?\s*\{[^}]*\babntex2cite\b[^}]*\}/.exec(source);
+  const splitOptions = (text: string | undefined) => (text ?? '').split(',').map((option) => option.trim()).filter(Boolean);
+  const abntex2cite = abntex2citeMatch ? splitOptions(abntex2citeMatch[1]) : null;
+  const citeOptions = [...source.matchAll(/\\citeoption\s*\{([^}]*)\}/g)].flatMap((match) => splitOptions(match[1]));
+  return { keys, databases, style, usesNatbib, abntex2cite, citeOptions };
 }
-
-interface Person {
-  first: string;
-  von: string;
-  last: string;
-  jr: string;
-}
-
-/** "Sobrenome, Nome" ou "Nome Sobrenome" (chaves protegem nomes compostos). */
-function parsePerson(raw: string): Person {
-  const name = raw.trim();
-  const parts = splitTopLevel(name, ',');
-  if (parts.length >= 2) {
-    const lastWords = parts[0]!.trim().split(/\s+/);
-    const vonIndex = lastWords.findIndex((word) => /^[a-z]/.test(word));
-    return {
-      von: vonIndex >= 0 && vonIndex < lastWords.length - 1 ? lastWords.slice(vonIndex, -1).join(' ') : '',
-      last: vonIndex >= 0 && vonIndex < lastWords.length - 1 ? lastWords.at(-1)! : lastWords.join(' '),
-      jr: parts.length === 3 ? parts[1]!.trim() : '',
-      first: (parts.length === 3 ? parts[2]! : parts[1]!).trim(),
-    };
-  }
-  const words = splitTopLevel(name, ' ').filter(Boolean);
-  if (words.length <= 1) return { first: '', von: '', last: name, jr: '' };
-  const vonStart = words.findIndex((word, index) => index > 0 && index < words.length - 1 && /^[a-z]/.test(word));
-  const lastStart = vonStart >= 0 ? vonStart : words.length - 1;
-  const von = vonStart >= 0 ? words.slice(vonStart, words.length - 1).join(' ') : '';
-  return { first: words.slice(0, lastStart).join(' '), von, last: words.at(-1)!, jr: '' };
-}
-
-function splitTopLevel(text: string, separator: string): string[] {
-  const parts: string[] = [];
-  let depth = 0;
-  let current = '';
-  for (const char of text) {
-    if (char === '{') depth++;
-    if (char === '}') depth--;
-    if (char === separator && depth === 0) {
-      parts.push(current);
-      current = '';
-    } else current += char;
-  }
-  parts.push(current);
-  return parts;
-}
-
-function people(field: string | undefined): Person[] {
-  if (!field) return [];
-  return field
-    .split(/\s+and\s+/)
-    .map((name) => name.trim())
-    .filter(Boolean)
-    .map(parsePerson);
-}
-
-const initials = (first: string) =>
-  first
-    .split(/[\s~]+/)
-    .filter(Boolean)
-    .map((word) => (word.startsWith('{') ? word : `${word.replace(/^[^\p{L}]*/u, '').charAt(0)}.`))
-    .join('~');
 
 function fullName(person: Person, abbreviate: boolean): string {
   const first = abbreviate ? initials(person.first) : person.first;
@@ -303,19 +256,27 @@ export function buildBbl(texts: ReadonlyMap<string, string>, mainPath: string): 
   const info = scanCitations(source);
   if (info.databases.length === 0) return null;
   const folder = mainPath.includes('/') ? mainPath.slice(0, mainPath.lastIndexOf('/') + 1) : '';
+  // abntex2cite usa o abntex2-alf.bst ou o abntex2-num.bst (o \bibliographystyle é opcional).
+  const style = (info.style ?? (info.abntex2cite ? `abntex2-${info.abntex2cite.includes('alf') ? 'alf' : 'num'}` : 'plain')).toLowerCase();
+  const isAbnt = style.startsWith('abntex2') || style.startsWith('abnt-');
   const strings = new Map<string, string>();
   const byKey = new Map<string, BibEntry>();
   for (const name of info.databases) {
     const path = `${folder}${name.endsWith('.bib') ? name : `${name}.bib`}`.replace(/^\.\//, '');
     const content = texts.get(path);
     if (content === undefined) continue;
-    for (const entry of parseBibFile(content, strings)) if (!byKey.has(entry.key)) byKey.set(entry.key, entry);
+    for (const entry of parseBibFile(content, strings, isAbnt ? ABNT_MONTHS : MONTHS)) if (!byKey.has(entry.key)) byKey.set(entry.key, entry);
   }
 
   const wantsAll = info.keys.includes('*');
   const cited = info.keys.filter((key) => key !== '*');
   const chosen = [...cited.flatMap((key) => (byKey.has(key) ? [byKey.get(key)!] : [])), ...(wantsAll ? [...byKey.values()].filter((entry) => !cited.includes(entry.key)) : [])];
-  const style = (info.style ?? 'plain').toLowerCase();
+  const missing = cited.filter((key) => !byKey.has(key));
+  if (isAbnt) {
+    // O formato do .bbl vem do estilo (alf: autor-data e ordem alfabética; num: ordem de citação).
+    const options = { ...abntOptionsFrom(info.abntex2cite ?? [], info.citeOptions), alf: style.endsWith('alf') };
+    return { bbl: buildAbntBbl(chosen, options), missing };
+  }
   const isUnsorted = style.startsWith('unsrt');
   const entries = isUnsorted ? chosen : [...chosen].sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
   const abbreviate = style.startsWith('abbrv');
@@ -332,5 +293,5 @@ export function buildBbl(texts: ReadonlyMap<string, string>, mainPath: string): 
     '\\end{thebibliography}',
     '',
   ];
-  return { bbl: lines.join('\n'), missing: cited.filter((key) => !byKey.has(key)) };
+  return { bbl: lines.join('\n'), missing };
 }

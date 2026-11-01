@@ -28,12 +28,13 @@ Não há servidor: todo código de produto roda no navegador. O que antes seria 
 | Compilação LaTeX (motor, preparação, log) | `src/lib/latex` |
 | Diff de texto, comparação de árvores e diff visual (LaTeX anotado e compilação) | `src/lib/diff` |
 | SyncTeX (leitura e buscas direta e reversa) | `src/lib/latex/synctex.ts` |
-| Bibliografia (.bbl a partir dos .bib) | `src/lib/latex/bibliography.ts` |
+| Bibliografia (.bbl a partir dos .bib) | `src/lib/latex/bibliography.ts`; estilo ABNT do abnTeX2 em `bibliography-abnt.ts`; nomes de pessoas em `bib-names.ts` |
+| Arquivos soltos e revisão do repositório de pacotes | `src/lib/latex/texlive-files.ts` |
 | Reancoragem de trechos entre versões | `src/lib/pdf/reanchor.ts`; geometria do texto em `src/lib/pdf/page-text.ts` |
 | Âncoras de trecho e desenho (puro) | `src/lib/pdf/text-anchor.ts`, `src/lib/pdf/drawing.ts` |
 | Texto das páginas e carregamento do pdf.js | `src/lib/pdf` |
 | Componente que junta várias features (ex.: os diálogos do editor) | Na página da rota (`EditorDialogs` em `src/pages/editor-page.tsx`) ou por slot de props, nunca chamando hook de outra feature num componente |
-| Um pacote LaTeX que o compilador não tem | Nome do pacote do TeX Live em `ROOT_PACKAGES` de `scripts/latex-packages.mjs` (as dependências entram sozinhas) |
+| Um pacote LaTeX que o compilador não tem | Nome do pacote do TeX Live em `ROOT_PACKAGES` de `scripts/latex-packages.mjs` (as dependências entram sozinhas). Se for idioma do babel, também em `BABEL_LANGUAGE_PACKAGES` de `src/lib/latex/prepare.ts`; se a versão atual não combinar com o Siglum, um ano em `PINNED_YEARS` |
 | Tipo de documento do Firestore ou caminho | `shared/firestore/types.ts` e `paths.ts` |
 | Rota nova | `src/pages/<nome>-page.tsx` e uma linha em `src/app/router.tsx` |
 | Uma operação que envolve vários documentos | Um `writeBatch` no hook, e a validação cruzada (`getAfter`, `existsAfter`) em `firestore.rules` |
@@ -136,7 +137,8 @@ Teste com chave real de provedor de IA só por variável de ambiente, nunca grav
 | Item | Detalhe | Prioridade |
 | --- | --- | --- |
 | biblatex na compilação | Precisa do Biber, que não existe em WebAssembly; hoje só `\bibliography` (BibTeX) funciona, com o `.bbl` gerado em JavaScript | Média |
-| Estilos ABNT na bibliografia | `abntex2-alf` e `abntex2-num` saem como plain numérico; o formato do abntex2cite precisaria de um gerador próprio | Média |
+| Hifenização em português | O formato do pdfLaTeX do Siglum não tem padrões para português, francês e espanhol (o babel avisa e usa os que houver). Resolver exige um formato próprio com os padrões (o Siglum já gera formatos com `-ini` para o cache de preâmbulo) | Média |
+| Estilo ABNT: campos raros | `bibliography-abnt.ts` segue o `.bst` nos tipos e campos comuns; `reprinted-from`, `furtherresp`, `dimensions`, `illustrated`, `abnt-repeated-*` e a opção de citação `(Autor, ANO)` ainda não entram | Baixa |
 | Assets do Siglum hospedados por nós | Hoje motor e conjuntos vêm de `cdn.siglum.org` (projeto pequeno, de terceiros). Espelhar no Hosting exige plano pago pelo tráfego de cerca de 45 MB por pessoa | Média |
 | Arquivar projeto | Campo `archivedAt` existe, mas as regras não deixam gravá-lo; liberar para o dono e esconder da lista | Baixa |
 | Coleta de lixo de binários | Blobs e PDFs de diff sem referência ficam no banco para sempre (sobrescrever um arquivo cria outro blob). Uma ação "Limpar arquivos não usados" precisaria listar `files` e os manifestos de todos os snapshots e liberar exclusão de blob nas regras com cuidado, porque snapshots dependem deles | Média |
