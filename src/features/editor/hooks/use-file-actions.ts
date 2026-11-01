@@ -42,7 +42,7 @@ export function useFileActions(projectId: string) {
         const id = crypto.randomUUID();
         queryClient.setQueryData<EditorFile[]>(filesKey, (old = []) => [
           ...old,
-          { id, path, name: fileNameOf(path), kind: classifyFileKind(path), content: '', blobPath: null },
+          { id, path, name: fileNameOf(path), kind: classifyFileKind(path), content: '', blobPath: null, size: 0, updatedAt: Date.now() },
         ]);
         return id;
       }

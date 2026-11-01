@@ -40,7 +40,7 @@ EditorPage                               pages/editor-page.tsx (papel, convite p
         ├── main
         │   ├── DesktopWorkspace         layoutMode = desktop
         │   │   └── ResizablePanelGroup  layout salvo em localStorage
-        │   │       ├── FileTreePanel    Novo arquivo, Importar e Exportar (.zip) na barra; menu por arquivo (renomear, excluir)
+        │   │       ├── FileTreePanel    Novo arquivo, Importar, Exportar (.zip) e Ordenar na barra; pastas recolhíveis; menu por arquivo (renomear, excluir)
         │   │       ├── CodeEditorPanel  Monaco (somente leitura para quem só lê); "Mostrar no PDF" (SyncTeX)
         │   │       └── PdfPane          liga o PdfPreviewPanel ao estado da compilação; duplo clique leva ao código
         │   └── MobileWorkspace          layoutMode = mobile-portrait | mobile-landscape
@@ -69,7 +69,7 @@ EditorPage                               pages/editor-page.tsx (papel, convite p
 | `EditorHeader` | Ações do projeto com regra de transbordo | nenhum | store |
 | `DesktopWorkspace` | Três colunas redimensionáveis | layout (pela biblioteca, persistido) | nenhum |
 | `MobileWorkspace` | Um painel por vez ou duas colunas curtas | nenhum | store |
-| `FileTreePanel` | Árvore indentada a partir dos caminhos, com criar, renomear e excluir | ação de arquivo aberta | `useProjectFiles`, `useFileActions` (via `FileActionsDialogs`) |
+| `FileTreePanel` | Árvore a partir dos caminhos, com criar, renomear e excluir. Pastas começam recolhidas e mostram quantos arquivos têm; o menu "Ordenar e organizar" escolhe a ordem (nome de A a Z ou de Z a A, tipo pela extensão, modificados por último, tamanho), "Pastas no topo" (ligado por padrão; desligado, pastas e arquivos entram na mesma ordenação) e abre ou recolhe todas. Ordem e pastas no topo valem para todos os projetos; as pastas abertas, por projeto (ambas no localStorage deste navegador). Abrir um arquivo dentro de uma pasta recolhida (arquivo novo, SyncTeX, "Abrir no código") abre as pastas até ele. Lógica pura em `model/file-tree.ts` | ação de arquivo aberta | `useProjectFiles`, `useFileTreeView`, `useFileActions` (via `FileActionsDialogs`) |
 | `CodeEditorPanel` | Monaco com LaTeX e tema dos tokens | modelos do Monaco (por `path`) | `useProjectFiles`, store |
 | `CompileStoreProvider` | Compilar o projeto e guardar o resultado | compilando, etapa, último PDF bom, último resultado | `useLatexCompile` |
 | `PdfPane` | Passar estado e ações da compilação ao visualizador | nenhum | `useCompileStore`, `useProjectFiles` |

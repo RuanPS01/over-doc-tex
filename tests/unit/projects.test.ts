@@ -15,6 +15,8 @@ const file = (id: string, path: string, content: string | null, kind: EditorFile
   kind,
   content,
   blobPath: null,
+  size: content?.length ?? 0,
+  updatedAt: null,
 });
 
 describe('projeto novo', () => {
