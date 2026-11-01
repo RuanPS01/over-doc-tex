@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react';
 import { PdfPreviewPanel } from '@/features/pdf-viewer/components/pdf-preview-panel';
+import { useT } from '@/hooks/use-t';
+import { msg } from '@/lib/i18n';
 import type { CompileStage } from '@/lib/latex/compiler';
 import type { TexIssue } from '@/lib/latex/prepare';
 import { sourceAt } from '@/lib/latex/synctex';
@@ -8,9 +10,9 @@ import { useCompileStore } from '../state/compile-store';
 import { useEditorStore } from '../state/editor-store';
 
 const STAGE_LABELS: Record<CompileStage, string> = {
-  engine: 'Baixando o compilador (cerca de 45 MB, só na primeira vez)',
-  packages: 'Carregando pacotes',
-  compiling: 'Compilando',
+  engine: msg('Baixando o compilador (cerca de 45 MB, só na primeira vez)'),
+  packages: msg('Carregando pacotes'),
+  compiling: msg('Compilando'),
 };
 
 function pdfNameFor(mainPath: string | null): string {
@@ -20,6 +22,7 @@ function pdfNameFor(mainPath: string | null): string {
 
 /** Liga o visualizador de PDF ao estado da compilação do projeto aberto. */
 export function PdfPane() {
+  const { t, locale } = useT();
   const { isCompiling, stage, pdf, synctex, pdfFocus, last, compile } = useCompileStore();
   const { projectId, revealLine } = useEditorStore();
   const { data: files = [] } = useProjectFiles(projectId);
@@ -40,8 +43,10 @@ export function PdfPane() {
 
   const summary = last
     ? last.ok
-      ? `Compilado em ${(last.durationMs / 1000).toFixed(1).replace('.', ',')} s`
-      : 'A compilação falhou'
+      ? t('Compilado em {seconds} s', {
+          seconds: (last.durationMs / 1000).toLocaleString(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }),
+        })
+      : t('A compilação falhou')
     : null;
 
   const handleIssueSelect = (issue: TexIssue) => {
@@ -54,7 +59,7 @@ export function PdfPane() {
       pdf={pdf}
       fileName={pdfNameFor(last?.mainPath ?? null)}
       isCompiling={isCompiling}
-      statusLabel={stage ? STAGE_LABELS[stage] : isCompiling ? 'Preparando os arquivos' : null}
+      statusLabel={stage ? t(STAGE_LABELS[stage]) : isCompiling ? t('Preparando os arquivos') : null}
       summary={summary}
       failed={last !== null && !last.ok}
       issues={last?.issues ?? []}

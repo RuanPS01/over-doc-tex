@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import { msg, t } from '@/lib/i18n';
 import { compileLatex, type CompileStage, type LatexCompileResult } from '@/lib/latex/compiler';
 import { buildCompileInput } from '@/lib/latex/prepare';
 import { useProjectSources } from './use-project-sources';
@@ -8,7 +9,7 @@ export interface ProjectCompileOutcome extends LatexCompileResult {
   mainPath: string | null;
 }
 
-export const NO_MAIN_FILE_MESSAGE = 'Nenhum arquivo .tex com \\documentclass no projeto.';
+export const NO_MAIN_FILE_MESSAGE = msg('Nenhum arquivo .tex com \\documentclass no projeto.');
 
 /** Compila o projeto aberto como ele está na tela (ver useProjectSources). */
 export function useLatexCompile(projectId: string) {
@@ -24,7 +25,7 @@ export function useLatexCompile(projectId: string) {
           mainPath: null,
           durationMs: 0,
           synctex: null,
-          issues: [{ kind: 'error', message: NO_MAIN_FILE_MESSAGE, file: null, line: null }],
+          issues: [{ kind: 'error', message: t(NO_MAIN_FILE_MESSAGE), file: null, line: null }],
         };
       }
       const data = new Map([...binaries].map(([path, binary]) => [path, binary.data]));

@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useRef } from 'react';
 import { getFirebase, isFirebaseConfigured } from '@/lib/firebase/app';
 import { readStoredFile } from '@/lib/firebase/stored-files';
+import { t } from '@/lib/i18n';
 import { pickMainFile, type ProjectTextFile, type TexIssue } from '@/lib/latex/prepare';
 import { queryKeys } from '@/lib/query-keys';
 import type { EditorFile } from '../model/editor-file';
@@ -64,7 +65,7 @@ export function useProjectSources(projectId: string) {
                 }
                 binaries.set(file.path, { data, hash: blobPath.slice(blobPath.lastIndexOf('/') + 1) });
               } catch {
-                loadIssues.push({ kind: 'warning', message: `Não foi possível carregar ${file.path}.`, file: file.path, line: null });
+                loadIssues.push({ kind: 'warning', message: t('Não foi possível carregar {path}.', { path: file.path }), file: file.path, line: null });
               }
             }),
         );

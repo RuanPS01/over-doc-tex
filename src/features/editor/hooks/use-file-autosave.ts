@@ -3,6 +3,7 @@ import { doc, increment, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { firestorePaths } from '@shared/firestore/paths';
 import { getFirebase, isFirebaseConfigured } from '@/lib/firebase/app';
+import { t } from '@/lib/i18n';
 import { queryKeys } from '@/lib/query-keys';
 import { sha256Hex } from '@/lib/stored-files/chunks';
 import type { EditorFile } from '../model/editor-file';
@@ -16,9 +17,9 @@ export const MAX_INLINE_TEXT_BYTES = 512 * 1024;
 
 function saveErrorMessage(error: unknown): string {
   const code = (error as { code?: string }).code;
-  if (code === 'permission-denied') return 'Sem permissão para editar: sua conta só pode ler este projeto.';
-  if (code === 'not-found') return 'O arquivo foi removido do projeto.';
-  return 'Não foi possível salvar. As alterações continuam no editor; tente de novo em instantes.';
+  if (code === 'permission-denied') return t('Sem permissão para editar: sua conta só pode ler este projeto.');
+  if (code === 'not-found') return t('O arquivo foi removido do projeto.');
+  return t('Não foi possível salvar. As alterações continuam no editor; tente de novo em instantes.');
 }
 
 /**
@@ -47,14 +48,14 @@ export function useFileAutosave(projectId: string) {
       const data = new TextEncoder().encode(content);
       if (data.byteLength > MAX_INLINE_TEXT_BYTES) {
         setStatus('error');
-        setError('Arquivo acima de 512 KB: divida o texto em arquivos menores com \\input.');
+        setError(t('Arquivo acima de 512 KB: divida o texto em arquivos menores com \\input.'));
         return;
       }
       const { db, auth } = getFirebase();
       const uid = auth.currentUser?.uid;
       if (!uid) {
         setStatus('error');
-        setError('Sua sessão terminou. Entre de novo para salvar.');
+        setError(t('Sua sessão terminou. Entre de novo para salvar.'));
         return;
       }
 

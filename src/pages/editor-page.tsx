@@ -17,15 +17,21 @@ import { MAIN_FILE_ID } from '@/features/projects/model/new-project';
 import { ProjectReviewQueue } from '@/features/review/components/project-review-queue';
 import { RequestReviewDialog } from '@/features/review/components/request-review-dialog';
 import { VersionHistorySheet } from '@/features/snapshots/components/version-history-sheet';
+import { useT } from '@/hooks/use-t';
+import { msg } from '@/lib/i18n';
 import { hasDocumentClass, type TexIssue } from '@/lib/latex/prepare';
 
-const INVITE_ROLE_LABELS = { editor: 'editar', viewer: 'ler' } as const;
+const INVITE_DESCRIPTIONS = {
+  editor: msg('Você foi convidado para editar este projeto com o e-mail {email}.'),
+  viewer: msg('Você foi convidado para ler este projeto com o e-mail {email}.'),
+} as const;
 
 /**
  * Diálogos do cabeçalho do editor (versões, alterações, revisão e
  * configurações). Ficam na página porque juntam várias features.
  */
 function EditorDialogs({ project, currentUid }: { project: ProjectInfo; currentUid: string | null }) {
+  const { t } = useT();
   const { projectId, projectName, role, canEdit, dialog, openDialog, closeDialog, openFile, revealLine } = useEditorStore();
   const { data: files = [] } = useProjectFiles(projectId);
   const { status } = useAuth();
@@ -51,10 +57,11 @@ function EditorDialogs({ project, currentUid }: { project: ProjectInfo; currentU
       <Dialog open={dialog !== null && dialog.kind !== 'ai-settings'} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Disponível com o Firebase configurado</DialogTitle>
+            <DialogTitle>{t('Disponível com o Firebase configurado')}</DialogTitle>
             <DialogDescription>
-              Versões, revisões, comparação de alterações e membros ficam salvos no Firestore. No modo demonstração, configure o
-              Firebase no arquivo .env para usar estas funções.
+              {t(
+                'Versões, revisões, comparação de alterações e membros ficam salvos no Firestore. No modo demonstração, configure o Firebase no arquivo .env para usar estas funções.',
+              )}
             </DialogDescription>
           </DialogHeader>
         </DialogContent>
@@ -120,6 +127,7 @@ function EditorDialogs({ project, currentUid }: { project: ProjectInfo; currentU
  * Firebase acontece aqui.
  */
 export default function EditorPage() {
+  const { t } = useT();
   const { projectId = 'demo' } = useParams<{ projectId: string }>();
   const { status, user } = useAuth();
   const { data: project, isPending, isError, refetch } = useProject(projectId);
@@ -140,20 +148,20 @@ export default function EditorPage() {
 
   const backToProjects = (
     <Button asChild variant="outline" size="sm">
-      <Link href="/">Voltar aos projetos</Link>
+      <Link href="/">{t('Voltar aos projetos')}</Link>
     </Button>
   );
 
-  if (isPending) return <FullPageStatus title="Abrindo o projeto" loading />;
+  if (isPending) return <FullPageStatus title={t('Abrindo o projeto')} loading />;
   if (isError) {
     return (
       <FullPageStatus
-        title="Não foi possível abrir o projeto"
-        description="Confira a conexão e tente de novo."
+        title={t('Não foi possível abrir o projeto')}
+        description={t('Confira a conexão e tente de novo.')}
         action={
           <div className="flex gap-2">
             <Button size="sm" onClick={() => void refetch()}>
-              Tentar de novo
+              {t('Tentar de novo')}
             </Button>
             {backToProjects}
           </div>
@@ -168,19 +176,19 @@ export default function EditorPage() {
       try {
         await members.acceptInvite(invitedRole);
       } catch {
-        setAcceptError('Não foi possível aceitar o convite. Ele pode ter sido cancelado.');
+        setAcceptError(t('Não foi possível aceitar o convite. Ele pode ter sido cancelado.'));
       } finally {
         setIsAccepting(false);
       }
     };
     return (
       <FullPageStatus
-        title={`Convite para ${project.name}`}
-        description={acceptError ?? `Você foi convidado para ${INVITE_ROLE_LABELS[invitedRole]} este projeto com o e-mail ${email}.`}
+        title={t('Convite para {name}', { name: project.name })}
+        description={acceptError ?? t(INVITE_DESCRIPTIONS[invitedRole], { email })}
         action={
           <div className="flex gap-2">
             <Button size="sm" disabled={isAccepting} onClick={() => void accept()}>
-              Aceitar convite
+              {t('Aceitar convite')}
             </Button>
             {backToProjects}
           </div>
@@ -191,11 +199,13 @@ export default function EditorPage() {
   if (!project || !role) {
     return (
       <FullPageStatus
-        title="Projeto não encontrado"
+        title={t('Projeto não encontrado')}
         description={
           user && !user.emailVerified
-            ? 'Ele não existe ou a sua conta não é membro dele. Se você recebeu um convite, entre com o Google ou com o link de acesso enviado ao e-mail convidado.'
-            : 'Ele não existe ou a sua conta não é membro dele. Peça um convite a quem é dono do projeto.'
+            ? t(
+                'Ele não existe ou a sua conta não é membro dele. Se você recebeu um convite, entre com o Google ou com o link de acesso enviado ao e-mail convidado.',
+              )
+            : t('Ele não existe ou a sua conta não é membro dele. Peça um convite a quem é dono do projeto.')
         }
         action={backToProjects}
       />

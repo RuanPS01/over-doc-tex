@@ -30,6 +30,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import type { FileKind } from '@shared/firestore/types';
+import { useT } from '@/hooks/use-t';
 import { cn } from '@/lib/utils';
 import { useExportProject } from '../hooks/use-export-project';
 import { useFileTreeView, type FileTreeView } from '../hooks/use-file-tree-view';
@@ -47,35 +48,36 @@ const ICONS: Partial<Record<FileKind, typeof FileText>> = {
 
 /** Ordenação, pastas no topo e abrir ou recolher todas as pastas. */
 function FileTreeSortMenu({ view }: { view: FileTreeView }) {
+  const { t } = useT();
   const { options, setOptions, expandAll, collapseAll } = view;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="size-7" aria-label="Ordenar e organizar arquivos" title="Ordenar e organizar">
+        <Button variant="ghost" size="icon" className="size-7" aria-label={t('Ordenar e organizar arquivos')} title={t('Ordenar e organizar')}>
           <ArrowDownUp />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64">
-        <DropdownMenuLabel>Ordenar por</DropdownMenuLabel>
+        <DropdownMenuLabel>{t('Ordenar por')}</DropdownMenuLabel>
         <DropdownMenuRadioGroup value={options.sort} onValueChange={(value) => isFileTreeSort(value) && setOptions({ ...options, sort: value })}>
           {FILE_TREE_SORTS.map((sort) => (
             <DropdownMenuRadioItem key={sort.value} value={sort.value}>
-              {sort.label}
+              {t(sort.label)}
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>
         <DropdownMenuSeparator />
         <DropdownMenuCheckboxItem checked={options.foldersFirst} onCheckedChange={(checked) => setOptions({ ...options, foldersFirst: checked === true })}>
-          Pastas no topo
+          {t('Pastas no topo')}
         </DropdownMenuCheckboxItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={expandAll}>
           <ChevronsUpDown />
-          Abrir todas as pastas
+          {t('Abrir todas as pastas')}
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={collapseAll}>
           <ChevronsDownUp />
-          Recolher todas as pastas
+          {t('Recolher todas as pastas')}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -83,6 +85,7 @@ function FileTreeSortMenu({ view }: { view: FileTreeView }) {
 }
 
 export function FileTreePanel({ className }: { className?: string }) {
+  const { t } = useT();
   const { projectId, activeFileId, openFile, setImportOpen, canEdit } = useEditorStore();
   const { data: files = [], isPending } = useProjectFiles(projectId);
   const { exportProject, isExporting } = useExportProject();
@@ -91,22 +94,22 @@ export function FileTreePanel({ className }: { className?: string }) {
   const activeFolder = files.find((file) => file.id === activeFileId)?.path.split('/').slice(0, -1).join('/') ?? '';
 
   return (
-    <nav aria-label="Arquivos do projeto" className={cn('flex h-full min-w-0 flex-col bg-panel', className)}>
+    <nav aria-label={t('Arquivos do projeto')} className={cn('flex h-full min-w-0 flex-col bg-panel', className)}>
       <div className="flex h-9 shrink-0 items-center gap-1 border-b pl-3 pr-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        <span className="min-w-0 flex-1 truncate">Arquivos</span>
+        <span className="min-w-0 flex-1 truncate">{t('Arquivos')}</span>
         {canEdit && (
           <>
             <Button
               variant="ghost"
               size="icon"
               className="size-7"
-              aria-label="Novo arquivo"
-              title="Novo arquivo"
+              aria-label={t('Novo arquivo')}
+              title={t('Novo arquivo')}
               onClick={() => setAction({ kind: 'create', folder: activeFolder })}
             >
               <FilePlus />
             </Button>
-            <Button variant="ghost" size="icon" className="size-7" aria-label="Importar arquivos" title="Importar .zip, arquivos ou pasta" onClick={() => setImportOpen(true)}>
+            <Button variant="ghost" size="icon" className="size-7" aria-label={t('Importar arquivos')} title={t('Importar .zip, arquivos ou pasta')} onClick={() => setImportOpen(true)}>
               <Upload />
             </Button>
           </>
@@ -115,8 +118,8 @@ export function FileTreePanel({ className }: { className?: string }) {
           variant="ghost"
           size="icon"
           className="size-7"
-          aria-label="Exportar projeto em .zip"
-          title="Exportar projeto em .zip"
+          aria-label={t('Exportar projeto em .zip')}
+          title={t('Exportar projeto em .zip')}
           disabled={isExporting}
           onClick={() => void exportProject()}
         >
@@ -125,7 +128,7 @@ export function FileTreePanel({ className }: { className?: string }) {
         <FileTreeSortMenu view={view} />
       </div>
       <ul className="min-h-0 flex-1 overflow-y-auto py-1 text-sm">
-        {isPending && <li className="px-3 py-2 text-muted-foreground">Carregando...</li>}
+        {isPending && <li className="px-3 py-2 text-muted-foreground">{t('Carregando...')}</li>}
         {view.rows.map((row) => {
           const indent = { paddingLeft: `${0.5 + row.depth * 1}rem` };
           if (row.folderPath !== null) {
@@ -146,7 +149,7 @@ export function FileTreePanel({ className }: { className?: string }) {
                   <span className="min-w-0 flex-1 truncate">{row.label}</span>
                   <span className="shrink-0 text-xs tabular-nums">
                     {row.fileCount}
-                    <span className="sr-only"> {row.fileCount === 1 ? 'arquivo' : 'arquivos'}</span>
+                    <span className="sr-only"> {row.fileCount === 1 ? t('arquivo') : t('arquivos')}</span>
                   </span>
                 </button>
               </li>
@@ -178,7 +181,7 @@ export function FileTreePanel({ className }: { className?: string }) {
                     <Button
                       variant="ghost"
                       size="icon"
-                      aria-label={`Ações de ${row.file.path}`}
+                      aria-label={t('Ações de {path}', { path: row.file.path })}
                       className="mr-1 size-7 shrink-0 opacity-0 focus-visible:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100 [@media(hover:none)]:opacity-100"
                     >
                       <MoreHorizontal />
@@ -187,14 +190,14 @@ export function FileTreePanel({ className }: { className?: string }) {
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem onSelect={() => row.file && setAction({ kind: 'rename', file: row.file })}>
                       <Pencil />
-                      Renomear ou mover
+                      {t('Renomear ou mover')}
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       className="text-destructive focus:text-destructive"
                       onSelect={() => row.file && setAction({ kind: 'delete', file: row.file })}
                     >
                       <Trash2 />
-                      Excluir
+                      {t('Excluir')}
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>

@@ -2,6 +2,7 @@
  * Árvore de arquivos do editor (pura): pastas implícitas nos caminhos,
  * ordenação, pastas no topo ou misturadas e pastas recolhidas.
  */
+import { getLocale, msg } from '@/lib/i18n';
 import type { EditorFile } from './editor-file';
 
 export type FileTreeSort = 'name' | 'name-desc' | 'type' | 'modified' | 'size';
@@ -15,11 +16,11 @@ export interface FileTreeOptions {
 export const DEFAULT_FILE_TREE_OPTIONS: FileTreeOptions = { sort: 'name', foldersFirst: true };
 
 export const FILE_TREE_SORTS: readonly { value: FileTreeSort; label: string }[] = [
-  { value: 'name', label: 'Nome (A a Z)' },
-  { value: 'name-desc', label: 'Nome (Z a A)' },
-  { value: 'type', label: 'Tipo (extensão)' },
-  { value: 'modified', label: 'Modificados por último' },
-  { value: 'size', label: 'Tamanho (maiores primeiro)' },
+  { value: 'name', label: msg('Nome (A a Z)') },
+  { value: 'name-desc', label: msg('Nome (Z a A)') },
+  { value: 'type', label: msg('Tipo (extensão)') },
+  { value: 'modified', label: msg('Modificados por último') },
+  { value: 'size', label: msg('Tamanho (maiores primeiro)') },
 ];
 
 export function isFileTreeSort(value: unknown): value is FileTreeSort {
@@ -54,7 +55,7 @@ interface FolderNode {
 
 type TreeNode = FolderNode | { kind: 'file'; name: string; file: EditorFile };
 
-const collator = new Intl.Collator('pt-BR', { numeric: true, sensitivity: 'base' });
+const collatorFor = (locale: string) => new Intl.Collator(locale, { numeric: true, sensitivity: 'base' });
 
 /** Pastas que contêm o caminho, da mais externa à mais interna: "a/b/c.tex" dá ["a", "a/b"]. */
 export function ancestorFolders(path: string): string[] {
@@ -99,7 +100,7 @@ function extensionOf(name: string): string {
   return dot > 0 ? name.slice(dot + 1).toLowerCase() : '';
 }
 
-function compareNodes(a: TreeNode, b: TreeNode, { sort, foldersFirst }: FileTreeOptions): number {
+function compareNodes(a: TreeNode, b: TreeNode, { sort, foldersFirst }: FileTreeOptions, collator: Intl.Collator): number {
   // Na ordenação por tipo a pasta é um tipo à parte e fica antes dos arquivos.
   if ((foldersFirst || sort === 'type') && a.kind !== b.kind) return a.kind === 'folder' ? -1 : 1;
   const byName = collator.compare(a.name, b.name);
@@ -131,11 +132,12 @@ function compareNodes(a: TreeNode, b: TreeNode, { sort, foldersFirst }: FileTree
  */
 export function fileTreeRows(files: readonly EditorFile[], options: FileTreeOptions, expanded: ReadonlySet<string>): FileTreeRow[] {
   const rows: FileTreeRow[] = [];
+  const collator = collatorFor(getLocale());
   const visit = (folder: FolderNode, depth: number) => {
     const children: TreeNode[] = [
       ...folder.folders.values(),
       ...folder.files.map((file) => ({ kind: 'file' as const, name: file.name, file })),
-    ].sort((a, b) => compareNodes(a, b, options));
+    ].sort((a, b) => compareNodes(a, b, options, collator));
     for (const child of children) {
       if (child.kind === 'file') {
         rows.push({ key: child.file.id, depth, label: child.name, file: child.file, folderPath: null, expanded: false, fileCount: 0 });
