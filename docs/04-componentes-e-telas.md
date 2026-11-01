@@ -50,7 +50,7 @@ EditorPage                               pages/editor-page.tsx (papel, convite p
         │       └── PdfPane              montado sempre, oculto com `hidden`; compilar com sucesso mostra o PDF
         ├── FileTreeSheet                Sheet lateral (fora do desktop)
         ├── ImportDialog                 .zip, arquivos ou pasta; destino e política de conflito
-        └── AiAssistantPanel             janela encaixada no rodapé ou solta (desktop) ou Sheet inferior (celular)
+        └── AiAssistantPanel             aba encaixada no rodapé (DockedAssistant) ou janela solta (desktop); Sheet inferior (celular)
             ├── AiChat
             │   ├── estado vazio         "Configurar a minha IA" quando não há modelo
             │   ├── AiMessage            Markdown sanitizado, fontes, modelo que respondeu, erros
@@ -75,7 +75,8 @@ EditorPage                               pages/editor-page.tsx (papel, convite p
 | `CompileStoreProvider` | Compilar o projeto e guardar o resultado | compilando, etapa, último PDF bom, último resultado | `useLatexCompile` |
 | `PdfPane` | Passar estado e ações da compilação ao visualizador | nenhum | `useCompileStore`, `useProjectFiles` |
 | `PdfPreviewPanel` | Páginas do PDF (pdf.js), zoom, download, andamento e lista de erros com arquivo e linha | zoom, lista aberta | props |
-| `AiAssistantPanel` | Conter o chat no formato certo para o layout. No desktop é uma janela: encaixada no rodapé à direita (padrão), à esquerda ou no meio, sempre com o mesmo tamanho (até 420 x 640) e em exibição compacta (cabeçalho de 36px, menos espaço, campo de mensagem de uma linha); ou solta, arrastada pelo título, sem sair da tela nem subir sobre o cabeçalho. O botão de encaixe do cabeçalho escolhe a posição ou "Janela solta" (também pelo teclado). Posição lembrada neste navegador (`overdoctex.ai-window`); lógica pura em `model/assistant-window.ts` | conversa (`useAiStream`), diálogo de configuração aberto, posição da janela (`useAssistantWindow`) | `useAiConfig`; `files`, `open` e `onOpenChange` vêm do `EditorShell` por props |
+| `AiAssistantPanel` | Conter o chat no formato certo para o layout. O botão "Assistente de IA" do cabeçalho liga e desliga o assistente. No desktop, ligado e encaixado no rodapé (à direita por padrão, à esquerda ou no meio), ele é uma aba (`DockedAssistant`, veja abaixo); solto, é uma janela de até 420 x 640 arrastada pelo título, sem sair da tela nem subir sobre o cabeçalho. O botão de encaixe escolhe a posição ou "Janela solta" (também pelo teclado). Posição lembrada neste navegador (`overdoctex.ai-window`); lógica pura em `model/assistant-window.ts` | conversa (`useAiStream`), diálogo de configuração aberto, posição da janela (`useAssistantWindow`) | `useAiConfig`; `files`, `open` e `onOpenChange` vêm do `EditorShell` por props |
+| `DockedAssistant` | Assistente encaixado como aba no rodapé. Só a aba ("Assistente", 28px de altura) fica na tela; o mouse em cima revela a janela com uma animação, e ela volta à aba se o mouse sair sem interação (350 ms de espera). Clique, foco ou digitação dentro fixam a janela até "Ocultar" (botão ao lado) ou Esc; clicar na aba abre fixada com o cursor no campo. Aberta, ocupa pouco: até 560px de largura, altura pelo conteúdo (151px sem conversa), conversa com teto de 45% da tela (até 380px), sugestões de tarefa antes da primeira mensagem e campo de uma linha. Ao lado ficam Ocultar, o encaixe e "Mais" (Nova conversa, Configurar a minha IA, Desligar o assistente). A aba mostra quando a IA está respondendo e acende um ponto quando chega resposta com a janela oculta. Arrastar a alça de cima solta a janela. Estados em `nextDockReveal` (puro) e `useDockReveal` | revelação (aba, espiando, fixada), tarefa escolhida, última resposta vista | conversa e posição vêm do `AiAssistantPanel` |
 | `AiSettingsDialog` | Editar e validar a fila de modelos | rascunho da fila, erros por item | `useAiConfig` |
 | `ImportDialog` | Ler a origem, montar e aplicar o plano de importação | origem lida, destino, política de conflito | `useProjectFiles`, `useProjectArchive` |
 
@@ -92,7 +93,7 @@ Regras que esta divisão garante:
 | --- | --- | --- | --- |
 | Árvore de arquivos | Coluna redimensionável e recolhível | Sheet lateral | Sheet lateral |
 | Editor e PDF | Colunas lado a lado redimensionáveis | Duas colunas curtas fixas | Um por vez, abas Código e PDF |
-| Assistente de IA | Janela de 420px encaixada no rodapé (direita, esquerda ou meio) ou solta e arrastável | Sheet inferior 85dvh | Sheet inferior 85dvh |
+| Assistente de IA | Aba no rodapé (direita, esquerda ou meio) que revela a janela compacta de até 560px, ou janela solta e arrastável | Sheet inferior 85dvh | Sheet inferior 85dvh |
 | Ações do cabeçalho | Todas visíveis | Parte no menu "Mais" | Quase todas no menu "Mais" |
 
 O código está em `src/features/editor/components/` e as regras completas em `08-responsividade.md`.
@@ -158,7 +159,7 @@ Pontos de atenção:
 | --- | --- |
 | `editor` | `EditorShell`, `EditorHeader`, `DesktopWorkspace`, `MobileWorkspace`, `PaneSwitcher`, `FileTreePanel`, `FileTreeSheet`, `FileActionsDialogs`, `FileNameDialog`, `CodeEditorPanel`, `PdfPane`, `ImportDialog` |
 | `pdf-viewer` | `PdfPreviewPanel` (compilação, marca da busca do SyncTeX, duplo clique), `PdfDocumentView` (PDF pronto, com zoom e download), `PdfPages` (pdf.js, páginas desenhadas perto da área visível, camada de texto opcional, camada por página via `renderOverlay`, tamanhos das páginas e duplo clique) |
-| `ai-assistant` | `AiAssistantPanel`, `AiSettingsDialog`, `ModelEntryCard`, `AiMessage`, `AiComposer`, `StructuredResultView` |
+| `ai-assistant` | `AiAssistantPanel`, `DockedAssistant`, `DockMenu`, `AiSettingsDialog`, `ModelEntryCard`, `AiMessage`, `AiComposer`, `StructuredResultView` |
 | `auth` | `AuthProvider`, `RequireAuth` |
 | `projects` | `ProjectList`, `DemoProjectList`, `NewProjectDialog`, `ProjectSettingsDialog`, `ProjectDocumentsSection` |
 | `notifications` | `NotificationBell` (contagem, lista, marcar como lidas, abrir a revisão) |

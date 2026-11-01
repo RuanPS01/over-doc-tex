@@ -64,7 +64,13 @@ export function useAssistantWindow() {
       // pela árvore de componentes: só conta o que nasceu no próprio cabeçalho, fora de controles.
       if (event.button !== 0 || !event.currentTarget.contains(target) || target.closest('button, a, input, textarea, [role^="menuitem"]')) return;
       const current = viewportNow();
-      const origin = state.mode === 'floating' ? clampWindowPosition(state, size, current) : dockedPosition(state.dock, size, current);
+      // Começa de onde a janela está na tela (a encaixada é mais baixa que a solta); sem ela, pela posição guardada.
+      const box = event.currentTarget.closest('[data-assistant-window]')?.getBoundingClientRect();
+      const origin = box
+        ? clampWindowPosition({ x: box.left, y: box.top }, size, current)
+        : state.mode === 'floating'
+          ? clampWindowPosition(state, size, current)
+          : dockedPosition(state.dock, size, current);
       drag.current = { pointerId: event.pointerId, offsetX: event.clientX - origin.x, offsetY: event.clientY - origin.y };
       event.currentTarget.setPointerCapture(event.pointerId);
       event.preventDefault();
@@ -100,6 +106,7 @@ export function useAssistantWindow() {
   return {
     state,
     size,
+    viewport,
     position,
     isDragging,
     dock,

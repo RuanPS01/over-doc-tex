@@ -140,6 +140,14 @@ const messages: Record<string, string> = {
   '{model} respondeu em {elapsed}, sem texto.': '{model} replied in {elapsed}, with no text.',
   'O provedor usou um modelo alternativo para responder.': 'The provider used an alternative model to reply.',
   'O modelo não respondeu. Confira a chave, o nome do modelo e a conexão.': 'The model did not respond. Check the key, the model name and the connection.',
+  'Arraste para soltar a janela': 'Drag to undock the window',
+  'Sugestões de tarefa': 'Task suggestions',
+  'Mostrar o assistente (nova resposta)': 'Show the assistant (new reply)',
+  'Mostrar o assistente': 'Show the assistant',
+  'Ocultar o assistente': 'Hide the assistant',
+  'Mais opções do assistente': 'More assistant options',
+  'Desligar o assistente': 'Turn off the assistant',
+  'Mostrar o assistente (respondendo)': 'Show the assistant (replying)',
 };
 
 export default messages;

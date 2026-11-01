@@ -256,7 +256,7 @@ async function runDiff(job: DiffRequest): Promise<DiffOutcome> {
 
 ### O que o usuário vê
 
-1. Abre o assistente (janela no desktop, encaixada no rodapé ou solta; Sheet inferior no celular). Sem IA configurada, o painel mostra "Configurar a minha IA"; o mesmo diálogo abre por "Configurações de IA" no menu "Mais ações" do projeto.
+1. Liga o assistente pelo botão do cabeçalho (no desktop, encaixado no rodapé como aba, que abre ao passar o mouse e fica aberta ao interagir, ou janela solta; Sheet inferior no celular). Sem IA configurada, o painel mostra "Configurar a minha IA"; o mesmo diálogo abre por "Configurações de IA" no menu "Mais ações" do projeto.
 2. No diálogo "Usar a minha própria IA", escolhe provedor, modelo e cola a própria chave; pode adicionar modelos de reserva.
 3. Escolhe a tarefa ("Gerar rascunho", "Verificar referências"...) e escreve o pedido.
 4. Vê a etapa atual e o texto chegando aos poucos. Se um modelo falhar, a resposta recomeça pelo modelo de reserva, com o motivo da troca.

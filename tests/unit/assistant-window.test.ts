@@ -4,7 +4,10 @@ import {
   centeredPosition,
   clampWindowPosition,
   DEFAULT_ASSISTANT_WINDOW,
+  dockedMessagesMaxHeight,
+  dockedPanelWidth,
   dockedPosition,
+  nextDockReveal,
   parseAssistantWindow,
 } from '@/features/ai-assistant/model/assistant-window';
 
@@ -37,5 +40,24 @@ describe('janela do assistente', () => {
     expect(parseAssistantWindow({ mode: 'docked', dock: 'top' })).toEqual(DEFAULT_ASSISTANT_WINDOW);
     expect(parseAssistantWindow({ mode: 'floating', x: 'a' })).toEqual(DEFAULT_ASSISTANT_WINDOW);
     expect(parseAssistantWindow(null)).toEqual(DEFAULT_ASSISTANT_WINDOW);
+  });
+
+  it('encaixada vira aba: o mouse revela, sair sem interagir encolhe, interagir fixa até ocultar', () => {
+    expect(nextDockReveal('tab', 'enter')).toBe('peek');
+    expect(nextDockReveal('peek', 'leave')).toBe('tab');
+    expect(nextDockReveal('peek', 'interact')).toBe('pinned');
+    expect(nextDockReveal('pinned', 'leave')).toBe('pinned');
+    expect(nextDockReveal('pinned', 'enter')).toBe('pinned');
+    expect(nextDockReveal('pinned', 'hide')).toBe('tab');
+    expect(nextDockReveal('tab', 'open')).toBe('pinned');
+    expect(nextDockReveal('tab', 'leave')).toBe('tab');
+  });
+
+  it('encaixada e aberta ocupa pouco: até 560 de largura e conversa com até 45% da altura', () => {
+    expect(dockedPanelWidth(viewport)).toBe(560);
+    expect(dockedPanelWidth({ width: 500, height: 800 })).toBe(420);
+    expect(dockedMessagesMaxHeight(viewport)).toBe(360);
+    expect(dockedMessagesMaxHeight({ width: 1280, height: 1200 })).toBe(380);
+    expect(dockedMessagesMaxHeight({ width: 1280, height: 300 })).toBe(160);
   });
 });

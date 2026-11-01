@@ -46,6 +46,44 @@ export function clampWindowPosition(position: { x: number; y: number }, size: Si
   };
 }
 
+/**
+ * Encaixada, a janela vira uma aba no rodapé:
+ * - "tab": só a aba aparece;
+ * - "peek": o mouse está em cima e a janela aparece; ao sair sem interagir, volta à aba;
+ * - "pinned": houve interação (clique, foco, digitação) e ela fica até ser ocultada.
+ */
+export type DockReveal = 'tab' | 'peek' | 'pinned';
+
+/** enter/leave: o mouse entra ou sai; interact: clique ou foco dentro; open: aba clicada ou assistente ligado; hide: ocultar ou Esc. */
+export type DockRevealEvent = 'enter' | 'leave' | 'interact' | 'open' | 'hide';
+
+export function nextDockReveal(current: DockReveal, event: DockRevealEvent): DockReveal {
+  switch (event) {
+    case 'enter':
+      return current === 'tab' ? 'peek' : current;
+    case 'leave':
+      return current === 'peek' ? 'tab' : current;
+    case 'interact':
+    case 'open':
+      return 'pinned';
+    case 'hide':
+      return 'tab';
+  }
+}
+
+/** Espera antes de encolher quando o mouse sai, para um desvio rápido não fechar a janela. */
+export const DOCK_LEAVE_DELAY_MS = 350;
+
+/** Encaixada e aberta, a janela é mais baixa e mais larga que a solta: até 560 de largura. */
+export function dockedPanelWidth(viewport: Size): number {
+  return Math.max(280, Math.min(560, viewport.width - WINDOW_MARGIN * 2 - 48));
+}
+
+/** Altura máxima da conversa encaixada: até 380, sem passar de 45% da tela. */
+export function dockedMessagesMaxHeight(viewport: Size): number {
+  return Math.max(160, Math.min(380, Math.round(viewport.height * 0.45)));
+}
+
 /** Canto superior esquerdo da janela encaixada (para soltar a janela de onde ela está). */
 export function dockedPosition(dock: DockPosition, size: Size, viewport: Size): { x: number; y: number } {
   const x = dock === 'left' ? WINDOW_MARGIN : dock === 'center' ? (viewport.width - size.width) / 2 : viewport.width - size.width - WINDOW_MARGIN;

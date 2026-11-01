@@ -1,14 +1,6 @@
-import { AppWindow, GripHorizontal, Loader2, PanelBottom, RotateCcw, Settings2, Sparkles, X } from 'lucide-react';
+import { GripHorizontal, Loader2, RotateCcw, Settings2, Sparkles, X } from 'lucide-react';
 import { useEffect, useRef, useState, type HTMLAttributes, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet';
 import type { LayoutMode } from '@/hooks/use-layout-mode';
 import { useT } from '@/hooks/use-t';
@@ -18,10 +10,11 @@ import { cn } from '@/lib/utils';
 import { useAiConfig } from '../hooks/use-ai-config';
 import { useAiStream } from '../hooks/use-ai-stream';
 import { useAssistantWindow } from '../hooks/use-assistant-window';
-import { DOCK_POSITIONS, type AssistantWindowState, type DockPosition } from '../model/assistant-window';
 import { AiComposer } from './ai-composer';
+import { DockedAssistant } from './ai-docked-assistant';
 import { AiMessage } from './ai-message';
 import { AiSettingsDialog } from './ai-settings-dialog';
+import { DockMenu } from './dock-menu';
 
 type AiStream = ReturnType<typeof useAiStream>;
 
@@ -30,15 +23,14 @@ interface AiChatProps {
   state: 'loading' | 'unconfigured' | 'ready';
   onOpenSettings: () => void;
   onClose: () => void;
-  /** Encaixada no rodapé: cabeçalho, mensagens e campo de texto mais enxutos. */
-  compact?: boolean;
   /** Alça de arraste da janela (desktop). */
   headerProps?: HTMLAttributes<HTMLDivElement>;
   /** Botões da janela antes dos demais (encaixe). */
   windowControls?: ReactNode;
 }
 
-function AiChat({ chat, state, onOpenSettings, onClose, compact = false, headerProps, windowControls }: AiChatProps) {
+/** Conversa completa: janela solta no desktop e Sheet no celular. */
+function AiChat({ chat, state, onOpenSettings, onClose, headerProps, windowControls }: AiChatProps) {
   const { t } = useT();
   const listRef = useRef<HTMLDivElement>(null);
   const lastText = chat.messages.at(-1)?.text;
@@ -52,19 +44,19 @@ function AiChat({ chat, state, onOpenSettings, onClose, compact = false, headerP
     <div className="flex h-full min-h-0 flex-col">
       <div
         {...headerProps}
-        className={cn('flex shrink-0 items-center gap-1 border-b pl-3 pr-1', compact ? 'h-9' : 'h-11', headerProps?.className)}
+        className={cn('flex h-11 shrink-0 items-center gap-1 border-b pl-3 pr-1', headerProps?.className)}
       >
         {headerProps && <GripHorizontal className="size-4 shrink-0 text-muted-foreground" aria-hidden />}
         <Sparkles className="size-4 shrink-0 text-primary" />
-        <h2 className={cn('min-w-0 flex-1 truncate pl-1 font-semibold', compact ? 'text-xs' : 'text-sm')}>{t('Assistente')}</h2>
+        <h2 className="min-w-0 flex-1 truncate pl-1 text-sm font-semibold">{t('Assistente')}</h2>
         {windowControls}
-        <Button variant="ghost" size="icon" className={cn(compact && 'size-8')} aria-label={t('Configurar a minha IA')} onClick={onOpenSettings}>
+        <Button variant="ghost" size="icon" aria-label={t('Configurar a minha IA')} onClick={onOpenSettings}>
           <Settings2 />
         </Button>
-        <Button variant="ghost" size="icon" className={cn(compact && 'size-8')} aria-label={t('Nova conversa')} onClick={chat.reset}>
+        <Button variant="ghost" size="icon" aria-label={t('Nova conversa')} onClick={chat.reset}>
           <RotateCcw />
         </Button>
-        <Button variant="ghost" size="icon" className={cn(compact && 'size-8')} aria-label={t('Fechar assistente')} onClick={onClose}>
+        <Button variant="ghost" size="icon" aria-label={t('Fechar assistente')} onClick={onClose}>
           <X />
         </Button>
       </div>
@@ -84,7 +76,7 @@ function AiChat({ chat, state, onOpenSettings, onClose, compact = false, headerP
         </div>
       ) : (
         <>
-          <div ref={listRef} className={cn('flex min-h-0 flex-1 flex-col overflow-y-auto', compact ? 'gap-3 p-2 text-[13px]' : 'gap-4 p-3')}>
+          <div ref={listRef} className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-3">
             {chat.messages.length === 0 && (
               <p className="m-auto max-w-xs text-center text-sm text-muted-foreground">
                 {t('Peça para reescrever um trecho, gerar um rascunho a partir dos capítulos ou verificar se as referências estão acessíveis.')}
@@ -94,58 +86,12 @@ function AiChat({ chat, state, onOpenSettings, onClose, compact = false, headerP
               <AiMessage key={message.id} message={message} />
             ))}
           </div>
-          <AiComposer compact={compact} isStreaming={chat.isStreaming} onSend={(input) => void chat.send(input)} onStop={chat.stop} />
+          <AiComposer isStreaming={chat.isStreaming} onSend={(input) => void chat.send(input)} onStop={chat.stop} />
         </>
       )}
     </div>
   );
 }
-
-const DOCK_VALUE_FLOATING = 'floating';
-
-/** Encaixe da janela: rodapé à esquerda, no meio, à direita ou janela solta. */
-function DockMenu({ state, compact, onDock, onUndock }: { state: AssistantWindowState; compact: boolean; onDock: (dock: DockPosition) => void; onUndock: () => void }) {
-  const { t } = useT();
-  const value = state.mode === 'docked' ? state.dock : DOCK_VALUE_FLOATING;
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className={cn(compact && 'size-8')}
-          aria-label={state.mode === 'docked' ? t('Encaixe da janela (encaixada no rodapé)') : t('Encaixe da janela (solta)')}
-          title={t('Encaixar no rodapé ou soltar')}
-        >
-          {state.mode === 'docked' ? <PanelBottom /> : <AppWindow />}
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuLabel>{t('Posição do assistente')}</DropdownMenuLabel>
-        <DropdownMenuRadioGroup
-          value={value}
-          onValueChange={(next) => {
-            if (next === DOCK_VALUE_FLOATING) onUndock();
-            else if (DOCK_POSITIONS.some((position) => position.value === next)) onDock(next as DockPosition);
-          }}
-        >
-          {DOCK_POSITIONS.map((position) => (
-            <DropdownMenuRadioItem key={position.value} value={position.value}>
-              {t(position.label)}
-            </DropdownMenuRadioItem>
-          ))}
-          <DropdownMenuRadioItem value={DOCK_VALUE_FLOATING}>{t('Janela solta (arraste pelo título)')}</DropdownMenuRadioItem>
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-const DOCK_CLASSES: Record<DockPosition, string> = {
-  left: 'left-4',
-  center: 'left-1/2 -translate-x-1/2',
-  right: 'right-4',
-};
 
 interface AiAssistantPanelProps {
   layoutMode: LayoutMode;
@@ -156,10 +102,10 @@ interface AiAssistantPanelProps {
 }
 
 /**
- * Assistente de IA ("Ask anything"):
- * - desktop: janela sobre o workspace, encaixada no rodapé (à direita, por
- *   padrão; também à esquerda ou no meio, em exibição compacta) ou solta,
- *   arrastada pelo título;
+ * Assistente de IA ("Ask anything"), ligado e desligado pelo botão do cabeçalho:
+ * - desktop: encaixado no rodapé (à direita, por padrão; também à esquerda ou
+ *   no meio) como uma aba que revela a janela compacta (DockedAssistant), ou
+ *   janela solta, arrastada pelo título;
  * - celular: Sheet inferior com 85% da altura visível.
  * Os hooks ficam acima do condicional, então fechar o painel não perde a conversa.
  */
@@ -177,38 +123,52 @@ export function AiAssistantPanel({ layoutMode, open, onOpenChange, files }: AiAs
 
   if (layoutMode === 'desktop') {
     if (!open) return settings;
-    const docked = windowState.state.mode === 'docked' ? windowState.state.dock : null;
+    if (windowState.state.mode === 'docked') {
+      return (
+        <>
+          {settings}
+          <DockedAssistant
+            chat={chat}
+            state={state}
+            dock={windowState.state.dock}
+            windowState={windowState.state}
+            viewport={windowState.viewport}
+            onOpenSettings={openSettings}
+            onTurnOff={close}
+            onDock={windowState.dock}
+            onUndock={windowState.undock}
+            dragHandleProps={windowState.dragHandleProps}
+          />
+        </>
+      );
+    }
     const position = windowState.position;
     return (
       <>
-      {settings}
-      <aside
-        aria-label={t('Assistente de IA')}
-        data-dock={docked ?? 'floating'}
-        style={{ width: windowState.size.width, height: windowState.size.height, ...(position ? { left: position.x, top: position.y } : {}) }}
-        className={cn(
-          'fixed z-40 flex flex-col overflow-hidden border bg-card text-card-foreground shadow-2xl',
-          // Encaixada: presa ao rodapé, cantos de baixo retos; solta: janela com cantos redondos.
-          docked ? cn('bottom-0 rounded-t-xl border-b-0', DOCK_CLASSES[docked]) : 'rounded-xl',
-          windowState.isDragging && 'select-none shadow-[0_24px_48px_-12px] shadow-overlay/40',
-        )}
-      >
-        <AiChat
-          chat={chat}
-          state={state}
-          onOpenSettings={openSettings}
-          onClose={close}
-          compact={docked !== null}
-          headerProps={{
-            ...windowState.dragHandleProps,
-            className: cn('touch-none', windowState.isDragging ? 'cursor-grabbing' : 'cursor-grab'),
-            title: t('Arraste para mover a janela'),
-          }}
-          windowControls={
-            <DockMenu state={windowState.state} compact={docked !== null} onDock={windowState.dock} onUndock={windowState.undock} />
-          }
-        />
-      </aside>
+        {settings}
+        <aside
+          aria-label={t('Assistente de IA')}
+          data-dock="floating"
+          data-assistant-window
+          style={{ width: windowState.size.width, height: windowState.size.height, ...(position ? { left: position.x, top: position.y } : {}) }}
+          className={cn(
+            'fixed z-40 flex flex-col overflow-hidden rounded-xl border bg-card text-card-foreground shadow-2xl',
+            windowState.isDragging && 'select-none shadow-[0_24px_48px_-12px] shadow-overlay/40',
+          )}
+        >
+          <AiChat
+            chat={chat}
+            state={state}
+            onOpenSettings={openSettings}
+            onClose={close}
+            headerProps={{
+              ...windowState.dragHandleProps,
+              className: cn('touch-none', windowState.isDragging ? 'cursor-grabbing' : 'cursor-grab'),
+              title: t('Arraste para mover a janela'),
+            }}
+            windowControls={<DockMenu state={windowState.state} onDock={windowState.dock} onUndock={windowState.undock} />}
+          />
+        </aside>
       </>
     );
   }
