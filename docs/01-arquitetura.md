@@ -75,7 +75,7 @@ over-doc-tex/
 │   ├── app/                           providers, roteador (com o subcaminho do Pages)
 │   ├── pages/                         uma página por rota; só compõe features
 │   ├── features/
-│   │   ├── auth/                      AuthProvider, RequireAuth e useAuth
+│   │   ├── auth/                      AuthProvider, RequireAuth, useAuth, menu da conta e Perfil (useProfile)
 │   │   ├── projects/                  lista e criação de projetos, useProject
 │   │   ├── editor/
 │   │   │   ├── components/            casca, cabeçalho, workspaces, árvore, Monaco, ImportDialog

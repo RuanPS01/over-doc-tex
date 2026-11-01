@@ -6,7 +6,7 @@
 | --- | --- | --- | --- |
 | `/login` | `LoginPage` | Visitante | Implementada: Google, e-mail e senha, criar conta, "Esqueci a senha" (link do Firebase para criar uma senha nova), volta para `?next=` |
 | `/login` (link de acesso) | `LoginPage` | Quem abriu o link enviado por e-mail | Implementada: confirma o e-mail e conclui a entrada sem senha (convite de revisão, coautor ou "Receber link de acesso por e-mail") |
-| `/` | `ProjectsPage` | Usuário com sessão | Implementada: projetos de que é membro, em tempo real, "Novo projeto" e "Revisões para você" (consulta `collectionGroup('reviews')` pelo e-mail verificado) |
+| `/` | `ProjectsPage` | Usuário com sessão | Implementada: projetos de que é membro, em tempo real, "Novo projeto" e "Revisões para você" (consulta `collectionGroup('reviews')` pelo e-mail verificado). No cabeçalho: "Configurações de IA", idioma, tema, notificações e o menu da conta (`AccountMenu`: "Perfil" e "Sair da conta"). No celular, o título fica numa linha e os botões na seguinte |
 | `/p/:projectId` | `EditorPage` | Membro; convidado com e-mail verificado | Implementada: layout responsivo, salvamento automático, diálogos do cabeçalho, aceite de convite de coautoria, aviso de projeto inexistente ou sem acesso |
 | `/p/:projectId/reviews/:reviewId` | `ReviewPage` | Membro (autor) e revisor com grant | Implementada: PDF da versão, pins numerados, threads, aprovar ou pedir alterações, "Ver alterações" desde a rodada anterior |
 
@@ -149,6 +149,7 @@ Pontos de atenção:
 | `FullPageStatus` | Tela inteira de espera, aviso ou erro (abrindo sessão, abrindo projeto, projeto não encontrado) |
 | `ThemeMenu`, `ThemeMenuItems` | Botão de tema (ícone do tema atual: sol, lua ou monitor) com Claro, Escuro e Padrão do sistema; `ThemeMenuItems` põe as mesmas opções dentro de outro menu. Está nos cabeçalhos de projetos, editor e revisão (`useThemePreference`, `src/lib/theme.ts`) |
 | `LanguageMenu`, `LanguageMenuItems` | Botão de idioma com a sigla do atual (PT, EN, ES): Português (Brasil), English, Español e Idioma do sistema, com os nomes sempre no próprio idioma e `translate="no"`. Fica ao lado do `ThemeMenu` nos cabeçalhos de projetos, editor (no celular, dentro de "Mais ações") e revisão (`src/lib/i18n/locale.ts`) |
+| `AccountMenu`, `ProfileDialog` (`features/auth`) | Botão redondo com a foto ou a inicial; o menu mostra nome e e-mail, "Perfil" e "Sair da conta". `ProfileDialog` troca o nome (no Firebase Authentication e em `memberProfiles` dos projetos) e a senha (com a atual, ou link por e-mail; quem só entra com Google ou link de acesso recebe um link para criar uma). Operações em `useProfile` |
 | `PageCornerBar` | Cabeçalho mínimo, só com o `LanguageMenu` e o `ThemeMenu` no canto, das telas sem barra própria (login e página não encontrada) |
 
 ### Domínio (`src/features/*/components`)

@@ -60,7 +60,7 @@ Configuração da IA do usuário (`UserAiConfigDoc`): lista ordenada de modelos,
 | `members` | mapa `uid: 'owner' \| 'editor' \| 'viewer'` | Fonte da verdade das regras |
 | `memberIds` | string[] | Espelho das chaves de `members` para `array-contains` |
 | `pendingMembers` | mapa `email: 'editor' \| 'viewer'` | Convites de coautoria; o convidado se adiciona ao aceitar |
-| `memberProfiles` | mapa `uid: { name, email }` | Nome e e-mail para a lista de membros (`users/{uid}` é privado). Cada membro grava só a própria entrada (ao criar o projeto, ao aceitar o convite ou ao abrir um projeto antigo); o dono só remove a entrada de quem sai |
+| `memberProfiles` | mapa `uid: { name, email }` | Nome e e-mail para a lista de membros (`users/{uid}` é privado). Cada membro grava só a própria entrada (ao criar o projeto, ao aceitar o convite, ao abrir um projeto antigo ou ao trocar o nome em "Perfil", que atualiza todos os projetos dele); o dono só remove a entrada de quem sai |
 | `engine` | `'pdflatex' \| 'xelatex' \| 'lualatex'` | Motor padrão |
 | `mainDocumentId` | string | Documento exibido ao revisor por padrão |
 | `latestSnapshotId` | string ou null | |

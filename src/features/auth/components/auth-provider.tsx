@@ -27,6 +27,8 @@ export interface AuthUser {
   emailVerified: boolean;
   photoURL: string | null;
   isAnonymous: boolean;
+  /** Formas de entrar ligadas à conta ("password", "google.com"...). */
+  providers: string[];
 }
 
 export interface AuthContextValue {
@@ -45,6 +47,8 @@ export interface AuthContextValue {
   /** Sessão anônima para revisar pelo link, sem conta (exige "Anônimo" ativo no Authentication). */
   signInAsGuest: () => Promise<void>;
   signOut: () => Promise<void>;
+  /** Relê nome e foto da conta depois de uma mudança de perfil (o Firebase não avisa sozinho). */
+  refreshUser: () => void;
 }
 
 export const AuthContext = createContext<AuthContextValue | null>(null);
@@ -57,6 +61,7 @@ function toAuthUser(user: User): AuthUser {
     emailVerified: user.emailVerified,
     photoURL: user.photoURL,
     isAnonymous: user.isAnonymous,
+    providers: user.providerData.map((provider) => provider.providerId),
   };
 }
 
@@ -97,6 +102,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await signInAnonymously(getFirebase().auth);
       },
       signOut: () => firebaseSignOut(getFirebase().auth),
+      refreshUser: () => {
+        const current = getFirebase().auth.currentUser;
+        setUser(current ? toAuthUser(current) : null);
+      },
     }),
     [status, user],
   );
