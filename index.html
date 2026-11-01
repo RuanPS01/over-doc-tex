@@ -10,8 +10,9 @@
     <link rel="icon" type="image/svg+xml" href="/icons/icon.svg" />
     <title>OverDocTeX</title>
     <script>
-      // Tema antes do primeiro desenho, para a página não piscar no tema errado.
-      // Mesma regra e mesma chave de src/lib/theme.ts.
+      // Tema e idioma antes do primeiro desenho, para a página não piscar no tema errado
+      // nem o navegador oferecer tradução por engano. Mesma regra e mesmas chaves de
+      // src/lib/theme.ts e src/lib/i18n/locale.ts.
       (function () {
         var preference = 'system';
         try {
@@ -20,6 +21,16 @@
         var dark = preference === 'dark' || (preference !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
         document.documentElement.classList.toggle('dark', dark);
         document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+        // Idioma: mesma regra de src/lib/i18n/locale.ts (sistema; fora de pt, es e en, inglês).
+        var locale = 'system';
+        try {
+          locale = localStorage.getItem('overdoctex.locale') || 'system';
+        } catch (error) {}
+        if (locale !== 'pt-BR' && locale !== 'en' && locale !== 'es') {
+          var language = ((navigator.languages && navigator.languages[0]) || navigator.language || '').toLowerCase();
+          locale = language.indexOf('pt') === 0 ? 'pt-BR' : language.indexOf('es') === 0 ? 'es' : 'en';
+        }
+        document.documentElement.lang = locale;
       })();
     </script>
   </head>

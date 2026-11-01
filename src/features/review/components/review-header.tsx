@@ -1,6 +1,7 @@
 import { ArrowLeft, CheckCircle2, GitCompare, MoreVertical, RotateCcw, Share2, TriangleAlert, UserRound, XCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'wouter';
+import { LanguageMenu } from '@/components/common/language-menu';
 import { ThemeMenu } from '@/components/common/theme-menu';
 import { Button } from '@/components/ui/button';
 import {
@@ -101,6 +102,7 @@ export function ReviewHeader({ review, role, onShowChanges, onStatusChange, onOp
           <span className="hidden sm:inline">Envio</span>
         </Button>
       )}
+      <LanguageMenu />
       <ThemeMenu />
       {!guestName && <NotificationBell />}
       {(actions.length > 0 || review.baseSnapshotId) && (

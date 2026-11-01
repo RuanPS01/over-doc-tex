@@ -1,5 +1,6 @@
 import { LogOut, Plus } from 'lucide-react';
 import { useState } from 'react';
+import { LanguageMenu } from '@/components/common/language-menu';
 import { ThemeMenu } from '@/components/common/theme-menu';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/features/auth/hooks/use-auth';
@@ -22,6 +23,7 @@ export default function ProjectsPage() {
           <Plus />
           <span className="hidden xs:inline">Novo projeto</span>
         </Button>
+        <LanguageMenu />
         <ThemeMenu />
         {user && <NotificationBell />}
         {user && (
