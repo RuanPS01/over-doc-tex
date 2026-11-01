@@ -50,7 +50,8 @@ O hífen simples é permitido. Ícones de seta (`ArrowLeft`) são permitidos: a 
 
 ## 2. Idioma
 
-- Documentação, textos de interface, mensagens de erro e comentários: **português do Brasil**, com acentos e cedilha corretos.
+- Documentação, comentários e commits: **português do Brasil**, com acentos e cedilha corretos.
+- Textos de interface e mensagens de erro: escritos em **português do Brasil** dentro de `t('...')` (ou `msg('...')` em constantes), com a tradução em inglês e espanhol nos dicionários de `src/lib/i18n/messages`. Texto visível sem `t()` não troca de idioma; `tests/unit/i18n.test.ts` falha se uma chave usada no código ficar sem tradução (receita em `10-manutencao-e-granularidade.md`, seção 3.8).
 - Identificadores de código (variáveis, funções, tipos, coleções, campos): **inglês** (`05-padroes-de-nomes.md`).
 
 ## 3. Proibições

@@ -82,7 +82,8 @@ Escala: `text-xs` (metadados, barras de painel), `text-sm` (padrão da interface
 
 ## 6. Texto da interface
 
-- Português do Brasil, frases curtas, sem travessão, sem emojis, sem setas.
+- Três idiomas: português do Brasil (o texto escrito no código), inglês e espanhol (dicionários em `src/lib/i18n/messages`). Frases curtas, sem travessão, sem emojis, sem setas, nos três.
+- O botão de idioma mostra a sigla (PT, EN, ES) e os nomes dos idiomas aparecem sempre no próprio idioma ("English", "Español"). A página inteira tem `translate="no"`: a tradução automática do navegador não age por cima da tradução própria.
 - Botões com verbo no infinitivo: "Compilar", "Solicitar revisão", "Ver alterações".
 - Estados com substantivo: "Em revisão", "Resolvido", "Congelado".
 - Mensagens de erro dizem o que aconteceu e o que fazer: "Não foi possível entrar. Confira os dados e tente novamente."

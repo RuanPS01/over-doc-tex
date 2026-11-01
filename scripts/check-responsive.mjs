@@ -5,6 +5,10 @@
  * - no celular em retrato, apenas um painel (Código OU PDF) fica visível;
  * - o menu "Mais ações" cabe na tela de 360px.
  *
+ * Roda em português (com todas as conferências, que acham os elementos pelos
+ * rótulos em português) e de novo em inglês e espanhol, com textos mais longos,
+ * conferindo a rolagem horizontal e a altura da raiz.
+ *
  * Uso: npm run build && npm run check:responsive
  * Requer o pacote `playwright` com Chromium instalado (npx playwright install chromium).
  */
@@ -28,6 +32,8 @@ const VIEWPORTS = [
   { name: 'desktop', width: 1280, height: 800, mode: 'desktop' },
 ];
 const ROUTES = ['/', '/login', '/p/demo'];
+/** O primeiro idioma é o dos rótulos usados nas conferências abaixo. */
+const LOCALES = ['pt-BR', 'en', 'es'];
 const outDir = process.env.SCREENSHOT_DIR ?? 'dist-screenshots';
 mkdirSync(outDir, { recursive: true });
 
@@ -35,13 +41,20 @@ const server = await preview({ preview: { port: 4173, strictPort: true }, logLev
 const browser = await chromium.launch();
 const failures = [];
 
-for (const viewport of VIEWPORTS) {
-  const context = await browser.newContext({ viewport: { width: viewport.width, height: viewport.height } });
+const RUNS = LOCALES.flatMap((locale) => VIEWPORTS.map((viewport) => ({ locale, viewport })));
+
+for (const { locale, viewport } of RUNS) {
+  const context = await browser.newContext({ locale, viewport: { width: viewport.width, height: viewport.height } });
   const page = await context.newPage();
+  const byLabel = locale === LOCALES[0];
+  const shot = `${outDir}/${locale === LOCALES[0] ? '' : `${locale}-`}${viewport.name}`;
 
   for (const route of ROUTES) {
     await page.goto(`http://localhost:4173${route}`, { waitUntil: 'networkidle' });
-    const label = `${viewport.name} ${route}`;
+    const label = `${locale} ${viewport.name} ${route}`;
+
+    const lang = await page.evaluate(() => document.documentElement.lang);
+    if (lang !== locale) failures.push(`${label}: idioma da página ${lang}, esperado ${locale}`);
 
     const overflow = await page.evaluate(() => ({
       doc: document.documentElement.scrollWidth,
@@ -57,7 +70,9 @@ for (const viewport of VIEWPORTS) {
       if (Math.round(rootHeight ?? 0) !== viewport.height) {
         failures.push(`${label}: raiz do editor com ${rootHeight}px em vez de ${viewport.height}px`);
       }
+    }
 
+    if (route === '/p/demo' && byLabel) {
       const visible = await page.evaluate(() =>
         ['Editor de código', 'Pré-visualização do PDF'].filter((name) => {
           const el = document.querySelector(`[aria-label="${name}"]`);
@@ -75,12 +90,12 @@ for (const viewport of VIEWPORTS) {
         if (!menu || menu.x < 0 || menu.x + menu.width > viewport.width) {
           failures.push(`${label}: menu "Mais ações" fora da tela`);
         }
-        await page.screenshot({ path: `${outDir}/${viewport.name}-menu.png` });
+        await page.screenshot({ path: `${shot}-menu.png` });
         await page.keyboard.press('Escape');
       }
     }
 
-    await page.screenshot({ path: `${outDir}/${viewport.name}${route.replace(/\//g, '_')}.png` });
+    await page.screenshot({ path: `${shot}${route.replace(/\//g, '_')}.png` });
   }
   await context.close();
 }
@@ -92,4 +107,4 @@ if (failures.length > 0) {
   console.error(`Falhas de responsividade:\n- ${failures.join('\n- ')}`);
   process.exit(1);
 }
-console.log(`Contrato de responsividade OK em ${VIEWPORTS.length} viewports e ${ROUTES.length} rotas.`);
+console.log(`Contrato de responsividade OK em ${VIEWPORTS.length} viewports, ${ROUTES.length} rotas e ${LOCALES.length} idiomas.`);

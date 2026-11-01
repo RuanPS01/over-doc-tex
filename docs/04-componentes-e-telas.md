@@ -147,7 +147,8 @@ Pontos de atenção:
 | `MarkdownContent` | Único ponto com `dangerouslySetInnerHTML`; recebe Markdown, sanitiza com DOMPurify |
 | `FullPageStatus` | Tela inteira de espera, aviso ou erro (abrindo sessão, abrindo projeto, projeto não encontrado) |
 | `ThemeMenu`, `ThemeMenuItems` | Botão de tema (ícone do tema atual: sol, lua ou monitor) com Claro, Escuro e Padrão do sistema; `ThemeMenuItems` põe as mesmas opções dentro de outro menu. Está nos cabeçalhos de projetos, editor e revisão (`useThemePreference`, `src/lib/theme.ts`) |
-| `PageCornerBar` | Cabeçalho mínimo, só com o `ThemeMenu` no canto, das telas sem barra própria (login e página não encontrada) |
+| `LanguageMenu`, `LanguageMenuItems` | Botão de idioma com a sigla do atual (PT, EN, ES): Português (Brasil), English, Español e Idioma do sistema, com os nomes sempre no próprio idioma e `translate="no"`. Fica ao lado do `ThemeMenu` nos cabeçalhos de projetos, editor (no celular, dentro de "Mais ações") e revisão (`src/lib/i18n/locale.ts`) |
+| `PageCornerBar` | Cabeçalho mínimo, só com o `LanguageMenu` e o `ThemeMenu` no canto, das telas sem barra própria (login e página não encontrada) |
 
 ### Domínio (`src/features/*/components`)
 

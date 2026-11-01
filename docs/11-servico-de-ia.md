@@ -137,7 +137,7 @@ O erro devolvido quando todos falham é o da primeira tentativa: é ele que diz 
 | `updateToc` | `OutlineProposal` | médio | abertura de cada seção, 30 mil |
 | `checkReferences` | `ReferenceAudit` | médio | referências extraídas |
 
-Regras dos prompts (`prompts.ts`): texto estável por tarefa (aproveita o cache de prompt do provedor), conteúdo do documento entre `<documento>` e `<selecao>`, páginas externas entre `<pagina_externa>`, e a instrução explícita de tratar esse conteúdo como dado, nunca como instrução.
+Regras dos prompts (`prompts.ts`): os prompts são escritos em português nos três idiomas da interface e pedem a resposta no idioma do documento; na dúvida, no idioma da interface (`getLocale()`, lido a cada pedido). Texto estável por tarefa e por idioma (aproveita o cache de prompt do provedor), conteúdo do documento entre `<documento>` e `<selecao>`, páginas externas entre `<pagina_externa>`, e a instrução explícita de tratar esse conteúdo como dado, nunca como instrução.
 
 ### 11.5.1 `checkReferences`
 

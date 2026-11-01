@@ -23,6 +23,7 @@ Não há servidor: todo código de produto roda no navegador. O que antes seria 
 | Um componente que conhece threads, snapshots, IA... | `src/features/<domínio>/components` |
 | Buscar ou gravar dados no Firebase | `src/features/<domínio>/hooks` |
 | Um hook de interface sem domínio (media query, teclado) | `src/hooks` |
+| Um texto visível (rótulo, `aria-label`, mensagem de erro) | Em português dentro de `t('...')` (componente com `useT()`) ou `msg('...')` (constante), e a tradução em `src/lib/i18n/messages/{en,es}/<área>.ts` (receita 3.8) |
 | Infraestrutura (parser, conversões, zip, download) | `src/lib/<assunto>` |
 | Lógica de IA (provedor, prompt, tarefa, contexto) | `src/lib/ai` (mapa completo em `11-servico-de-ia.md`) |
 | Compilação LaTeX (motor, preparação, log) | `src/lib/latex` |
@@ -39,7 +40,7 @@ Não há servidor: todo código de produto roda no navegador. O que antes seria 
 | Rota nova | `src/pages/<nome>-page.tsx` e uma linha em `src/app/router.tsx` |
 | Uma operação que envolve vários documentos | Um `writeBatch` no hook, e a validação cruzada (`getAfter`, `existsAfter`) em `firestore.rules` |
 
-Se algo parecer exigir servidor (segredo da plataforma, tarefa agendada, e-mail transacional), registre a decisão em `01-arquitetura.md` antes de implementar: o projeto é estático por escolha (decisões D1 a D10).
+Se algo parecer exigir servidor (segredo da plataforma, tarefa agendada, e-mail transacional), registre a decisão em `01-arquitetura.md` antes de implementar: o projeto é estático por escolha (decisões D1 a D12).
 
 ## 3. Receitas
 
@@ -93,6 +94,19 @@ As regras puras (caminhos, plano, limites) ficam em `src/lib/project-archive` e 
 ### 3.7 Mudar o motor de diff
 
 Toda mudança que altere o LaTeX gerado incrementa a versão do motor. Como a versão faz parte do `diffKey`, PDFs antigos não são reaproveitados por engano. Os anteriores continuam no banco até existir a coleta de lixo (backlog), então não troque a versão do motor sem necessidade: cada troca regera os diffs e ocupa cota.
+
+### 3.8 Adicionar ou mudar um texto da interface
+
+1. Escrever o texto em português dentro de `t()`: num componente, `const { t } = useT();` (redesenha quando o idioma muda) e `t('Salvar alterações')`; em funções fora de componentes, `t` de `@/lib/i18n` (lê o idioma na hora da chamada).
+2. A chave é sempre uma string literal, nunca variável nem template string. Partes variáveis entram como `{nome}`: `t('{count} arquivos', { count })`. Plural e concordância viram chaves separadas (`'1 comentário'` e `'{count} comentários'`).
+3. Constantes de módulo (rótulos de status, opções de menu) usam `msg('...')`, que só marca a chave, e são traduzidas ao mostrar: `t(STATUS_LABELS[status])`.
+4. Datas e números usam `getLocale()` no `Intl` (`toLocaleDateString(getLocale())`), nunca `'pt-BR'` fixo.
+5. Pôr a tradução nos dois dicionários da área (`src/lib/i18n/messages/en/<área>.ts` e `es/<área>.ts`): `common` para palavras repetidas em toda parte, e `editor`, `review`, `ai`, `projects` e `misc` para o resto. A chave fica idêntica ao texto do código, inclusive pontuação e espaços.
+6. Rodar `npx vitest run tests/unit/i18n.test.ts`: o teste lista as chaves sem tradução em cada idioma.
+7. Ao mudar um texto já traduzido, mudar a chave nos dois dicionários; a antiga sobra sem uso (o teste não reclama, mas remova).
+8. Texto que vem do usuário ou do banco (nome de arquivo, comentário, título de projeto) não passa por `t()`. Prompts enviados à IA também não (`src/lib/ai/prompts.ts`): eles pedem a resposta no idioma do documento e, na dúvida, no idioma da interface.
+
+Um idioma novo: incluir em `Locale`, `LOCALE_OPTIONS` e `detectLocale` (`src/lib/i18n/locale.ts`) e na regra do script do `index.html`, criar a pasta de dicionários em `messages/<idioma>` e juntá-la em `messages/index.ts`, e incluir o idioma no teste de cobertura.
 
 ## 4. Verificações
 
