@@ -1,5 +1,5 @@
 import { ArrowUp, ChevronDown, Square } from 'lucide-react';
-import { useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useState, type FormEvent, type KeyboardEvent, type Ref } from 'react';
 import type { AiTask } from '@/lib/ai/schemas';
 import { Button } from '@/components/ui/button';
 import {
@@ -24,16 +24,22 @@ export const TASK_LABELS: Record<AiTask, string> = {
 };
 
 interface AiComposerProps {
-  /** Assistente encaixado no rodapé: campo de uma linha e menos espaço. */
+  /** Assistente encaixado no rodapé: campo de uma linha, sem borda de cima e menos espaço. */
   compact?: boolean;
   isStreaming: boolean;
   onSend: (input: { task: AiTask; prompt: string }) => void;
   onStop: () => void;
+  /** Tarefa controlada de fora (as sugestões do assistente encaixado escolhem a tarefa). */
+  task?: AiTask;
+  onTaskChange?: (task: AiTask) => void;
+  inputRef?: Ref<HTMLTextAreaElement>;
 }
 
-export function AiComposer({ compact = false, isStreaming, onSend, onStop }: AiComposerProps) {
+export function AiComposer({ compact = false, isStreaming, onSend, onStop, task: controlledTask, onTaskChange, inputRef }: AiComposerProps) {
   const { t } = useT();
-  const [task, setTask] = useState<AiTask>('chat');
+  const [ownTask, setOwnTask] = useState<AiTask>('chat');
+  const task = controlledTask ?? ownTask;
+  const setTask = (next: AiTask) => (onTaskChange ? onTaskChange(next) : setOwnTask(next));
   const [prompt, setPrompt] = useState('');
 
   const submit = (event?: FormEvent) => {
@@ -52,14 +58,15 @@ export function AiComposer({ compact = false, isStreaming, onSend, onStop }: AiC
   };
 
   return (
-    <form onSubmit={submit} className={cn('flex shrink-0 flex-col border-t', compact ? 'gap-1.5 p-2' : 'gap-2 p-3')}>
+    <form onSubmit={submit} className={cn('flex shrink-0 flex-col', compact ? 'gap-1.5 p-2' : 'gap-2 border-t p-3')}>
       <Textarea
+        ref={inputRef}
         value={prompt}
         onChange={(event) => setPrompt(event.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={t('Pergunte qualquer coisa sobre o documento')}
         rows={compact ? 1 : 2}
-        className={cn('resize-none', compact ? 'max-h-28 min-h-9 py-1.5 text-sm' : 'max-h-40')}
+        className={cn('resize-none', compact ? 'max-h-28 min-h-9 border-0 bg-transparent px-1 py-1.5 text-sm shadow-none focus-visible:ring-0' : 'max-h-40')}
         aria-label={t('Mensagem para o assistente')}
       />
       <div className="flex items-center gap-2">

@@ -140,6 +140,14 @@ const messages: Record<string, string> = {
   '{model} respondeu em {elapsed}, sem texto.': '{model} respondió en {elapsed}, sin texto.',
   'O provedor usou um modelo alternativo para responder.': 'El proveedor usó un modelo alternativo para responder.',
   'O modelo não respondeu. Confira a chave, o nome do modelo e a conexão.': 'El modelo no respondió. Revisa la clave, el nombre del modelo y la conexión.',
+  'Arraste para soltar a janela': 'Arrastra para soltar la ventana',
+  'Sugestões de tarefa': 'Sugerencias de tarea',
+  'Mostrar o assistente (nova resposta)': 'Mostrar el asistente (nueva respuesta)',
+  'Mostrar o assistente': 'Mostrar el asistente',
+  'Ocultar o assistente': 'Ocultar el asistente',
+  'Mais opções do assistente': 'Más opciones del asistente',
+  'Desligar o assistente': 'Desactivar el asistente',
+  'Mostrar o assistente (respondendo)': 'Mostrar el asistente (respondiendo)',
 };
 
 export default messages;
