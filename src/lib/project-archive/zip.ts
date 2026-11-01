@@ -1,4 +1,5 @@
 import { unzipSync, zipSync, type Zippable } from 'fflate';
+import { t } from '@/lib/i18n';
 import { normalizeArchivePath } from './archive-paths';
 import type { ImportEntry } from './import-plan';
 
@@ -39,18 +40,18 @@ export function readZip(data: Uint8Array): { entries: ImportEntry[]; skipped: Sk
       if (file.name.endsWith('/')) return false;
       const path = normalizeArchivePath(file.name);
       if (!path) {
-        skipped.push({ path: file.name, reason: 'Caminho inválido ou arquivo de sistema' });
+        skipped.push({ path: file.name, reason: t('Caminho inválido ou arquivo de sistema') });
         return false;
       }
       if (file.originalSize > IMPORT_LIMITS.maxFileBytes) {
-        skipped.push({ path, reason: `Maior que ${formatMb(IMPORT_LIMITS.maxFileBytes)}` });
+        skipped.push({ path, reason: t('Maior que {size}', { size: formatMb(IMPORT_LIMITS.maxFileBytes) }) });
         return false;
       }
       declaredTotal += file.originalSize;
       accepted++;
-      if (accepted > IMPORT_LIMITS.maxFiles) throw new ImportLimitError(`O zip tem mais de ${IMPORT_LIMITS.maxFiles} arquivos.`);
+      if (accepted > IMPORT_LIMITS.maxFiles) throw new ImportLimitError(t('O zip tem mais de {count} arquivos.', { count: IMPORT_LIMITS.maxFiles }));
       if (declaredTotal > IMPORT_LIMITS.maxTotalBytes) {
-        throw new ImportLimitError(`O conteúdo do zip passa de ${formatMb(IMPORT_LIMITS.maxTotalBytes)}.`);
+        throw new ImportLimitError(t('O conteúdo do zip passa de {size}.', { size: formatMb(IMPORT_LIMITS.maxTotalBytes) }));
       }
       return true;
     },
@@ -63,7 +64,7 @@ export function readZip(data: Uint8Array): { entries: ImportEntry[]; skipped: Sk
     if (!path) continue;
     total += bytes.byteLength;
     if (total > IMPORT_LIMITS.maxTotalBytes) {
-      throw new ImportLimitError(`O conteúdo do zip passa de ${formatMb(IMPORT_LIMITS.maxTotalBytes)}.`);
+      throw new ImportLimitError(t('O conteúdo do zip passa de {size}.', { size: formatMb(IMPORT_LIMITS.maxTotalBytes) }));
     }
     entries.push({ path, data: bytes });
   }
@@ -75,22 +76,22 @@ export async function readDeviceFiles(files: readonly File[]): Promise<{ entries
   const skipped: SkippedEntry[] = [];
   const entries: ImportEntry[] = [];
   let total = 0;
-  if (files.length > IMPORT_LIMITS.maxFiles) throw new ImportLimitError(`Escolha no máximo ${IMPORT_LIMITS.maxFiles} arquivos.`);
+  if (files.length > IMPORT_LIMITS.maxFiles) throw new ImportLimitError(t('Escolha no máximo {count} arquivos.', { count: IMPORT_LIMITS.maxFiles }));
 
   for (const file of files) {
     // Na escolha de pasta, webkitRelativePath traz "pasta/sub/arquivo.tex".
     const path = normalizeArchivePath(file.webkitRelativePath || file.name);
     if (!path) {
-      skipped.push({ path: file.webkitRelativePath || file.name, reason: 'Caminho inválido ou arquivo de sistema' });
+      skipped.push({ path: file.webkitRelativePath || file.name, reason: t('Caminho inválido ou arquivo de sistema') });
       continue;
     }
     if (file.size > IMPORT_LIMITS.maxFileBytes) {
-      skipped.push({ path, reason: `Maior que ${formatMb(IMPORT_LIMITS.maxFileBytes)}` });
+      skipped.push({ path, reason: t('Maior que {size}', { size: formatMb(IMPORT_LIMITS.maxFileBytes) }) });
       continue;
     }
     total += file.size;
     if (total > IMPORT_LIMITS.maxTotalBytes) {
-      throw new ImportLimitError(`Os arquivos somam mais de ${formatMb(IMPORT_LIMITS.maxTotalBytes)}.`);
+      throw new ImportLimitError(t('Os arquivos somam mais de {size}.', { size: formatMb(IMPORT_LIMITS.maxTotalBytes) }));
     }
     entries.push({ path, data: new Uint8Array(await file.arrayBuffer()) });
   }

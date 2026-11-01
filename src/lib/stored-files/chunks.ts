@@ -6,6 +6,8 @@
  * src/lib/firebase/stored-files.ts. Modelo em docs/06-banco-de-dados.md.
  */
 
+import { t } from '@/lib/i18n';
+
 /**
  * Bytes por pedaço. O documento do Firestore aceita até 1 MiB (1.048.576 bytes)
  * somando nome e campos; 1.000.000 deixa folga para o caminho do documento.
@@ -62,8 +64,8 @@ export function joinChunks(parts: ReadonlyMap<number, Uint8Array>, layout: Chunk
   const data = new Uint8Array(layout.totalBytes);
   for (const { index, start, end } of chunkRanges(layout.totalBytes, layout.chunkBytes)) {
     const part = parts.get(index);
-    if (!part) throw new StoredFileError(`Pedaço ${index} do arquivo não encontrado.`);
-    if (part.byteLength !== end - start) throw new StoredFileError(`Pedaço ${index} do arquivo com tamanho inesperado.`);
+    if (!part) throw new StoredFileError(t('Pedaço {index} do arquivo não encontrado.', { index }));
+    if (part.byteLength !== end - start) throw new StoredFileError(t('Pedaço {index} do arquivo com tamanho inesperado.', { index }));
     data.set(part, start);
   }
   return data;

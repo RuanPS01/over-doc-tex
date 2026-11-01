@@ -3,6 +3,7 @@
  * principal, quais arquivos vão junto (inclusive o .bbl gerado) e como ler os
  * erros do log do TeX.
  */
+import { t } from '@/lib/i18n';
 import { buildBbl } from './bibliography';
 
 export interface ProjectTextFile {
@@ -143,7 +144,7 @@ export function buildCompileInput(
   binaries: ReadonlyMap<string, Uint8Array>,
 ): CompileInput {
   const main = texts.find((file) => file.path === mainPath);
-  if (!main) throw new Error(`Arquivo principal ${mainPath} não encontrado.`);
+  if (!main) throw new Error(t('Arquivo principal {path} não encontrado.', { path: mainPath }));
   const additionalFiles: Record<string, string | Uint8Array> = {};
   for (const file of texts) {
     if (file.path !== mainPath) additionalFiles[relativeToMain(file.path, mainPath)] = file.content;
@@ -233,7 +234,7 @@ export function parseTexLog(lines: readonly string[], mainPath: string, lineOffs
 
     const missing = line.match(/LaTeX Error: File `([^']+)' not found/);
     if (missing) {
-      issues.push({ kind: 'missing-package', message: `Pacote ou arquivo ${missing[1]} não disponível no compilador.`, file: innermostProject(), line: null });
+      issues.push({ kind: 'missing-package', message: t('Pacote ou arquivo {file} não disponível no compilador.', { file: missing[1]! }), file: innermostProject(), line: null });
     } else if (line.startsWith('! ')) {
       let lineNumber: number | null = null;
       for (let next = index + 1; next < Math.min(lines.length, index + 12); next++) {
@@ -252,7 +253,8 @@ export function parseTexLog(lines: readonly string[], mainPath: string, lineOffs
     } else {
       const warning = index >= lastPass ? line.match(/LaTeX Warning: (Citation|Reference) `([^']+)' .*undefined/) : null;
       if (warning) {
-        issues.push({ kind: 'warning', message: `${warning[1] === 'Citation' ? 'Citação' : 'Referência'} ${warning[2]} indefinida`, file: innermostProject(), line: null });
+        const message = warning[1] === 'Citation' ? t('Citação {key} indefinida', { key: warning[2]! }) : t('Referência {key} indefinida', { key: warning[2]! });
+        issues.push({ kind: 'warning', message, file: innermostProject(), line: null });
       }
     }
 

@@ -1,3 +1,5 @@
+import { t } from '@/lib/i18n';
+
 /** Entrega bytes gerados no navegador como download de arquivo. */
 export function downloadBytes(bytes: Uint8Array, fileName: string, type: string): void {
   const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type }));
@@ -17,6 +19,6 @@ export function slugify(text: string): string {
       .replace(/[\u0300-\u036f]/g, '')
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '') || 'projeto'
+      .replace(/^-|-$/g, '') || t('projeto')
   );
 }

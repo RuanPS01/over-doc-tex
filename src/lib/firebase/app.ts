@@ -11,6 +11,7 @@ import {
   persistentMultipleTabManager,
   type Firestore,
 } from 'firebase/firestore';
+import { t } from '@/lib/i18n';
 
 const config = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -34,7 +35,7 @@ let services: FirebaseServices | null = null;
 export function getFirebase(): FirebaseServices {
   if (services) return services;
   if (!isFirebaseConfigured) {
-    throw new Error('Firebase não configurado: copie .env.example para .env e preencha as chaves.');
+    throw new Error(t('Firebase não configurado: copie .env.example para .env e preencha as chaves.'));
   }
 
   const app = initializeApp(config);

@@ -5,25 +5,30 @@ import { PageCornerBar } from '@/components/common/page-corner-bar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/features/auth/hooks/use-auth';
+import { useT } from '@/hooks/use-t';
+import { msg } from '@/lib/i18n';
 
+/** Mensagens são chaves de tradução (msg): quem mostra chama t(). */
 const AUTH_ERRORS: Record<string, string> = {
-  'auth/invalid-credential': 'E-mail ou senha incorretos.',
-  'auth/invalid-email': 'E-mail inválido.',
-  'auth/user-disabled': 'Esta conta foi desativada.',
-  'auth/email-already-in-use': 'Já existe uma conta com este e-mail. Entre com a senha dela.',
-  'auth/weak-password': 'A senha precisa de pelo menos 6 caracteres.',
-  'auth/too-many-requests': 'Muitas tentativas. Espere alguns minutos e tente de novo.',
-  'auth/popup-closed-by-user': 'A janela do Google foi fechada antes de terminar.',
-  'auth/unauthorized-domain':
+  'auth/invalid-credential': msg('E-mail ou senha incorretos.'),
+  'auth/invalid-email': msg('E-mail inválido.'),
+  'auth/user-disabled': msg('Esta conta foi desativada.'),
+  'auth/email-already-in-use': msg('Já existe uma conta com este e-mail. Entre com a senha dela.'),
+  'auth/weak-password': msg('A senha precisa de pelo menos 6 caracteres.'),
+  'auth/too-many-requests': msg('Muitas tentativas. Espere alguns minutos e tente de novo.'),
+  'auth/popup-closed-by-user': msg('A janela do Google foi fechada antes de terminar.'),
+  'auth/unauthorized-domain': msg(
     'Este endereço não está autorizado no Firebase Authentication. Adicione o domínio em Authentication > Settings > Authorized domains.',
-  'auth/operation-not-allowed': 'Este método de login não está ativado no Firebase Authentication.',
-  'auth/invalid-action-code': 'O link de acesso expirou ou já foi usado. Peça um novo.',
-  'auth/expired-action-code': 'O link de acesso expirou. Peça um novo.',
+  ),
+  'auth/operation-not-allowed': msg('Este método de login não está ativado no Firebase Authentication.'),
+  'auth/invalid-action-code': msg('O link de acesso expirou ou já foi usado. Peça um novo.'),
+  'auth/expired-action-code': msg('O link de acesso expirou. Peça um novo.'),
 };
 
+/** Chave da mensagem de erro (traduzir com t()). */
 function messageFor(error: unknown): string {
   const code = (error as { code?: string }).code ?? '';
-  return AUTH_ERRORS[code] ?? 'Não foi possível entrar. Confira os dados e tente novamente.';
+  return AUTH_ERRORS[code] ?? msg('Não foi possível entrar. Confira os dados e tente novamente.');
 }
 
 /** Só aceita caminhos internos, para o ?next= não virar redirecionamento para fora. */
@@ -34,6 +39,7 @@ function safeNext(search: string): string {
 
 /** Rota /login: Google ou e-mail e senha (Firebase Authentication). */
 export default function LoginPage() {
+  const { t } = useT();
   const { signInWithGoogle, signInWithEmail, signUpWithEmail, sendEmailLink, isEmailLink, completeEmailLink, status } = useAuth();
   const [, navigate] = useLocation();
   const search = useSearch();
@@ -59,7 +65,7 @@ export default function LoginPage() {
       await action();
       navigate(next, { replace: true });
     } catch (caught) {
-      setError(messageFor(caught));
+      setError(t(messageFor(caught)));
     } finally {
       setIsBusy(false);
     }
@@ -74,15 +80,15 @@ export default function LoginPage() {
     setError(null);
     setNotice(null);
     if (!email.trim()) {
-      setError('Informe o e-mail para receber o link de acesso.');
+      setError(t('Informe o e-mail para receber o link de acesso.'));
       return;
     }
     setIsBusy(true);
     try {
       await sendEmailLink(email.trim().toLowerCase(), next);
-      setNotice(`Enviamos um link de acesso para ${email.trim()}. Abra o e-mail e toque no link para entrar.`);
+      setNotice(t('Enviamos um link de acesso para {email}. Abra o e-mail e toque no link para entrar.', { email: email.trim() }));
     } catch (caught) {
-      setError(messageFor(caught));
+      setError(t(messageFor(caught)));
     } finally {
       setIsBusy(false);
     }
@@ -102,11 +108,11 @@ export default function LoginPage() {
             void run(() => completeEmailLink(email.trim().toLowerCase()));
           }}
         >
-          <h1 className="text-lg font-semibold">Entrar com o link de acesso</h1>
-          <p className="text-sm text-muted-foreground">Confirme o e-mail que recebeu o link.</p>
-          <Input type="email" required autoComplete="email" placeholder="E-mail" value={email} onChange={(event) => setEmail(event.target.value)} />
+          <h1 className="text-lg font-semibold">{t('Entrar com o link de acesso')}</h1>
+          <p className="text-sm text-muted-foreground">{t('Confirme o e-mail que recebeu o link.')}</p>
+          <Input type="email" required autoComplete="email" placeholder={t('E-mail')} value={email} onChange={(event) => setEmail(event.target.value)} />
           <Button type="submit" disabled={isBusy}>
-            Entrar
+            {t('Entrar')}
           </Button>
           {error && (
             <p className="text-sm text-destructive" role="alert">
@@ -122,21 +128,21 @@ export default function LoginPage() {
     <div className="flex min-h-viewport items-center justify-center px-4">
       <PageCornerBar />
       <div className="flex w-full max-w-sm flex-col gap-4 rounded-xl border bg-card p-6 shadow-sm">
-        <h1 className="text-lg font-semibold">{isSignUp ? 'Criar conta no OverDocTeX' : 'Entrar no OverDocTeX'}</h1>
+        <h1 className="text-lg font-semibold">{isSignUp ? t('Criar conta no OverDocTeX') : t('Entrar no OverDocTeX')}</h1>
         {isDemo && (
-          <p className="text-sm text-muted-foreground">Firebase não configurado: login indisponível no modo demonstração.</p>
+          <p className="text-sm text-muted-foreground">{t('Firebase não configurado: login indisponível no modo demonstração.')}</p>
         )}
         {/* Diretrizes do Google: "G" nas cores oficiais, a 10px do texto. */}
         <Button variant="outline" className="gap-2.5" disabled={isDemo || isBusy} onClick={() => void run(signInWithGoogle)}>
           <img src={`${import.meta.env.BASE_URL}icons/google-g.svg`} alt="" width={18} height={18} className="size-[18px] shrink-0" />
-          Continuar com Google
+          {t('Continuar com Google')}
         </Button>
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <Input
             type="email"
             required
             autoComplete="email"
-            placeholder="E-mail"
+            placeholder={t('E-mail')}
             value={email}
             onChange={(event) => setEmail(event.target.value)}
           />
@@ -145,18 +151,18 @@ export default function LoginPage() {
             required
             minLength={isSignUp ? 6 : undefined}
             autoComplete={isSignUp ? 'new-password' : 'current-password'}
-            placeholder={isSignUp ? 'Senha (mínimo de 6 caracteres)' : 'Senha'}
+            placeholder={isSignUp ? t('Senha (mínimo de 6 caracteres)') : t('Senha')}
             value={password}
             onChange={(event) => setPassword(event.target.value)}
           />
           <Button type="submit" disabled={isDemo || isBusy}>
-            {isSignUp ? 'Criar conta' : 'Entrar com e-mail'}
+            {isSignUp ? t('Criar conta') : t('Entrar com e-mail')}
           </Button>
         </form>
         {!isSignUp && (
           <Button variant="outline" disabled={isDemo || isBusy} onClick={() => void handleSendLink()}>
             <Mail />
-            Receber link de acesso por e-mail
+            {t('Receber link de acesso por e-mail')}
           </Button>
         )}
         {error && (
@@ -179,7 +185,7 @@ export default function LoginPage() {
             setError(null);
           }}
         >
-          {isSignUp ? 'Já tenho conta: entrar' : 'Não tem conta? Criar com e-mail'}
+          {isSignUp ? t('Já tenho conta: entrar') : t('Não tem conta? Criar com e-mail')}
         </Button>
       </div>
     </div>

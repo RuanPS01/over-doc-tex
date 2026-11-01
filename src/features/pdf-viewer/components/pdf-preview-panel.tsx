@@ -1,6 +1,7 @@
 import { AlertTriangle, ChevronDown, CircleX, Download, FileText, Loader2, Play, ZoomIn, ZoomOut } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { useT } from '@/hooks/use-t';
 import { downloadBytes } from '@/lib/download';
 import type { TexIssue } from '@/lib/latex/prepare';
 import { cn } from '@/lib/utils';
@@ -48,6 +49,7 @@ export function PdfPreviewPanel({
   onPageSizes,
   focus,
 }: PdfPreviewPanelProps) {
+  const { t } = useT();
   const [zoomIndex, setZoomIndex] = useState(2);
   const zoom = ZOOM_STEPS[zoomIndex] ?? 100;
   const [viewerError, setViewerError] = useState<string | null>(null);
@@ -87,7 +89,7 @@ export function PdfPreviewPanel({
   const warningCount = issues.length - errorCount;
 
   return (
-    <section aria-label="Pré-visualização do PDF" className="flex h-full min-w-0 flex-col bg-pdf-canvas">
+    <section aria-label={t('Pré-visualização do PDF')} className="flex h-full min-w-0 flex-col bg-pdf-canvas">
       <div className="flex h-9 shrink-0 items-center gap-1 border-b bg-background px-2 text-xs text-muted-foreground">
         <FileText className="size-3.5 shrink-0" />
         <span className="min-w-0 truncate">{fileName}</span>
@@ -101,7 +103,7 @@ export function PdfPreviewPanel({
           variant="ghost"
           size="icon"
           className="size-7"
-          aria-label="Baixar PDF"
+          aria-label={t('Baixar PDF')}
           disabled={!pdf}
           onClick={() => pdf && downloadBytes(pdf, fileName, 'application/pdf')}
         >
@@ -111,7 +113,7 @@ export function PdfPreviewPanel({
           variant="ghost"
           size="icon"
           className="size-7"
-          aria-label="Diminuir zoom"
+          aria-label={t('Diminuir zoom')}
           disabled={zoomIndex === 0}
           onClick={() => setZoomIndex((index) => Math.max(0, index - 1))}
         >
@@ -122,7 +124,7 @@ export function PdfPreviewPanel({
           variant="ghost"
           size="icon"
           className="size-7"
-          aria-label="Aumentar zoom"
+          aria-label={t('Aumentar zoom')}
           disabled={zoomIndex === ZOOM_STEPS.length - 1}
           onClick={() => setZoomIndex((index) => Math.min(ZOOM_STEPS.length - 1, index + 1))}
         >
@@ -160,12 +162,12 @@ export function PdfPreviewPanel({
               </>
             ) : (
               <>
-                <p>O PDF aparece aqui depois da compilação.</p>
+                <p>{t('O PDF aparece aqui depois da compilação.')}</p>
                 <Button size="sm" onClick={onCompile}>
                   <Play />
-                  Compilar
+                  {t('Compilar')}
                 </Button>
-                <p className="text-xs">Atalho: Ctrl+S ou Ctrl+Enter (Cmd no Mac).</p>
+                <p className="text-xs">{t('Atalho: Ctrl+S ou Ctrl+Enter (Cmd no Mac).')}</p>
               </>
             )}
           </div>
@@ -187,7 +189,10 @@ export function PdfPreviewPanel({
             onClick={() => setIssuesOpen((open) => !open)}
           >
             <ChevronDown className={cn('size-3.5 transition-transform', !issuesOpen && '-rotate-90')} />
-            {[errorCount > 0 && `${errorCount} ${errorCount === 1 ? 'erro' : 'erros'}`, warningCount > 0 && `${warningCount} ${warningCount === 1 ? 'aviso' : 'avisos'}`]
+            {[
+              errorCount > 0 && (errorCount === 1 ? t('1 erro') : t('{count} erros', { count: errorCount })),
+              warningCount > 0 && (warningCount === 1 ? t('1 aviso') : t('{count} avisos', { count: warningCount })),
+            ]
               .filter(Boolean)
               .join(', ')}
           </button>

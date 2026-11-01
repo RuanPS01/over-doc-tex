@@ -6,13 +6,15 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import type { ProjectRole } from '@shared/firestore/types';
+import { useT } from '@/hooks/use-t';
 import { normalizeEmail } from '@/lib/email';
+import { msg } from '@/lib/i18n';
 import type { ProjectInfo } from '../hooks/use-project';
 import { useProjectMembers, type InviteRole } from '../hooks/use-project-members';
 import { MAX_PROJECT_NAME, normalizeProjectName } from '../model/new-project';
 import { ProjectDocumentsSection } from './project-documents-section';
 
-const ROLE_LABELS: Record<ProjectRole, string> = { owner: 'Dono', editor: 'Edita', viewer: 'Só lê' };
+const ROLE_LABELS: Record<ProjectRole, string> = { owner: msg('Dono'), editor: msg('Edita'), viewer: msg('Só lê') };
 
 interface ProjectSettingsDialogProps {
   open: boolean;
@@ -25,6 +27,7 @@ interface ProjectSettingsDialogProps {
 
 /** Nome, descrição, membros e convites de coautoria (o dono gerencia; quem edita muda os detalhes). */
 export function ProjectSettingsDialog({ open, onOpenChange, project, currentUid, role, rootCandidates }: ProjectSettingsDialogProps) {
+  const { t } = useT();
   const members = useProjectMembers(project.id);
   const canEdit = role === 'owner' || role === 'editor';
   const isOwner = role === 'owner';
@@ -52,7 +55,7 @@ export function ProjectSettingsDialog({ open, onOpenChange, project, currentUid,
       await action();
       setMessage({ text: success, isError: false });
     } catch {
-      setMessage({ text: 'Não foi possível salvar. Confira a conexão e a sua permissão no projeto.', isError: true });
+      setMessage({ text: t('Não foi possível salvar. Confira a conexão e a sua permissão no projeto.'), isError: true });
     } finally {
       setBusy(null);
     }
@@ -62,21 +65,21 @@ export function ProjectSettingsDialog({ open, onOpenChange, project, currentUid,
     event.preventDefault();
     const normalized = normalizeProjectName(name);
     if (!normalized) {
-      setMessage({ text: 'O nome não pode ficar vazio.', isError: true });
+      setMessage({ text: t('O nome não pode ficar vazio.'), isError: true });
       return;
     }
-    void run('details', () => members.saveDetails({ name: normalized, description: description.trim() || null }), 'Detalhes salvos.');
+    void run('details', () => members.saveDetails({ name: normalized, description: description.trim() || null }), t('Detalhes salvos.'));
   };
 
   const handleInvite = (event: FormEvent) => {
     event.preventDefault();
     const email = normalizeEmail(inviteEmail);
     if (!email) {
-      setMessage({ text: 'Informe um e-mail válido.', isError: true });
+      setMessage({ text: t('Informe um e-mail válido.'), isError: true });
       return;
     }
     if (Object.values(project.memberProfiles).some((profile) => profile.email === email)) {
-      setMessage({ text: 'Esta pessoa já é membro do projeto.', isError: true });
+      setMessage({ text: t('Esta pessoa já é membro do projeto.'), isError: true });
       return;
     }
     void run(
@@ -85,7 +88,7 @@ export function ProjectSettingsDialog({ open, onOpenChange, project, currentUid,
         await members.invite(email, inviteRole);
         setInviteEmail('');
       },
-      `Convite registrado. Envie o link do projeto para ${email}: ao entrar com esse e-mail, a pessoa aceita o convite.`,
+      t('Convite registrado. Envie o link do projeto para {email}: ao entrar com esse e-mail, a pessoa aceita o convite.', { email }),
     );
   };
 
@@ -98,30 +101,32 @@ export function ProjectSettingsDialog({ open, onOpenChange, project, currentUid,
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[calc(100dvh-1rem)] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Configurações do projeto</DialogTitle>
-          <DialogDescription>{isOwner ? 'Você é dono deste projeto.' : `Seu papel: ${ROLE_LABELS[role].toLowerCase()}.`}</DialogDescription>
+          <DialogTitle>{t('Configurações do projeto')}</DialogTitle>
+          <DialogDescription>
+            {isOwner ? t('Você é dono deste projeto.') : t('Seu papel: {role}.', { role: t(ROLE_LABELS[role]).toLowerCase() })}
+          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleDetails} className="flex flex-col gap-2">
           <label className="flex flex-col gap-1 text-sm font-medium">
-            Nome
+            {t('Nome')}
             <Input value={name} maxLength={MAX_PROJECT_NAME} disabled={!canEdit} onChange={(event) => setName(event.target.value)} />
           </label>
           <label className="flex flex-col gap-1 text-sm font-medium">
-            Descrição
+            {t('Descrição')}
             <Textarea
               value={description}
               rows={2}
               maxLength={1000}
               disabled={!canEdit}
-              placeholder="Sobre o que é o documento (opcional)"
+              placeholder={t('Sobre o que é o documento (opcional)')}
               onChange={(event) => setDescription(event.target.value)}
             />
           </label>
           {canEdit && (
             <Button type="submit" size="sm" className="self-end" disabled={busy !== null}>
               {busy === 'details' && <Loader2 className="animate-spin" />}
-              Salvar detalhes
+              {t('Salvar detalhes')}
             </Button>
           )}
         </form>
@@ -129,7 +134,7 @@ export function ProjectSettingsDialog({ open, onOpenChange, project, currentUid,
         <ProjectDocumentsSection projectId={project.id} projectName={project.name} canEdit={canEdit} rootCandidates={rootCandidates} />
 
         <section className="flex flex-col gap-2 border-t pt-4">
-          <h3 className="text-sm font-semibold">Membros</h3>
+          <h3 className="text-sm font-semibold">{t('Membros')}</h3>
           <ul className="flex flex-col gap-1">
             {memberIds.map((uid) => {
               const memberRole = project.members[uid]!;
@@ -139,8 +144,7 @@ export function ProjectSettingsDialog({ open, onOpenChange, project, currentUid,
                 <li key={uid} className="flex min-w-0 items-center gap-2 rounded-md border px-2 py-1.5">
                   <span className="flex min-w-0 flex-1 flex-col">
                     <span className="truncate text-sm">
-                      {profile?.name ?? 'Membro'}
-                      {uid === currentUid ? ' (você)' : ''}
+                      {uid === currentUid ? t('{name} (você)', { name: profile?.name ?? t('Membro') }) : (profile?.name ?? t('Membro'))}
                     </span>
                     {profile?.email && <span className="truncate text-xs text-muted-foreground">{profile.email}</span>}
                   </span>
@@ -149,29 +153,29 @@ export function ProjectSettingsDialog({ open, onOpenChange, project, currentUid,
                       <Select
                         value={memberRole}
                         disabled={busy !== null}
-                        onValueChange={(value) => void run(uid, () => members.changeRole(uid, value as InviteRole), 'Papel atualizado.')}
+                        onValueChange={(value) => void run(uid, () => members.changeRole(uid, value as InviteRole), t('Papel atualizado.'))}
                       >
-                        <SelectTrigger className="h-8 w-24 shrink-0 text-xs" aria-label={`Papel de ${profile?.name ?? 'membro'}`}>
+                        <SelectTrigger className="h-8 w-24 shrink-0 text-xs" aria-label={t('Papel de {name}', { name: profile?.name ?? t('membro') })}>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="editor">{ROLE_LABELS.editor}</SelectItem>
-                          <SelectItem value="viewer">{ROLE_LABELS.viewer}</SelectItem>
+                          <SelectItem value="editor">{t(ROLE_LABELS.editor)}</SelectItem>
+                          <SelectItem value="viewer">{t(ROLE_LABELS.viewer)}</SelectItem>
                         </SelectContent>
                       </Select>
                       <Button
                         variant="ghost"
                         size="icon"
                         className="size-8 shrink-0"
-                        aria-label={`Remover ${profile?.name ?? 'membro'}`}
+                        aria-label={t('Remover {name}', { name: profile?.name ?? t('membro') })}
                         disabled={busy !== null}
-                        onClick={() => void run(uid, () => members.removeMember(uid), 'Membro removido.')}
+                        onClick={() => void run(uid, () => members.removeMember(uid), t('Membro removido.'))}
                       >
                         <Trash2 />
                       </Button>
                     </>
                   ) : (
-                    <span className="shrink-0 text-xs text-muted-foreground">{ROLE_LABELS[memberRole]}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground">{t(ROLE_LABELS[memberRole])}</span>
                   )}
                 </li>
               );
@@ -180,16 +184,18 @@ export function ProjectSettingsDialog({ open, onOpenChange, project, currentUid,
               <li key={email} className="flex min-w-0 items-center gap-2 rounded-md border border-dashed px-2 py-1.5">
                 <span className="flex min-w-0 flex-1 flex-col">
                   <span className="truncate text-sm">{email}</span>
-                  <span className="text-xs text-muted-foreground">Convite pendente: {ROLE_LABELS[pendingRole].toLowerCase()}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {t('Convite pendente: {role}', { role: t(ROLE_LABELS[pendingRole]).toLowerCase() })}
+                  </span>
                 </span>
                 {isOwner && (
                   <Button
                     variant="ghost"
                     size="icon"
                     className="size-8 shrink-0"
-                    aria-label={`Cancelar o convite de ${email}`}
+                    aria-label={t('Cancelar o convite de {email}', { email })}
                     disabled={busy !== null}
-                    onClick={() => void run(email, () => members.cancelInvite(email), 'Convite cancelado.')}
+                    onClick={() => void run(email, () => members.cancelInvite(email), t('Convite cancelado.'))}
                   >
                     <Trash2 />
                   </Button>
@@ -201,45 +207,45 @@ export function ProjectSettingsDialog({ open, onOpenChange, project, currentUid,
 
         {isOwner && (
           <form onSubmit={handleInvite} className="flex flex-col gap-2 border-t pt-4">
-            <h3 className="text-sm font-semibold">Convidar coautor</h3>
+            <h3 className="text-sm font-semibold">{t('Convidar coautor')}</h3>
             <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
               <Input
                 type="email"
                 required
                 value={inviteEmail}
-                placeholder="coautor@universidade.br"
-                aria-label="E-mail do coautor"
+                placeholder={t('coautor@universidade.br')}
+                aria-label={t('E-mail do coautor')}
                 className="min-w-0 sm:flex-1"
                 onChange={(event) => setInviteEmail(event.target.value)}
               />
               <Select value={inviteRole} onValueChange={(value) => setInviteRole(value as InviteRole)}>
-                <SelectTrigger className="sm:w-28" aria-label="Papel do convidado">
+                <SelectTrigger className="sm:w-28" aria-label={t('Papel do convidado')}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="editor">{ROLE_LABELS.editor}</SelectItem>
-                  <SelectItem value="viewer">{ROLE_LABELS.viewer}</SelectItem>
+                  <SelectItem value="editor">{t(ROLE_LABELS.editor)}</SelectItem>
+                  <SelectItem value="viewer">{t(ROLE_LABELS.viewer)}</SelectItem>
                 </SelectContent>
               </Select>
               <Button type="submit" disabled={busy !== null}>
                 {busy === 'invite' ? <Loader2 className="animate-spin" /> : <UserPlus />}
-                Convidar
+                {t('Convidar')}
               </Button>
             </div>
             <div className="flex min-w-0 gap-2">
-              <Input readOnly value={projectLink} aria-label="Link do projeto" className="min-w-0 flex-1 font-mono text-xs" />
+              <Input readOnly value={projectLink} aria-label={t('Link do projeto')} className="min-w-0 flex-1 font-mono text-xs" />
               <Button
                 type="button"
                 variant="outline"
                 size="icon"
-                aria-label="Copiar link do projeto"
+                aria-label={t('Copiar link do projeto')}
                 onClick={() => void navigator.clipboard.writeText(projectLink).then(() => setCopied(true))}
               >
                 {copied ? <Check /> : <Copy />}
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              O convidado abre este link e entra com o e-mail convidado (Google ou link de acesso, que confirmam o endereço).
+              {t('O convidado abre este link e entra com o e-mail convidado (Google ou link de acesso, que confirmam o endereço).')}
             </p>
           </form>
         )}

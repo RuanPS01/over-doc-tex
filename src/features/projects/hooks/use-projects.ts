@@ -17,6 +17,7 @@ import { firestorePaths } from '@shared/firestore/paths';
 import type { ProjectDoc, ProjectRole } from '@shared/firestore/types';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { getFirebase, isFirebaseConfigured } from '@/lib/firebase/app';
+import { t } from '@/lib/i18n';
 import { queryKeys } from '@/lib/query-keys';
 import { sha256Hex } from '@/lib/stored-files/chunks';
 import { MAIN_DOCUMENT_ID, MAIN_FILE_ID, buildNewProject, memberProfileOf, starterTex } from '../model/new-project';
@@ -86,7 +87,7 @@ export function useCreateProject() {
     mutationFn: async (name: string): Promise<string> => {
       const { db, auth } = getFirebase();
       const user = auth.currentUser;
-      if (!user) throw new Error('Entre na sua conta para criar projetos.');
+      if (!user) throw new Error(t('Entre na sua conta para criar projetos.'));
       const uid = user.uid;
 
       const projectRef = doc(collection(db, firestorePaths.projects()));
