@@ -7,7 +7,8 @@ import { downloadBytes } from '@/lib/download';
 import type { TexIssue } from '@/lib/latex/prepare';
 import { cn } from '@/lib/utils';
 import { usePdfOutline } from '../hooks/use-pdf-outline';
-import { PdfOutlinePanel, PdfOutlineToggle } from './pdf-outline';
+import { PdfOutlineToggle } from './pdf-outline';
+import { PdfOutlineFrame } from './pdf-outline-frame';
 import { PdfPages } from './pdf-pages';
 
 const ZOOM_STEPS = [50, 75, 100, 125, 150, 200] as const;
@@ -150,17 +151,7 @@ export function PdfPreviewPanel({
         </Button>
       </div>
 
-      <div ref={frameRef} className="relative flex min-h-0 flex-1">
-        {outline.open && (
-          <PdfOutlinePanel
-            items={outline.items}
-            activeId={outline.activeId}
-            parents={outline.parents}
-            overlay={outline.overlay}
-            onSelect={outline.goTo}
-            onClose={() => outline.setOpen(false)}
-          />
-        )}
+      <PdfOutlineFrame outline={outline} frameRef={frameRef} widthKey="overdoctex.pdf-outline-width.editor">
         <div ref={scrollRef} className="relative min-h-0 min-w-0 flex-1 overflow-auto p-3 sm:p-4">
           {pdf && !viewerError ? (
             <PdfPages
@@ -209,7 +200,7 @@ export function PdfPreviewPanel({
             </div>
           )}
         </div>
-      </div>
+      </PdfOutlineFrame>
 
       {issues.length > 0 && (
         <div className="max-h-[40%] shrink-0 overflow-hidden border-t bg-background text-xs">

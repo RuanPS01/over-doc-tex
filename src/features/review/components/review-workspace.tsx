@@ -1,10 +1,13 @@
-import { MapPin, MessageSquare, PenLine, TextSelect } from 'lucide-react';
+import { MapPin, MessageSquare, PanelRightClose, PenLine, TextSelect } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState, useRef, type ReactNode } from 'react';
+import { useDefaultLayout } from 'react-resizable-panels';
 import { useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup, safeLayoutStorage } from '@/components/ui/resizable';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet';
 import { PdfDocumentView } from '@/features/pdf-viewer/components/pdf-document-view';
+import { useCollapsiblePanel } from '@/hooks/use-collapsible-panel';
 import { useLayoutMode } from '@/hooks/use-layout-mode';
 import { useT } from '@/hooks/use-t';
 import { slugify } from '@/lib/download';
@@ -52,6 +55,9 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
   const { t } = useT();
   const layoutMode = useLayoutMode();
   const isDesktop = layoutMode === 'desktop';
+  // Desktop: PDF | comentários num grupo redimensionável (como as colunas do editor), com o layout lembrado.
+  const { defaultLayout, onLayoutChanged } = useDefaultLayout({ id: 'review-desktop', storage: safeLayoutStorage });
+  const comments = useCollapsiblePanel('overdoctex.review-comments-width', 384);
   const [, navigate] = useLocation();
   const documents = useReviewDocuments(review);
   const [documentId, setDocumentId] = useState(review.grantedDocumentIds[0]!);
@@ -89,17 +95,20 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
   const startPending = (next: PendingAnnotation) => {
     setPending(next);
     setSelectedThreadId(null);
-    if (!isDesktop) setSheetOpen(true);
+    // O comentário novo é escrito no painel de comentários: se estiver recolhido, ele abre.
+    if (isDesktop) comments.expand();
+    else setSheetOpen(true);
   };
 
   const selectThread = useCallback(
     (threadId: string) => {
       setSelectedThreadId(threadId);
-      if (!isDesktop) setSheetOpen(true);
+      if (isDesktop) comments.expand();
+      else setSheetOpen(true);
       const thread = threads.find((item) => item.id === threadId);
       if (thread) scrollRef.current?.querySelector(`[data-pdf-page="${thread.anchor.page}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     },
-    [threads, isDesktop],
+    [threads, isDesktop, comments.expand],
   );
 
   const commentSelection = () => {
@@ -120,6 +129,7 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
     );
     // No celular o Sheet só abre pelo botão: abrir a cada traço impediria desenhar o resto.
     setSelectedThreadId(null);
+    if (isDesktop) comments.expand();
   };
 
   /** Linha do código sob o ponto (SyncTeX da versão), guardada na thread para "Abrir no código". */
@@ -253,6 +263,57 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
     </div>
   ) : null;
 
+  // Desktop: botão na barra do PDF que recolhe e reabre o painel de comentários.
+  const commentsToggle = isDesktop ? (
+    <Button
+      variant={comments.collapsed ? 'ghost' : 'secondary'}
+      size="sm"
+      className="h-8 shrink-0 gap-1.5 px-2"
+      aria-pressed={!comments.collapsed}
+      aria-label={comments.collapsed ? t('Mostrar os comentários') : t('Recolher os comentários')}
+      title={comments.collapsed ? t('Mostrar os comentários') : t('Recolher os comentários')}
+      onClick={() => (comments.collapsed ? comments.expand() : comments.collapse())}
+    >
+      <MessageSquare />
+      <span className="tabular-nums">{threads.length}</span>
+    </Button>
+  ) : null;
+
+  const pdfView = (
+    <PdfDocumentView
+      pdf={pdf}
+      error={pdfError}
+      scrollRef={scrollRef}
+      title={title}
+      actions={
+        <>
+          {tools}
+          {commentsToggle}
+        </>
+      }
+      textLayer
+      onPageSizes={setPageSizes}
+      outlineKey="review"
+      outlineDefaultOpen
+      fileName={`${slugify(review.projectName)}-v${review.snapshotLabel}${documentId === 'main' ? '' : `-${slugify(currentDocument?.title ?? documentId)}`}.pdf`}
+      renderOverlay={(page) => (
+        <AnnotationLayer
+          page={page}
+          threads={numbered.filter(({ thread }) => thread.anchor.page === page)}
+          pending={pending}
+          tool={canWrite ? tool : 'select'}
+          selectedThreadId={selectedThreadId}
+          onPlacePin={(pinPage, point) => {
+            startPending({ kind: 'pin', page: pinPage, point });
+            setTool('select');
+          }}
+          onStroke={handleStroke}
+          onSelect={selectThread}
+        />
+      )}
+    />
+  );
+
   return (
     <div className="flex h-viewport flex-col overflow-hidden bg-background">
       <ReviewHeader
@@ -280,44 +341,45 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
         </p>
       )}
       <main className="relative flex min-h-0 flex-1">
-        <div className="min-w-0 flex-1">
-          <PdfDocumentView
-            pdf={pdf}
-            error={pdfError}
-            scrollRef={scrollRef}
-            title={title}
-            actions={tools}
-            textLayer
-            onPageSizes={setPageSizes}
-            outlineKey="review"
-            outlineDefaultOpen
-            fileName={`${slugify(review.projectName)}-v${review.snapshotLabel}${documentId === 'main' ? '' : `-${slugify(currentDocument?.title ?? documentId)}`}.pdf`}
-            renderOverlay={(page) => (
-              <AnnotationLayer
-                page={page}
-                threads={numbered.filter(({ thread }) => thread.anchor.page === page)}
-                pending={pending}
-                tool={canWrite ? tool : 'select'}
-                selectedThreadId={selectedThreadId}
-                onPlacePin={(pinPage, point) => {
-                  startPending({ kind: 'pin', page: pinPage, point });
-                  setTool('select');
-                }}
-                onStroke={handleStroke}
-                onSelect={selectThread}
-              />
-            )}
-          />
-        </div>
         {isDesktop ? (
-          <aside aria-label={t('Comentários')} className="flex w-96 shrink-0 flex-col border-l bg-panel">
-            {threadList}
-          </aside>
+          <ResizablePanelGroup orientation="horizontal" defaultLayout={defaultLayout} onLayoutChanged={onLayoutChanged}>
+            <ResizablePanel id="document" minSize="35%">
+              {pdfView}
+            </ResizablePanel>
+            <ResizableHandle withHandle />
+            <ResizablePanel
+              id="comments"
+              panelRef={comments.panelRef}
+              defaultSize={384}
+              minSize={260}
+              maxSize="55%"
+              collapsible
+              collapsedSize={0}
+              groupResizeBehavior="preserve-pixel-size"
+              onResize={comments.onResize}
+            >
+              {!comments.collapsed && (
+                <aside aria-label={t('Comentários')} className="flex h-full min-w-0 flex-col bg-panel">
+                  <div className="flex h-10 shrink-0 items-center gap-2 border-b pl-3 pr-1 text-sm font-medium">
+                    <MessageSquare className="size-4 text-muted-foreground" aria-hidden />
+                    <span className="min-w-0 flex-1 truncate">{t('Comentários')}</span>
+                    <Button variant="ghost" size="icon" className="size-8" aria-label={t('Recolher os comentários')} title={t('Recolher os comentários')} onClick={comments.collapse}>
+                      <PanelRightClose />
+                    </Button>
+                  </div>
+                  {threadList}
+                </aside>
+              )}
+            </ResizablePanel>
+          </ResizablePanelGroup>
         ) : (
-          <Button className="absolute bottom-4 right-4 z-20 shadow-lg" onClick={() => setSheetOpen(true)}>
-            <MessageSquare />
-            {pending ? t('Escrever comentário') : t('Comentários ({count})', { count: threads.length })}
-          </Button>
+          <>
+            <div className="min-w-0 flex-1">{pdfView}</div>
+            <Button className="absolute bottom-4 right-4 z-20 shadow-lg" onClick={() => setSheetOpen(true)}>
+              <MessageSquare />
+              {pending ? t('Escrever comentário') : t('Comentários ({count})', { count: threads.length })}
+            </Button>
+          </>
         )}
       </main>
       {selection && <SelectionPopover selection={selection} onComment={commentSelection} />}

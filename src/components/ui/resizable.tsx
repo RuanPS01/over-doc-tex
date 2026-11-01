@@ -1,7 +1,25 @@
 import { GripVertical } from 'lucide-react';
 import type * as React from 'react';
-import { Group, Panel, Separator } from 'react-resizable-panels';
+import { Group, Panel, Separator, type LayoutStorage } from 'react-resizable-panels';
 import { cn } from '@/lib/utils';
+
+/** localStorage pode falhar (aba anônima, cota): o layout salvo é só conveniência. */
+const safeLayoutStorage: LayoutStorage = {
+  getItem: (key) => {
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  },
+  setItem: (key, value) => {
+    try {
+      localStorage.setItem(key, value);
+    } catch {
+      // Ignorado de propósito.
+    }
+  },
+};
 
 const ResizablePanelGroup = ({ className, ...props }: React.ComponentProps<typeof Group>) => (
   <Group className={cn('flex h-full w-full', className)} {...props} />
@@ -32,4 +50,4 @@ const ResizableHandle = ({
   </Separator>
 );
 
-export { ResizableHandle, ResizablePanel, ResizablePanelGroup };
+export { ResizableHandle, ResizablePanel, ResizablePanelGroup, safeLayoutStorage };

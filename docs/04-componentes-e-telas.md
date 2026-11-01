@@ -109,7 +109,7 @@ ReviewPage                               pages/review-page.tsx: membro entra com
     │   ├── ferramentas                  Selecionar texto | Ponto | Desenhar (na barra do PDF)
     │   └── AnnotationLayer (por página) destaques dos trechos, desenhos em SVG, pins numerados e a marcação pendente
     ├── SelectionPopover                 "Comentar trecho" logo abaixo da seleção de texto
-    ├── ThreadList                       lateral de 24rem (desktop) ou Sheet inferior (celular)
+    ├── ThreadList                       painel de comentários redimensionável e recolhível (desktop) ou Sheet inferior (celular)
     │   ├── PendingAnnotationPanel       comentário da marcação nova (citação do trecho; cor e desfazer traço no desenho)
     │   └── ThreadCard                   citação, "Rodada anterior" (conversa da thread de origem), comentários, responder,
     │                                    resolver ou reabrir, "Abrir no código" (autor), aviso de "Desatualizada"
@@ -119,6 +119,7 @@ ReviewPage                               pages/review-page.tsx: membro entra com
 Pontos de atenção:
 
 - **Índice do documento:** na revisão, o índice (marcadores do PDF) abre por padrão ao lado das páginas para guiar a leitura; a escolha de fechar fica lembrada neste navegador (`overdoctex.pdf-outline.review`). Num visualizador estreito (celular), começa fechado e abre por cima do PDF.
+- **Painéis redimensionáveis (desktop):** como as colunas do editor, o índice, as páginas e os comentários ficam lado a lado e as bordas entre eles arrastam para mudar a largura. Arrastar o índice ou os comentários até a borda recolhe o painel, e puxar a borda abre de novo. O índice também abre e fecha pelo botão no começo da barra do PDF; os comentários, pelo botão com o total de comentários na mesma barra e pelo botão no topo do painel. Começar um comentário (trecho, ponto ou desenho) ou escolher uma marcação no PDF reabre os comentários. Ao reabrir, o painel volta com a última largura usada, e não com o mínimo. Comentários: 384px por padrão, de 260px até 55% da tela, grupo lembrado em `review-desktop`. Índice: 224px por padrão, de 160px até metade do visualizador.
 - **Coordenadas normalizadas:** destaques, traços e pins usam valores de 0 a 1, então zoom e tamanho de tela não exigem recalcular nada no banco. Os traços são SVG com `vector-effect: non-scaling-stroke`.
 - **Camadas:** canvas, camada de texto do pdf.js (spans transparentes) e `AnnotationLayer` por cima. Em "Selecionar texto" a camada de anotação deixa o ponteiro passar (`pointer-events: none`), menos nos pins; em "Desenhar" ela captura o ponteiro com `touch-action: none` só sobre a página.
 - **Comentário em trecho:** a âncora junta os retângulos da seleção (por linha), a citação com 32 caracteres de contexto e a posição no texto da página (o mesmo `.pages` da versão).
@@ -159,7 +160,7 @@ Pontos de atenção:
 | Feature | Componentes |
 | --- | --- |
 | `editor` | `EditorShell`, `EditorHeader`, `DesktopWorkspace`, `MobileWorkspace`, `PaneSwitcher`, `FileTreePanel`, `FileTreeSheet`, `FileActionsDialogs`, `FileNameDialog`, `CodeEditorPanel`, `PdfPane`, `ImportDialog` |
-| `pdf-viewer` | `PdfPreviewPanel` (compilação, marca da busca do SyncTeX, duplo clique), `PdfDocumentView` (PDF pronto, com zoom e download), `PdfPages` (pdf.js, páginas desenhadas perto da área visível, camada de texto opcional, camada por página via `renderOverlay`, tamanhos das páginas, duplo clique e o documento aberto via `onDocument`), `PdfOutlinePanel` e `PdfOutlineToggle` (índice do documento, como o do leitor do Chrome: hierarquia recolhível, seção atual marcada, níveis acima dela abertos sozinhos e a seção visível na lista; o clique rola até ela, que continua marcada até a rolagem chegar; ao lado das páginas a partir de 520px de largura, por cima delas abaixo disso, fechando ao escolher). Estado em `usePdfOutline`; leitura e regras puras em `src/lib/pdf/outline.ts` |
+| `pdf-viewer` | `PdfPreviewPanel` (compilação, marca da busca do SyncTeX, duplo clique), `PdfDocumentView` (PDF pronto, com zoom e download), `PdfPages` (pdf.js, páginas desenhadas perto da área visível, camada de texto opcional, camada por página via `renderOverlay`, tamanhos das páginas, duplo clique e o documento aberto via `onDocument`), `PdfOutlineFrame` (índice e páginas num grupo redimensionável, com a borda arrastável e o índice recolhível; a estrutura não muda com ou sem índice, para as páginas não serem montadas de novo), `PdfOutlinePanel` e `PdfOutlineToggle` (índice do documento, como o do leitor do Chrome: hierarquia recolhível, seção atual marcada, níveis acima dela abertos sozinhos e a seção visível na lista; o clique rola até ela, que continua marcada até a rolagem chegar; ao lado das páginas a partir de 520px de largura, por cima delas abaixo disso, fechando ao escolher). Estado em `usePdfOutline`; leitura e regras puras em `src/lib/pdf/outline.ts` |
 | `ai-assistant` | `AiAssistantPanel`, `DockedAssistant`, `DockMenu`, `AiSettingsDialog`, `ModelEntryCard`, `AiMessage`, `AiComposer`, `StructuredResultView` |
 | `auth` | `AuthProvider`, `RequireAuth` |
 | `projects` | `ProjectList`, `DemoProjectList`, `NewProjectDialog`, `ProjectSettingsDialog`, `ProjectDocumentsSection` |
@@ -172,6 +173,7 @@ Pontos de atenção:
 
 | Hook | Feature | O que faz |
 | --- | --- | --- |
+| `useCollapsiblePanel` | hooks | Painel lateral recolhível de um grupo do react-resizable-panels: recolher, reabrir com a última largura (lembrada no navegador, gravada só depois de parar de mudar) e o estado recolhido |
 | `useProjects` | projects | Projetos do usuário em tempo real (`memberIds array-contains uid`, `updatedAt desc`) |
 | `useCreateProject` | projects | Cria o projeto (dono), o documento principal e o `main.tex` (ids fixos `main`) |
 | `useProject` | projects | Projeto aberto (nome, membros, convites, `memberProfiles`); nulo quando não existe ou a conta não pode vê-lo |

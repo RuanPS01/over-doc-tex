@@ -202,6 +202,8 @@ const messages: Record<string, string> = {
   alteracoes: 'cambios',
   'Entrar ou criar conta': 'Iniciar sesión o crear cuenta',
   'Com uma conta, você revisa com ela em qualquer aparelho, sem informar o nome.': 'Con una cuenta, revisas con ella en cualquier dispositivo, sin indicar tu nombre.',
+  'Mostrar os comentários': 'Mostrar los comentarios',
+  'Recolher os comentários': 'Contraer los comentarios',
 };
 
 export default messages;

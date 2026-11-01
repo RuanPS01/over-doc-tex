@@ -126,7 +126,7 @@ export function PdfOutlinePanel({ items, activeId, parents, overlay, onSelect, o
       aria-label={t('Índice do documento')}
       className={cn(
         'flex min-h-0 flex-col bg-background',
-        overlay ? 'absolute inset-y-0 left-0 z-20 w-72 max-w-[85%] border-r shadow-xl' : 'w-56 shrink-0 border-r',
+        overlay ? 'absolute inset-y-0 left-0 z-20 w-72 max-w-[85%] border-r shadow-xl' : 'h-full w-full',
       )}
     >
       <div className="flex h-9 shrink-0 items-center gap-2 border-b pl-3 pr-1 text-xs font-medium">
