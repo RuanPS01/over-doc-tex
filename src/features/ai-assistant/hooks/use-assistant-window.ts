@@ -4,6 +4,8 @@ import {
   centeredPosition,
   clampWindowPosition,
   dockedPosition,
+  DRAG_THRESHOLD_PX,
+  grabOffset,
   parseAssistantWindow,
   type AssistantWindowState,
   type DockPosition,
@@ -31,14 +33,14 @@ const viewportNow = () => ({ width: window.innerWidth, height: window.innerHeigh
 
 /**
  * Posição da janela do assistente no desktop: encaixada no rodapé ou solta e
- * arrastada pelo cabeçalho. A escolha fica lembrada neste navegador; a janela
- * solta volta para dentro da tela quando a janela do navegador encolhe.
+ * arrastada pelo cabeçalho (ou pela alça da encaixada, que só solta depois de
+ * o ponteiro andar alguns pixels). A escolha fica lembrada neste navegador; a
+ * janela solta volta para dentro da tela quando a janela do navegador encolhe.
  */
 export function useAssistantWindow() {
   const [state, setStateRaw] = useState<AssistantWindowState>(readState);
   const [viewport, setViewport] = useState(viewportNow);
   const [isDragging, setIsDragging] = useState(false);
-  const drag = useRef<{ pointerId: number; offsetX: number; offsetY: number } | null>(null);
 
   useEffect(() => {
     const onResize = () => setViewport(viewportNow());
@@ -56,50 +58,66 @@ export function useAssistantWindow() {
   const dock = useCallback((position: DockPosition) => setState({ mode: 'docked', dock: position }), [setState]);
   const undock = useCallback(() => setState({ mode: 'floating', ...centeredPosition(size, viewportNow()) }), [setState, size]);
 
-  /** Arrastar pelo cabeçalho; botões dentro dele continuam sendo só botões. */
+  // Arraste em andamento: os ouvintes ficam na janela do navegador, não no elemento clicado. Ao soltar
+  // a janela encaixada, a alça sai da tela (vira a janela solta); com captura do ponteiro no elemento,
+  // o pointerup se perdia e a janela seguia o mouse até um novo clique.
+  const stopDrag = useRef<(() => void) | null>(null);
+  useEffect(() => () => stopDrag.current?.(), []);
+
+  /** Arrastar pelo cabeçalho (ou pela alça da encaixada); botões dentro dele continuam sendo só botões. */
   const onPointerDown = useCallback(
     (event: ReactPointerEvent<HTMLElement>) => {
       const target = event.target as HTMLElement;
       // Menus abertos a partir do cabeçalho ficam em portal fora dele, mas o React repassa os eventos
       // pela árvore de componentes: só conta o que nasceu no próprio cabeçalho, fora de controles.
       if (event.button !== 0 || !event.currentTarget.contains(target) || target.closest('button, a, input, textarea, [role^="menuitem"]')) return;
-      const current = viewportNow();
-      // Começa de onde a janela está na tela (a encaixada é mais baixa que a solta); sem ela, pela posição guardada.
-      const box = event.currentTarget.closest('[data-assistant-window]')?.getBoundingClientRect();
-      const origin = box
-        ? clampWindowPosition({ x: box.left, y: box.top }, size, current)
-        : state.mode === 'floating'
-          ? clampWindowPosition(state, size, current)
-          : dockedPosition(state.dock, size, current);
-      drag.current = { pointerId: event.pointerId, offsetX: event.clientX - origin.x, offsetY: event.clientY - origin.y };
-      event.currentTarget.setPointerCapture(event.pointerId);
       event.preventDefault();
-      setIsDragging(true);
-      setStateRaw({ mode: 'floating', ...origin });
+      stopDrag.current?.();
+
+      const pointerId = event.pointerId;
+      const start = { x: event.clientX, y: event.clientY };
+      const fromDocked = state.mode === 'docked';
+      // Começa de onde a janela está na tela; sem ela, pela posição guardada.
+      const rect = event.currentTarget.closest('[data-assistant-window]')?.getBoundingClientRect();
+      const fallback = state.mode === 'floating' ? clampWindowPosition(state, size, viewportNow()) : dockedPosition(state.dock, size, viewportNow());
+      const box = rect ? { left: rect.left, top: rect.top, width: rect.width } : { left: fallback.x, top: fallback.y, width: size.width };
+      const offset = grabOffset(start, box, size, fromDocked);
+      let moving = false;
+      let last: AssistantWindowState | null = null;
+
+      const finish = () => {
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+        window.removeEventListener('pointercancel', onUp);
+        window.removeEventListener('blur', finish);
+        stopDrag.current = null;
+        if (!moving) return;
+        setIsDragging(false);
+        if (last) writeState(last);
+      };
+      const onMove = (move: PointerEvent) => {
+        if (move.pointerId !== pointerId) return;
+        // Botão já solto sem o pointerup chegar (soltou fora da janela do navegador): encerra.
+        if (move.buttons === 0) return finish();
+        if (!moving) {
+          if (Math.hypot(move.clientX - start.x, move.clientY - start.y) < DRAG_THRESHOLD_PX) return;
+          moving = true;
+          setIsDragging(true);
+        }
+        last = { mode: 'floating', ...clampWindowPosition({ x: move.clientX - offset.x, y: move.clientY - offset.y }, size, viewportNow()) };
+        setStateRaw(last);
+      };
+      const onUp = (up: PointerEvent) => {
+        if (up.pointerId === pointerId) finish();
+      };
+
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+      window.addEventListener('pointercancel', onUp);
+      window.addEventListener('blur', finish);
+      stopDrag.current = finish;
     },
     [state, size],
-  );
-
-  const onPointerMove = useCallback(
-    (event: ReactPointerEvent<HTMLElement>) => {
-      const active = drag.current;
-      if (!active || active.pointerId !== event.pointerId) return;
-      setStateRaw({ mode: 'floating', ...clampWindowPosition({ x: event.clientX - active.offsetX, y: event.clientY - active.offsetY }, size, viewportNow()) });
-    },
-    [size],
-  );
-
-  const onPointerUp = useCallback(
-    (event: ReactPointerEvent<HTMLElement>) => {
-      if (!drag.current || drag.current.pointerId !== event.pointerId) return;
-      drag.current = null;
-      setIsDragging(false);
-      setStateRaw((current) => {
-        writeState(current);
-        return current;
-      });
-    },
-    [],
   );
 
   const position = state.mode === 'floating' ? clampWindowPosition(state, size, viewport) : null;
@@ -111,6 +129,6 @@ export function useAssistantWindow() {
     isDragging,
     dock,
     undock,
-    dragHandleProps: { onPointerDown, onPointerMove, onPointerUp, onPointerCancel: onPointerUp },
+    dragHandleProps: { onPointerDown },
   };
 }

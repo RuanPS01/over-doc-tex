@@ -8,6 +8,8 @@ import {
   dockedPanelWidth,
   dockedPosition,
   dockMorphTransitions,
+  DRAG_THRESHOLD_PX,
+  grabOffset,
   nextDockReveal,
   parseAssistantWindow,
 } from '@/features/ai-assistant/model/assistant-window';
@@ -80,5 +82,14 @@ describe('janela do assistente', () => {
     expect(delayOf(close.card, 'width')).toBeGreaterThan(0);
     expect(delayOf(close.content, 'visibility')).toBeGreaterThan(0);
     expect(delayOf(close.tab, 'opacity')).toBeGreaterThan(delayOf(close.card, 'width'));
+  });
+
+  it('ao soltar a encaixada, o cursor segura o cabeçalho da janela solta; da solta, vale o ponto clicado', () => {
+    const size = assistantWindowSize(viewport);
+    const docked = { left: 704, top: 649, width: 560 };
+    expect(grabOffset({ x: 984, y: 655 }, docked, size, true)).toEqual({ x: 210, y: 22 });
+    expect(grabOffset({ x: 1262, y: 655 }, docked, size, true)).toEqual({ x: 396, y: 22 });
+    expect(grabOffset({ x: 300, y: 120 }, { left: 250, top: 100, width: 420 }, size, false)).toEqual({ x: 50, y: 20 });
+    expect(DRAG_THRESHOLD_PX).toBeGreaterThan(0);
   });
 });

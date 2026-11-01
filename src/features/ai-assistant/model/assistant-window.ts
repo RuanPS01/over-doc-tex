@@ -122,6 +122,30 @@ export function dockedPosition(dock: DockPosition, size: Size, viewport: Size): 
   return { x: Math.round(x), y: viewport.height - size.height };
 }
 
+/** Distância que o ponteiro precisa andar para virar arraste: um clique na alça não solta a janela. */
+export const DRAG_THRESHOLD_PX = 4;
+
+/** Altura do cabeçalho da janela solta (onde o cursor fica ao soltar a janela encaixada). */
+const FLOATING_HEADER_HEIGHT = 44;
+
+/**
+ * Onde o cursor "segura" a janela solta durante o arraste. Da janela solta,
+ * vale o ponto clicado. Da encaixada (mais larga e mais baixa), o cursor vai
+ * para o cabeçalho da janela solta, na mesma proporção horizontal, para a
+ * janela nascer debaixo do cursor e acompanhá-lo.
+ */
+export function grabOffset(
+  pointer: { x: number; y: number },
+  box: { left: number; top: number; width: number },
+  size: Size,
+  fromDocked: boolean,
+): { x: number; y: number } {
+  if (!fromDocked) return { x: pointer.x - box.left, y: pointer.y - box.top };
+  const ratio = box.width > 0 ? (pointer.x - box.left) / box.width : 0.5;
+  const edge = 24;
+  return { x: Math.round(Math.min(size.width - edge, Math.max(edge, ratio * size.width))), y: FLOATING_HEADER_HEIGHT / 2 };
+}
+
 /** Janela solta no centro da tela (soltar pelo menu, sem arrastar). */
 export function centeredPosition(size: Size, viewport: Size): { x: number; y: number } {
   return clampWindowPosition({ x: (viewport.width - size.width) / 2, y: (viewport.height - size.height) / 2 }, size, viewport);
