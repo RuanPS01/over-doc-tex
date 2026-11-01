@@ -11,6 +11,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
 import type { z } from 'zod';
+import { t } from '@/lib/i18n';
+import type { ProviderModel } from '../model-list';
 import { FETCH_LINKS_PROMPT } from '../prompts';
 import { AiTaskError } from '../schemas';
 import {
@@ -43,10 +45,10 @@ function textOf(message: Anthropic.Beta.BetaMessage): string {
 
 function assertCompleted(message: Anthropic.Beta.BetaMessage): void {
   if (message.stop_reason === 'refusal') {
-    throw new AiTaskError('refused', 'O modelo recusou este pedido.', false, true);
+    throw new AiTaskError('refused', t('O modelo recusou este pedido.'), false, true);
   }
   if (message.stop_reason === 'max_tokens') {
-    throw new AiTaskError('truncated', 'A resposta excedeu o limite de tamanho.', false);
+    throw new AiTaskError('truncated', t('A resposta excedeu o limite de tamanho.'), false);
   }
 }
 
@@ -54,22 +56,22 @@ function assertCompleted(message: Anthropic.Beta.BetaMessage): void {
 function toAiTaskError(error: unknown): unknown {
   if (error instanceof AiTaskError || error instanceof Anthropic.APIUserAbortError) return error;
   if (error instanceof Anthropic.AuthenticationError) {
-    return new AiTaskError('invalid_key', 'Chave da Anthropic inválida ou revogada. Confira a chave nas configurações do assistente.', false);
+    return new AiTaskError('invalid_key', t('Chave da Anthropic inválida ou revogada. Confira a chave nas configurações do assistente.'), false);
   }
   if (error instanceof Anthropic.PermissionDeniedError) {
-    return new AiTaskError('forbidden', 'A chave não tem permissão para este modelo ou recurso.', false);
+    return new AiTaskError('forbidden', t('A chave não tem permissão para este modelo ou recurso.'), false);
   }
   if (error instanceof Anthropic.RateLimitError) {
-    return new AiTaskError('rate_limited', 'Limite de uso da chave atingido. Tente em instantes.', true);
+    return new AiTaskError('rate_limited', t('Limite de uso da chave atingido. Tente em instantes.'), true);
   }
   if (error instanceof Anthropic.APIConnectionError) {
-    return new AiTaskError('network', 'Sem conexão com a API da Anthropic.', true);
+    return new AiTaskError('network', t('Sem conexão com a API da Anthropic.'), true);
   }
   if (error instanceof Anthropic.APIError && (error.status ?? 0) >= 500) {
-    return new AiTaskError('upstream', 'A API da Anthropic está indisponível no momento.', true);
+    return new AiTaskError('upstream', t('A API da Anthropic está indisponível no momento.'), true);
   }
   if (error instanceof Anthropic.APIError) {
-    return new AiTaskError('internal', `A API da Anthropic recusou o pedido: ${readableProviderMessage(error.message)}`, false);
+    return new AiTaskError('internal', t('A API da Anthropic recusou o pedido: {message}', { message: readableProviderMessage(error.message) }), false);
   }
   return error;
 }
@@ -89,11 +91,14 @@ export const verifyAnthropicKey = guarded(async (apiKey: string, model: string) 
   await createClient(apiKey).models.retrieve(model);
 });
 
-/** Modelos disponíveis para a chave (consultados ao vivo). */
-export const listAnthropicModels = guarded(async (apiKey: string): Promise<string[]> => {
-  const names: string[] = [];
-  for await (const model of createClient(apiKey).models.list()) names.push(model.id);
-  return names.sort();
+/** Modelos disponíveis para a chave (consultados ao vivo), com nome e data de lançamento. */
+export const listAnthropicModels = guarded(async (apiKey: string): Promise<ProviderModel[]> => {
+  const models: ProviderModel[] = [];
+  for await (const model of createClient(apiKey).models.list()) {
+    const released = Date.parse(model.created_at);
+    models.push({ id: model.id, label: model.display_name || null, released: Number.isNaN(released) ? null : released });
+  }
+  return models;
 });
 
 function toFetchedPage(content: Anthropic.Beta.BetaWebFetchToolResultBlock['content']): FetchedPage {
@@ -174,11 +179,11 @@ export function createAnthropicProvider(apiKey: string, model: string, options: 
       try {
         raw = parseJsonFromText(textOf(message));
       } catch {
-        throw new AiTaskError('invalid_output', 'A IA devolveu um JSON inválido.', true);
+        throw new AiTaskError('invalid_output', t('A IA devolveu um JSON inválido.'), true);
       }
       const parsed = schema.safeParse(raw);
       if (!parsed.success) {
-        throw new AiTaskError('invalid_output', 'A IA devolveu dados fora do formato esperado.', true);
+        throw new AiTaskError('invalid_output', t('A IA devolveu dados fora do formato esperado.'), true);
       }
       return { data: parsed.data as z.infer<Schema>, usage: toUsage(message) };
     }),

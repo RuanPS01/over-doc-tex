@@ -8,6 +8,7 @@ import { DIFF_ENGINE_VERSION } from '@/lib/diff/latex-diff';
 import { compileVisualDiff, type DiffTreeFile, type VisualDiffResult } from '@/lib/diff/visual-diff';
 import { getFirebase } from '@/lib/firebase/app';
 import { readChunks, writeChunks } from '@/lib/firebase/stored-files';
+import { t } from '@/lib/i18n';
 import { isTextPath } from '@/lib/project-archive/archive-paths';
 
 export function diffKeyOf(baseSnapshotId: string, targetSnapshotId: string, documentId: string): string {
@@ -90,7 +91,7 @@ export function useVisualDiff(projectId: string) {
   const readSnapshot = useCallback(
     async (snapshotId: string) => {
       const data = (await getDoc(doc(getFirebase().db, firestorePaths.snapshot(projectId, snapshotId)))).data() as SnapshotDoc | undefined;
-      if (!data) throw new Error('Versão não encontrada.');
+      if (!data) throw new Error(t('Versão não encontrada.'));
       return data;
     },
     [projectId],
@@ -104,7 +105,7 @@ export function useVisualDiff(projectId: string) {
       if (cached) return cached;
       const [base, target] = await Promise.all([readSnapshot(baseSnapshotId), readSnapshot(targetSnapshotId)]);
       const rootPath = target.documents[documentId]?.rootPath ?? base.documents[documentId]?.rootPath;
-      if (!rootPath) throw new Error('O documento não existe nas duas versões.');
+      if (!rootPath) throw new Error(t('O documento não existe nas duas versões.'));
       const result = await compileVisualDiff(await treeOf(base), await treeOf(target), rootPath);
       if (canSave) await saveDiff(projectId, key, { documentId, baseSnapshotId, targetSnapshotId }, result).catch(() => undefined);
       return { ...result, fromCache: false };
@@ -122,7 +123,7 @@ export function useVisualDiff(projectId: string) {
         ...[...binaries].map(([path, binary]) => [path, { data: binary.data }] as const),
       ]);
       const rootPath = base.documents[documentId]?.rootPath;
-      if (!rootPath) throw new Error('O documento não existe na versão base.');
+      if (!rootPath) throw new Error(t('O documento não existe na versão base.'));
       return { ...(await compileVisualDiff(await treeOf(base), target, rootPath)), fromCache: false };
     },
     [collectSources, readSnapshot, treeOf],

@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useT } from '@/hooks/use-t';
 import type { TreeChanges } from '@/lib/diff/file-changes';
 import { useVersionComparison, type ComparedSide } from '../hooks/use-tree-changes';
 import { useVisualDiff, type VisualDiff } from '../hooks/use-visual-diff';
@@ -26,6 +27,7 @@ interface ChangesDialogProps {
 
 /** "Ver alterações": o código de uma versão comparado com outra versão ou com o rascunho. */
 export function ChangesDialog({ open, onOpenChange, projectId, initialBaseId, onOpenFile, onOpenHistory, canEdit }: ChangesDialogProps) {
+  const { t } = useT();
   const { snapshots, isPending, compare } = useVersionComparison(projectId, open);
   const { betweenVersions, againstDraft } = useVisualDiff(projectId);
   const [view, setView] = useState<'code' | 'pdf'>('code');
@@ -61,12 +63,12 @@ export function ChangesDialog({ open, onOpenChange, projectId, initialBaseId, on
     setError(null);
     compare(...sides)
       .then((changes) => !cancelled && setResult(changes))
-      .catch(() => !cancelled && setError('Não foi possível ler os arquivos para comparar. Confira a conexão.'))
+      .catch(() => !cancelled && setError(t('Não foi possível ler os arquivos para comparar. Confira a conexão.')))
       .finally(() => !cancelled && setIsComparing(false));
     return () => {
       cancelled = true;
     };
-  }, [open, effectiveBase, targetId, snapshots, compare]);
+  }, [open, effectiveBase, targetId, snapshots, compare, t]);
 
   const baseSnapshot = snapshots.find((snapshot) => snapshot.id === effectiveBase);
   const documentIds = baseSnapshot ? Object.keys(baseSnapshot.documents) : ['main'];
@@ -75,15 +77,15 @@ export function ChangesDialog({ open, onOpenChange, projectId, initialBaseId, on
   useEffect(() => {
     if (!open || view !== 'pdf' || !effectiveBase) return;
     let cancelled = false;
-    setVisual({ diff: null, error: null, loading: 'Gerando a comparação em PDF' });
+    setVisual({ diff: null, error: null, loading: t('Gerando a comparação em PDF') });
     const run = targetId === DRAFT ? againstDraft(effectiveBase, documentId) : betweenVersions(effectiveBase, targetId, documentId, canEdit);
     run
       .then((diff) => !cancelled && setVisual({ diff, error: null, loading: null }))
-      .catch((caught: unknown) => !cancelled && setVisual({ diff: null, error: caught instanceof Error ? caught.message : 'Não foi possível gerar a comparação.', loading: null }));
+      .catch((caught: unknown) => !cancelled && setVisual({ diff: null, error: caught instanceof Error ? caught.message : t('Não foi possível gerar a comparação.'), loading: null }));
     return () => {
       cancelled = true;
     };
-  }, [open, view, effectiveBase, targetId, documentId, canEdit, againstDraft, betweenVersions]);
+  }, [open, view, effectiveBase, targetId, documentId, canEdit, againstDraft, betweenVersions, t]);
 
   const totals = result?.totals;
 
@@ -91,28 +93,28 @@ export function ChangesDialog({ open, onOpenChange, projectId, initialBaseId, on
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex h-[calc(100dvh-1rem)] max-w-4xl flex-col gap-0 overflow-hidden p-0">
         <DialogHeader className="shrink-0 border-b px-4 py-3 sm:px-5">
-          <DialogTitle>Ver alterações</DialogTitle>
-          <DialogDescription>Palavras inseridas aparecem em verde e as removidas, riscadas em vermelho.</DialogDescription>
+          <DialogTitle>{t('Ver alterações')}</DialogTitle>
+          <DialogDescription>{t('Palavras inseridas aparecem em verde e as removidas, riscadas em vermelho.')}</DialogDescription>
         </DialogHeader>
 
         {isPending ? (
           <p className="m-auto flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="size-4 animate-spin" />
-            Carregando as versões
+            {t('Carregando as versões')}
           </p>
         ) : snapshots.length === 0 ? (
           <div className="m-auto flex max-w-sm flex-col items-center gap-3 p-6 text-center text-sm text-muted-foreground">
-            <p>Ainda não há versões. Congele uma versão para comparar o rascunho com ela depois.</p>
+            <p>{t('Ainda não há versões. Congele uma versão para comparar o rascunho com ela depois.')}</p>
             <Button size="sm" onClick={onOpenHistory}>
               <History />
-              Abrir versões
+              {t('Abrir versões')}
             </Button>
           </div>
         ) : (
           <>
             <div className="grid shrink-0 grid-cols-1 gap-2 border-b px-4 py-3 sm:grid-cols-2 sm:px-5">
               <label className="flex min-w-0 flex-col gap-1 text-xs font-medium">
-                Versão base
+                {t('Versão base')}
                 <Select value={effectiveBase ?? undefined} onValueChange={setBaseId}>
                   <SelectTrigger>
                     <SelectValue />
@@ -120,25 +122,25 @@ export function ChangesDialog({ open, onOpenChange, projectId, initialBaseId, on
                   <SelectContent>
                     {snapshots.map((snapshot) => (
                       <SelectItem key={snapshot.id} value={snapshot.id}>
-                        Versão {snapshot.label}
+                        {t('Versão {label}', { label: snapshot.label })}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </label>
               <label className="flex min-w-0 flex-col gap-1 text-xs font-medium">
-                Comparar com
+                {t('Comparar com')}
                 <Select value={targetId} onValueChange={setTargetId}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={DRAFT}>Rascunho atual</SelectItem>
+                    <SelectItem value={DRAFT}>{t('Rascunho atual')}</SelectItem>
                     {snapshots
                       .filter((snapshot) => snapshot.id !== effectiveBase)
                       .map((snapshot) => (
                         <SelectItem key={snapshot.id} value={snapshot.id}>
-                          Versão {snapshot.label}
+                          {t('Versão {label}', { label: snapshot.label })}
                         </SelectItem>
                       ))}
                   </SelectContent>
@@ -149,13 +151,13 @@ export function ChangesDialog({ open, onOpenChange, projectId, initialBaseId, on
             <div className="flex shrink-0 flex-wrap items-center gap-2 border-b px-4 py-2 sm:px-5">
               <Tabs value={view} onValueChange={(next) => setView(next as 'code' | 'pdf')}>
                 <TabsList>
-                  <TabsTrigger value="code">Código</TabsTrigger>
-                  <TabsTrigger value="pdf">PDF marcado</TabsTrigger>
+                  <TabsTrigger value="code">{t('Código')}</TabsTrigger>
+                  <TabsTrigger value="pdf">{t('PDF marcado')}</TabsTrigger>
                 </TabsList>
               </Tabs>
               {view === 'pdf' && documentIds.length > 1 && (
                 <Select value={documentId} onValueChange={setDocumentId}>
-                  <SelectTrigger className="h-8 w-auto min-w-0 max-w-[12rem] text-xs" aria-label="Documento">
+                  <SelectTrigger className="h-8 w-auto min-w-0 max-w-[12rem] text-xs" aria-label={t('Documento')}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -175,7 +177,7 @@ export function ChangesDialog({ open, onOpenChange, projectId, initialBaseId, on
                   diff={visual.diff}
                   loadingLabel={visual.loading}
                   error={visual.error}
-                  fileName={`diff-${baseSnapshot?.label ?? ''}-${targetId === DRAFT ? 'rascunho' : (snapshots.find((item) => item.id === targetId)?.label ?? '')}.pdf`}
+                  fileName={`diff-${baseSnapshot?.label ?? ''}-${targetId === DRAFT ? t('rascunho') : (snapshots.find((item) => item.id === targetId)?.label ?? '')}.pdf`}
                 />
               </div>
             ) : (
@@ -185,16 +187,16 @@ export function ChangesDialog({ open, onOpenChange, projectId, initialBaseId, on
               ) : isComparing || !result ? (
                 <p className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="size-4 animate-spin" />
-                  Comparando
+                  {t('Comparando')}
                 </p>
               ) : result.files.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nenhuma diferença entre as duas versões.</p>
+                <p className="text-sm text-muted-foreground">{t('Nenhuma diferença entre as duas versões.')}</p>
               ) : (
                 <div className="flex flex-col gap-3">
                   <p role="status" className="text-sm">
-                    {totals!.changedFiles} {totals!.changedFiles === 1 ? 'arquivo alterado' : 'arquivos alterados'}:{' '}
-                    <span className="text-diff-added">{totals!.insertedWords} palavras inseridas</span>,{' '}
-                    <span className="text-diff-removed">{totals!.deletedWords} removidas</span>.
+                    {totals!.changedFiles === 1 ? t('1 arquivo alterado') : t('{count} arquivos alterados', { count: totals!.changedFiles })}:{' '}
+                    <span className="text-diff-added">{t('{count} palavras inseridas', { count: totals!.insertedWords })}</span>,{' '}
+                    <span className="text-diff-removed">{t('{count} removidas', { count: totals!.deletedWords })}</span>.
                   </p>
                   {result.files.map((file) => (
                     <FileChangeCard

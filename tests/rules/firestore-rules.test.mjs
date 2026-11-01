@@ -365,4 +365,156 @@ await runScenarios('Firestore', [
     assertFails(setDoc(doc(as('bia'), 'projects/p1/diffs/d1/chunks/1'), { data: zeros(10) }))],
 ]);
 
+// ------------------------------------------------------------ revisão por link
+// p7: ana (owner), bia (editor), caio (viewer). r5 é "por link" (código TOKEN), r6 é só por e-mail
+// (mesmo tendo um código guardado), r7 é por e-mail para rev@uni.br. Todas sobre a versão s1.
+const TOKEN = 'k'.repeat(24);
+const TOKEN6 = 'm'.repeat(24);
+await env.withSecurityRulesDisabled(async (ctx) => {
+  const db = ctx.firestore();
+  await setDoc(doc(db, 'projects/p7'), {
+    name: 'Livro', ownerId: 'ana', members: { ana: 'owner', bia: 'editor', caio: 'viewer' }, memberIds: ['ana', 'bia', 'caio'],
+    pendingMembers: {}, counters: { snapshots: 1, reviews: 7 }, latestSnapshotId: 's1', mainDocumentId: 'main',
+  });
+  await setDoc(doc(db, 'projects/p7/snapshots/s1'), { sequence: 1, label: '1.0' });
+  await setDoc(doc(db, 'projects/p7/snapshots/s1/grants/rev@uni.br'), { documentIds: ['main'], grantedBy: 'ana' });
+  const review = (overrides) => ({
+    number: 5, reviewerEmail: '', reviewerUid: null, snapshotId: 's1', grantedDocumentIds: ['main'],
+    status: 'invited', requestedBy: 'ana', lastActivityAt: 1, access: 'link', reviewerEmails: [], ...overrides,
+  });
+  await setDoc(doc(db, 'projects/p7/reviews/r5'), review({}));
+  await setDoc(doc(db, `projects/p7/reviews/r5/links/${TOKEN}`), { createdBy: 'ana', createdAt: 1 });
+  await setDoc(doc(db, 'projects/p7/reviews/r6'), review({ number: 6, access: 'email', reviewerEmail: 'x@uni.br' }));
+  await setDoc(doc(db, `projects/p7/reviews/r6/links/${TOKEN6}`), { createdBy: 'ana', createdAt: 1 });
+  await setDoc(doc(db, 'projects/p7/reviews/r7'), review({ number: 7, access: 'email', reviewerEmail: 'rev@uni.br' }));
+  for (const path of ['projects/p7/snapshots/s1/files/main.pdf', 'projects/p7/snapshots/s1/files/apendice.pdf']) {
+    await setDoc(doc(db, path), { ...fileInfo(10), createdBy: 'bia', createdAt: 1 });
+    await setDoc(doc(db, `${path}/chunks/0`), { data: zeros(10) });
+  }
+  await setDoc(doc(db, 'projects/p7/diffs/d1'), { targetSnapshotId: 's1', baseSnapshotId: 's0', documentId: 'main', createdBy: 'bia', pdf: fileInfo(10) });
+  await setDoc(doc(db, 'projects/p7/diffs/d1/chunks/0'), { data: zeros(10) });
+});
+
+const anon = (uid) => env.authenticatedContext(uid, { firebase: { sign_in_provider: 'anonymous' } }).firestore();
+const guest = (overrides = {}) => ({ reviewId: 'r5', token: TOKEN, name: 'Maria Souza', guestKey: 'maria souza', createdAt: serverTimestamp(), ...overrides });
+const guestThread = (uid, overrides = {}) => ({
+  projectId: 'p7', reviewId: 'r5', snapshotId: 's1', documentId: 'main', kind: 'pin',
+  anchor: { type: 'pin', page: 1, point: { x: 0.5, y: 0.5 }, drawing: null },
+  status: 'open', resolution: null, createdBy: uid, createdByRole: 'reviewer', commentCount: 1, participantIds: [uid], ...overrides,
+});
+const guestComment = (uid, overrides = {}) => ({ authorId: uid, authorName: 'Maria Souza', authorKey: 'maria souza', kind: 'comment', body: 'Rever a figura 1', ...overrides });
+
+await runScenarios('Revisão por link', [
+  ['visitante com o código do link grava a ficha (sem conta, login anônimo)', () =>
+    assertSucceeds(setDoc(doc(anon('g1'), 'projects/p7/snapshots/s1/guests/g1'), guest()))],
+  ['código errado é negado', () =>
+    assertFails(setDoc(doc(anon('g2'), 'projects/p7/snapshots/s1/guests/g2'), guest({ token: 'z'.repeat(24) })))],
+  ['revisão só por e-mail não aceita visitante, mesmo com código guardado', () =>
+    assertFails(setDoc(doc(anon('g2'), 'projects/p7/snapshots/s1/guests/g2'), guest({ reviewId: 'r6', token: TOKEN6 })))],
+  ['ficha em nome de outro uid é negada', () =>
+    assertFails(setDoc(doc(anon('g1'), 'projects/p7/snapshots/s1/guests/g3'), guest()))],
+  ['conta não convidada grava a ficha com a chave da própria conta', () =>
+    assertSucceeds(setDoc(doc(env.authenticatedContext('conta1').firestore(), 'projects/p7/snapshots/s1/guests/conta1'), guest({ name: 'Carla', guestKey: 'uid:conta1' })))],
+  ['chave "uid:" de outra conta é negada', async () => {
+    await assertFails(setDoc(doc(anon('g2'), 'projects/p7/snapshots/s1/guests/g2'), guest({ guestKey: 'uid:conta1' })));
+    await assertFails(setDoc(doc(env.authenticatedContext('conta2').firestore(), 'projects/p7/snapshots/s1/guests/conta2'), guest({ guestKey: 'uid:conta1' })));
+  }],
+  ['ficha com campo extra ou nome vazio é negada', async () => {
+    await assertFails(setDoc(doc(anon('g2'), 'projects/p7/snapshots/s1/guests/g2'), guest({ role: 'owner' })));
+    await assertFails(setDoc(doc(anon('g2'), 'projects/p7/snapshots/s1/guests/g2'), guest({ name: '' })));
+  }],
+  ['visitante lê a revisão, a versão, o PDF e o diff concedidos', async () => {
+    await assertSucceeds(getDoc(doc(anon('g1'), 'projects/p7/reviews/r5')));
+    await assertSucceeds(getDoc(doc(anon('g1'), 'projects/p7/snapshots/s1')));
+    await assertSucceeds(getDoc(doc(anon('g1'), 'projects/p7/snapshots/s1/files/main.pdf')));
+    await assertSucceeds(getDocs(collection(anon('g1'), 'projects/p7/snapshots/s1/files/main.pdf/chunks')));
+    await assertSucceeds(getDoc(doc(anon('g1'), 'projects/p7/diffs/d1')));
+    await assertSucceeds(getDocs(collection(anon('g1'), 'projects/p7/diffs/d1/chunks')));
+  }],
+  ['visitante não lê documento não concedido, outra revisão, o projeto nem o código', async () => {
+    await assertFails(getDoc(doc(anon('g1'), 'projects/p7/snapshots/s1/files/apendice.pdf')));
+    await assertFails(getDoc(doc(anon('g1'), 'projects/p7/reviews/r7')));
+    await assertFails(getDoc(doc(anon('g1'), 'projects/p7')));
+    await assertFails(getDoc(doc(anon('g1'), `projects/p7/reviews/r5/links/${TOKEN}`)));
+  }],
+  ['anônimo sem ficha não lê nada da revisão', () => assertFails(getDoc(doc(anon('g9'), 'projects/p7/reviews/r5')))],
+  ['visitante cria thread e comentário com a identidade do nome', () => {
+    const db = anon('g1');
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'projects/p7/reviews/r5/threads/t1'), guestThread('g1'));
+    batch.set(doc(db, 'projects/p7/reviews/r5/threads/t1/comments/c1'), guestComment('g1'));
+    return assertSucceeds(batch.commit());
+  }],
+  ['comentário com a identidade de outro nome é negado', () =>
+    assertFails(setDoc(doc(anon('g1'), 'projects/p7/reviews/r5/threads/t1/comments/c2'), guestComment('g1', { authorKey: 'joao' })))],
+  ['mesmo nome em outro aparelho é o mesmo revisor: edita o próprio comentário', async () => {
+    await assertSucceeds(setDoc(doc(anon('g4'), 'projects/p7/snapshots/s1/guests/g4'), guest()));
+    await assertSucceeds(updateDoc(doc(anon('g4'), 'projects/p7/reviews/r5/threads/t1/comments/c1'), { body: 'Rever as figuras 1 e 2', editedAt: serverTimestamp() }));
+  }],
+  ['outro nome não edita o comentário do visitante', async () => {
+    await assertSucceeds(setDoc(doc(anon('g5'), 'projects/p7/snapshots/s1/guests/g5'), guest({ name: 'João', guestKey: 'joao' })));
+    await assertFails(updateDoc(doc(anon('g5'), 'projects/p7/reviews/r5/threads/t1/comments/c1'), { body: 'x', editedAt: serverTimestamp() }));
+  }],
+  ['visitante muda o status da revisão e notifica quem pediu', async () => {
+    await assertSucceeds(updateDoc(doc(anon('g1'), 'projects/p7/reviews/r5'), {
+      status: 'changes_requested', reviewerUid: 'g1', reviewerName: 'Maria Souza', lastActivityAt: serverTimestamp(),
+    }));
+    await assertSucceeds(setDoc(doc(anon('g1'), 'users/ana/notifications/n-visitante'), {
+      actorId: 'g1', projectId: 'p7', reviewId: 'r5', read: false, type: 'review_status_changed', title: 't', body: '',
+    }));
+  }],
+  ['visitante não muda campos de quem pediu (acesso, e-mails, documentos)', () =>
+    assertFails(updateDoc(doc(anon('g1'), 'projects/p7/reviews/r5'), { access: 'email', lastActivityAt: serverTimestamp() }))],
+  ['quem edita cria e lê o código; leitor e revisor por e-mail não', async () => {
+    await assertSucceeds(setDoc(doc(as('bia'), `projects/p7/reviews/r5/links/${'n'.repeat(24)}`), { createdBy: 'bia', createdAt: serverTimestamp() }));
+    await assertSucceeds(getDocs(collection(as('bia'), 'projects/p7/reviews/r5/links')));
+    await assertFails(getDocs(collection(as('caio'), 'projects/p7/reviews/r5/links')));
+    await assertFails(setDoc(doc(as('caio'), `projects/p7/reviews/r5/links/${'o'.repeat(24)}`), { createdBy: 'caio' }));
+    await assertFails(setDoc(doc(as('bia'), 'projects/p7/reviews/r5/links/curto'), { createdBy: 'bia' }));
+  }],
+  ['editor acrescenta e-mails e troca o acesso; leitor não', async () => {
+    await assertSucceeds(updateDoc(doc(as('bia'), 'projects/p7/reviews/r7'), {
+      access: 'link', reviewerEmails: ['rev@uni.br', 'novo@uni.br'], lastActivityAt: serverTimestamp(),
+    }));
+    await assertFails(updateDoc(doc(as('caio'), 'projects/p7/reviews/r7'), { access: 'email', lastActivityAt: serverTimestamp() }));
+    await assertFails(updateDoc(doc(as('bia'), 'projects/p7/reviews/r7'), { access: 'aberto', lastActivityAt: serverTimestamp() }));
+  }],
+  ['e-mail acrescentado lê a revisão e a encontra em "Minhas revisões"', async () => {
+    const novo = as('novo', { email: 'novo@uni.br', email_verified: true });
+    await assertSucceeds(getDoc(doc(novo, 'projects/p7/reviews/r7')));
+    await assertSucceeds(getDocs(query(collectionGroup(novo, 'reviews'), where('reviewerEmails', 'array-contains', 'novo@uni.br'))));
+  }],
+  ['revisão por link sem e-mail pode ser aberta por quem edita', () => {
+    const db = as('bia');
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'projects/p7/reviews/r8'), {
+      number: 8, reviewerEmail: '', reviewerUid: null, snapshotId: 's1', grantedDocumentIds: ['main'], status: 'invited',
+      requestedBy: 'bia', lastActivityAt: serverTimestamp(), access: 'link', reviewerEmails: [],
+    });
+    batch.update(doc(db, 'projects/p7'), { 'counters.reviews': 8, updatedAt: serverTimestamp() });
+    return assertSucceeds(batch.commit());
+  }],
+  ['revisão por e-mail sem a concessão continua negada', () => {
+    const db = as('bia');
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'projects/p7/reviews/r9'), {
+      number: 9, reviewerEmail: 'sem@uni.br', reviewerUid: null, snapshotId: 's1', grantedDocumentIds: ['main'], status: 'invited',
+      requestedBy: 'bia', lastActivityAt: serverTimestamp(), access: 'email', reviewerEmails: [],
+    });
+    batch.update(doc(db, 'projects/p7'), { 'counters.reviews': 9, updatedAt: serverTimestamp() });
+    return assertFails(batch.commit());
+  }],
+  ['link revogado corta o acesso do visitante', async () => {
+    await assertSucceeds(deleteDocs(as('bia'), ['projects/p7/reviews/r5/links/' + TOKEN]));
+    await assertFails(getDoc(doc(anon('g1'), 'projects/p7/reviews/r5')));
+    await assertFails(getDoc(doc(anon('g1'), 'projects/p7/snapshots/s1/files/main.pdf')));
+  }],
+]);
+
+async function deleteDocs(db, paths) {
+  const batch = writeBatch(db);
+  for (const path of paths) batch.delete(doc(db, path));
+  await batch.commit();
+}
+
 await env.cleanup();

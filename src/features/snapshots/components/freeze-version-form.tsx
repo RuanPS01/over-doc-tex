@@ -2,15 +2,18 @@ import { Loader2, Snowflake } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useT } from '@/hooks/use-t';
+import { msg } from '@/lib/i18n';
 import type { TexIssue } from '@/lib/latex/prepare';
 import { useFreezeSnapshot, FreezeError, type FreezeStage } from '../hooks/use-freeze-snapshot';
 import { MAX_VERSION_MESSAGE, nextVersion, versionLabel, type VersionBump, type VersionNumber } from '../model/version';
 import { IssueList } from './issue-list';
 
+/** Rótulos são chaves de tradução (msg): quem mostra chama t(). */
 export const FREEZE_STAGE_LABELS: Record<FreezeStage, string> = {
-  compiling: 'Compilando a versão',
-  uploading: 'Guardando o código e o PDF',
-  freezing: 'Congelando',
+  compiling: msg('Compilando a versão'),
+  uploading: msg('Guardando o código e o PDF'),
+  freezing: msg('Congelando'),
 };
 
 interface FreezeVersionFormProps {
@@ -23,6 +26,7 @@ interface FreezeVersionFormProps {
 
 /** Congela o projeto como está na tela, com uma descrição opcional. */
 export function FreezeVersionForm({ projectId, projectName, latest, onFrozen, onIssueSelect }: FreezeVersionFormProps) {
+  const { t } = useT();
   const freeze = useFreezeSnapshot(projectId, projectName);
   const [message, setMessage] = useState('');
   const [bump, setBump] = useState<VersionBump>('minor');
@@ -53,18 +57,18 @@ export function FreezeVersionForm({ projectId, projectName, latest, onFrozen, on
   return (
     <form onSubmit={(event) => void handleSubmit(event)} className="flex flex-col gap-2 rounded-lg border bg-card p-3">
       <label htmlFor="version-message" className="text-sm font-medium">
-        Nova versão
+        {t('Nova versão')}
       </label>
       <Input
         id="version-message"
         value={message}
         maxLength={MAX_VERSION_MESSAGE}
         disabled={isBusy}
-        placeholder="O que mudou (opcional)"
+        placeholder={t('O que mudou (opcional)')}
         onChange={(event) => setMessage(event.target.value)}
       />
       {latest && (
-        <div role="radiogroup" aria-label="Tipo de versão" className="grid grid-cols-2 gap-1 rounded-md bg-muted p-1 text-xs">
+        <div role="radiogroup" aria-label={t('Tipo de versão')} className="grid grid-cols-2 gap-1 rounded-md bg-muted p-1 text-xs">
           {(['minor', 'major'] as const).map((option) => (
             <button
               key={option}
@@ -79,17 +83,19 @@ export function FreezeVersionForm({ projectId, projectName, latest, onFrozen, on
                   : 'rounded px-2 py-1 text-muted-foreground hover:text-foreground'
               }
             >
-              {option === 'minor' ? `Ajuste (${versionLabel(nextVersion(latest, 'minor'))})` : `Principal (${versionLabel(nextVersion(latest, 'major'))})`}
+              {option === 'minor'
+                ? t('Ajuste ({version})', { version: versionLabel(nextVersion(latest, 'minor')) })
+                : t('Principal ({version})', { version: versionLabel(nextVersion(latest, 'major')) })}
             </button>
           ))}
         </div>
       )}
       <Button type="submit" disabled={isBusy}>
         {isBusy ? <Loader2 className="animate-spin" /> : <Snowflake />}
-        {isBusy && stage ? FREEZE_STAGE_LABELS[stage] : `Congelar versão ${next}`}
+        {isBusy && stage ? t(FREEZE_STAGE_LABELS[stage]) : t('Congelar versão {version}', { version: next })}
       </Button>
       <p className="text-xs text-muted-foreground">
-        Guarda uma cópia imutável do código e do PDF. A edição continua normalmente.
+        {t('Guarda uma cópia imutável do código e do PDF. A edição continua normalmente.')}
       </p>
       {error && (
         <p role="alert" className="text-sm text-destructive">

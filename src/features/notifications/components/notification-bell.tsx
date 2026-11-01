@@ -1,4 +1,5 @@
 import { Bell, CheckCheck } from 'lucide-react';
+import { useMemo } from 'react';
 import { useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
 import {
@@ -9,13 +10,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useT } from '@/hooks/use-t';
 import { cn } from '@/lib/utils';
 import { useNotifications } from '../hooks/use-notifications';
 
-const TIME_FORMAT = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
-
 /** Sino com as notificações (revisões abertas, comentários, status); o clique abre a revisão e marca como lida. */
 export function NotificationBell({ className }: { className?: string }) {
+  const { t, locale } = useT();
+  const timeFormat = useMemo(() => new Intl.DateTimeFormat(locale, { dateStyle: 'short', timeStyle: 'short' }), [locale]);
   const { items, unread, markRead, markAllRead } = useNotifications();
   const [, navigate] = useLocation();
 
@@ -26,7 +28,7 @@ export function NotificationBell({ className }: { className?: string }) {
           variant="ghost"
           size="icon"
           className={cn('relative', className)}
-          aria-label={unread > 0 ? `Notificações (${unread} não lidas)` : 'Notificações'}
+          aria-label={unread > 0 ? t('Notificações ({count} não lidas)', { count: unread }) : t('Notificações')}
         >
           <Bell />
           {unread > 0 && (
@@ -38,17 +40,17 @@ export function NotificationBell({ className }: { className?: string }) {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-80">
         <div className="flex items-center justify-between gap-2 pr-1">
-          <DropdownMenuLabel>Notificações</DropdownMenuLabel>
+          <DropdownMenuLabel>{t('Notificações')}</DropdownMenuLabel>
           {unread > 0 && (
             <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => void markAllRead(items)}>
               <CheckCheck />
-              Marcar como lidas
+              {t('Marcar como lidas')}
             </Button>
           )}
         </div>
         <DropdownMenuSeparator />
         {items.length === 0 ? (
-          <p className="px-2 py-3 text-sm text-muted-foreground">Nada por aqui ainda.</p>
+          <p className="px-2 py-3 text-sm text-muted-foreground">{t('Nada por aqui ainda.')}</p>
         ) : (
           <div className="max-h-96 overflow-y-auto">
             {items.map((item) => (
@@ -66,7 +68,7 @@ export function NotificationBell({ className }: { className?: string }) {
                   <span className="min-w-0 truncate">{item.title}</span>
                 </span>
                 {item.body && <span className="line-clamp-2 w-full text-xs text-muted-foreground">{item.body}</span>}
-                {item.createdAt && <span className="text-[11px] text-muted-foreground">{TIME_FORMAT.format(item.createdAt)}</span>}
+                {item.createdAt && <span className="text-[11px] text-muted-foreground">{timeFormat.format(item.createdAt)}</span>}
               </DropdownMenuItem>
             ))}
           </div>

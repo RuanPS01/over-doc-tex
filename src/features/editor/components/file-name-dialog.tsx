@@ -3,6 +3,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { useT } from '@/hooks/use-t';
 
 interface FileNameDialogProps {
   open: boolean;
@@ -17,6 +18,7 @@ interface FileNameDialogProps {
 
 /** Pede um caminho de arquivo (criar ou renomear). Pastas entram no caminho: "capitulos/novo.tex". */
 export function FileNameDialog({ open, onOpenChange, title, description, initialValue, submitLabel, onSubmit }: FileNameDialogProps) {
+  const { t } = useT();
   const [value, setValue] = useState(initialValue);
   const [error, setError] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
@@ -47,8 +49,8 @@ export function FileNameDialog({ open, onOpenChange, title, description, initial
           <Input
             autoFocus
             value={value}
-            aria-label="Caminho do arquivo"
-            placeholder="capitulos/introducao.tex"
+            aria-label={t('Caminho do arquivo')}
+            placeholder={t('capitulos/introducao.tex')}
             className="font-mono text-sm"
             onChange={(event) => setValue(event.target.value)}
           />
@@ -59,7 +61,7 @@ export function FileNameDialog({ open, onOpenChange, title, description, initial
           )}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancelar
+              {t('Cancelar')}
             </Button>
             <Button type="submit" disabled={isBusy || !value.trim()}>
               {isBusy && <Loader2 className="animate-spin" />}

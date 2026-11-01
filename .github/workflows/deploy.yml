@@ -180,6 +180,11 @@ jobs:
       - name: Repositório de pacotes LaTeX (TeX Live 2025)
         run: node scripts/latex-packages.mjs
 
+      # Lista de modelos de IA mostrada antes de a pessoa informar a chave (fonte: models.dev).
+      # Gerada a cada deploy; se a fonte falhar, o passo só avisa e o app usa a lista embutida.
+      - name: Catálogo público de modelos de IA
+        run: node scripts/ai-models-catalog.mjs
+
       - name: Build para o GitHub Pages
         env:
           # "/<repositório>/" em páginas de projeto; "/" com domínio próprio.

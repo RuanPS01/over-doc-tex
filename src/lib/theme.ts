@@ -6,15 +6,18 @@
  * continuar iguais aos de lá.
  */
 
+import { msg } from './i18n';
+
 export type ThemePreference = 'light' | 'dark' | 'system';
 export type ResolvedTheme = 'light' | 'dark';
 
 export const THEME_STORAGE_KEY = 'overdoctex.theme';
 
+/** Rótulos são chaves de tradução (msg): quem mostra chama t(). */
 export const THEME_OPTIONS: readonly { value: ThemePreference; label: string }[] = [
-  { value: 'light', label: 'Claro' },
-  { value: 'dark', label: 'Escuro' },
-  { value: 'system', label: 'Padrão do sistema' },
+  { value: 'light', label: msg('Claro') },
+  { value: 'dark', label: msg('Escuro') },
+  { value: 'system', label: msg('Padrão do sistema') },
 ];
 
 export function isThemePreference(value: unknown): value is ThemePreference {

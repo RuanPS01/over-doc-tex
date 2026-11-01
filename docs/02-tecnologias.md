@@ -88,6 +88,7 @@ Não existe chave de IA da plataforma em lugar nenhum.
 | `npm run check:responsive` | Abre o build em 4 viewports e valida o contrato de 360px |
 | `npm run test:rules` | Regras nos emuladores (depois de `npm --prefix tests/rules install`; requer Java 21+) |
 | `node scripts/latex-packages.mjs` | Gera o repositório de pacotes LaTeX em `public/texlive` (necessário para compilar documentos com pacotes fora do Siglum; atrás de proxy, `NODE_USE_ENV_PROXY=1`) |
+| `node scripts/ai-models-catalog.mjs` | Gera `public/ai-models.json`, a lista pública de modelos de IA mostrada antes da chave (opcional; sem ele, o app usa a lista embutida) |
 
 ## 6. Deploy
 

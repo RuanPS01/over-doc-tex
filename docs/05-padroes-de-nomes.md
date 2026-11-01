@@ -5,7 +5,8 @@
 | Onde | Idioma |
 | --- | --- |
 | Identificadores (variáveis, funções, tipos, arquivos, coleções, campos) | Inglês |
-| Textos de interface, mensagens de erro, comentários, documentação, commits | Português do Brasil |
+| Comentários, documentação, commits | Português do Brasil |
+| Textos de interface e mensagens de erro | Português do Brasil no código, como chave de `t()`; inglês e espanhol nos dicionários de `src/lib/i18n/messages` |
 
 ## 2. Arquivos e pastas
 
@@ -89,5 +90,6 @@ queryKeys.threads(projectId, reviewId)     // ['project', projectId, 'reviews', 
 ## 9. Textos da interface
 
 - Rótulos de botão no infinitivo: "Compilar", "Ver alterações".
-- `aria-label` sempre em português e descrevendo a ação: "Abrir arquivos", "Mais ações".
+- `aria-label` escrito em português dentro de `t()` e descrevendo a ação: `t('Abrir arquivos')`, `t('Mais ações')`.
+- A chave de `t()` é sempre uma string literal; partes variáveis entram como `{nome}`: `t('Revisão #{number}', { number })`.
 - Nada de travessão, emojis ou setas.

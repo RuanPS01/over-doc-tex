@@ -57,6 +57,8 @@ O OverDocTeX é um PWA estático de edição LaTeX com revisão por versões con
 
 **D11. Binários no próprio Firestore, sem Cloud Storage.** O Cloud Storage exige o plano Blaze (com cartão) desde fevereiro de 2026, e qualquer armazenamento de objetos de terceiros (R2, B2, S3) precisaria de um servidor para guardar a chave e conferir permissões. Os binários viraram arquivos em pedaços no Firestore: cabeçalho com tamanho, tipo e sha256 mais a subcoleção `chunks`, e o cabeçalho só entra no mesmo lote do último pedaço. As mesmas regras do Firestore protegem tudo (membros, grants do revisor, versão congelada), e o projeto inteiro cabe no plano Spark. O preço é a cota: 1 GiB no total, cada pedaço lido conta como uma leitura, e por isso há tetos (25 MiB por blob, 50 MiB por PDF de versão ou diff, 100 MB por importação) e o PDF da compilação de trabalho não é gravado.
 
+**D12. Tradução própria, sem biblioteca e com o português como chave.** A interface fala português (Brasil), inglês e espanhol. O texto em português escrito no código é a chave (como no gettext): `t('Compilar')` busca "Compile" ou "Compilar" nos dicionários de `src/lib/i18n/messages/{en,es}`, e uma chave sem tradução cai no português. Assim o código continua legível, não há arquivo de chaves abstratas para manter sincronizado e um teste (`tests/unit/i18n.test.ts`) acha toda chave usada e exige as duas traduções. Sem escolha manual, o idioma segue o principal do sistema (`navigator.languages[0]`); fora dos três, inglês. A escolha fica no navegador (`overdoctex.locale`), vira o `lang` do `<html>` antes do primeiro desenho (script do `index.html`) e a página tem `translate="no"`, para a tradução automática do navegador não reescrever a interface nem o código LaTeX. Os e-mails do Firebase seguem o mesmo idioma (`auth.languageCode`, em `src/lib/firebase/app.ts`). Textos gravados no banco (comentários, título padrão da revisão, título das notificações) ficam no idioma de quem gravou; o que vem de um código guardado (status da revisão, papel, cor da anotação) é traduzido na hora de mostrar. Nomes de arquivo baixados usam palavras sem acento traduzidas (`rascunho`, `alteracoes`). Descartados: i18next e FormatJS (dependência e chaves abstratas para um app de três idiomas, sem plural complexo nem carga sob demanda).
+
 ## 4. Estrutura de pastas
 
 Itens marcados como *(planejado)* ainda não existem.
@@ -73,7 +75,7 @@ over-doc-tex/
 │   ├── app/                           providers, roteador (com o subcaminho do Pages)
 │   ├── pages/                         uma página por rota; só compõe features
 │   ├── features/
-│   │   ├── auth/                      AuthProvider, RequireAuth e useAuth
+│   │   ├── auth/                      AuthProvider, RequireAuth, useAuth, menu da conta e Perfil (useProfile)
 │   │   ├── projects/                  lista e criação de projetos, useProject
 │   │   ├── editor/
 │   │   │   ├── components/            casca, cabeçalho, workspaces, árvore, Monaco, ImportDialog
@@ -90,8 +92,8 @@ over-doc-tex/
 │   │   └── diff/                      "Ver alterações": código e PDF marcado (com cache em diffs/{diffKey})
 │   ├── components/
 │   │   ├── ui/                        shadcn/ui puro: button, dialog, dropdown-menu, input, resizable, select, sheet, tabs, textarea
-│   │   └── common/                    markdown-content
-│   ├── hooks/                         hooks genéricos: media query, modo de layout, tema
+│   │   └── common/                    markdown-content, botões de tema e de idioma, cabeçalho mínimo
+│   ├── hooks/                         hooks genéricos: media query, modo de layout, tema, tradução (useT)
 │   ├── lib/
 │   │   ├── ai/                        motor de IA: provedores, fila, RAG, prompts, tarefas, referências
 │   │   ├── project-archive/           caminhos seguros, plano de importação, zip
@@ -102,6 +104,7 @@ over-doc-tex/
 │   │   ├── latex/                     compilação (Siglum), preparação do projeto, leitura do log e SyncTeX
 │   │   ├── diff/                      diff por palavra (Myers), comparação de árvores e diff visual (LaTeX anotado e compilação)
 │   │   ├── pdf/                       pdf.js, texto por página, âncoras de trecho e desenho
+│   │   ├── i18n/                      idioma (sistema ou escolha), t() e msg(), dicionários en e es por área
 │   │   ├── email.ts                   validação de e-mail e endereço de volta do link de acesso
 │   │   ├── download.ts, query-keys.ts, utils.ts
 │   └── styles/globals.css             tokens e utilitários (.h-viewport)

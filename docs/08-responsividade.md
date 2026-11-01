@@ -167,11 +167,12 @@ O diálogo "Usar a minha própria IA" e o de importação são mais altos que a 
 
 ## 6. Verificação automática
 
-`npm run check:responsive` (`scripts/check-responsive.mjs`) sobe o build com `vite preview` e, com Playwright, abre `/`, `/login` e `/p/demo` em quatro viewports (360x740, 740x360, 768x1024, 1280x800). Falha se:
+`npm run check:responsive` (`scripts/check-responsive.mjs`) sobe o build com `vite preview` e, com Playwright, abre `/`, `/login` e `/p/demo` em quatro viewports (360x740, 740x360, 768x1024, 1280x800) e em três idiomas (português, inglês e espanhol, pelo idioma do navegador do Playwright). Falha se:
 
+- o `lang` da página não for o idioma do navegador;
 - `document.documentElement.scrollWidth` ou `document.body.scrollWidth` passar da largura da janela;
 - a raiz `.h-viewport` do editor não tiver exatamente a altura da janela;
 - o número de painéis visíveis não for o esperado (1 em retrato, 2 nos demais);
 - o menu "Mais ações" sair da tela em 360px.
 
-As capturas ficam em `dist-screenshots/` (ou em `SCREENSHOT_DIR`).
+As duas últimas conferências acham os elementos pelos rótulos em português e rodam só nesse idioma; em inglês e espanhol (textos mais longos) valem a rolagem horizontal e a altura da raiz. As capturas ficam em `dist-screenshots/` (ou em `SCREENSHOT_DIR`), com o prefixo `en-` ou `es-` nos outros idiomas.

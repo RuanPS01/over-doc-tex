@@ -1,4 +1,5 @@
 import type { DocumentDoc, FileDoc, MemberProfile, ProjectDoc } from '@shared/firestore/types';
+import { t } from '@/lib/i18n';
 
 /** O documento principal e o arquivo inicial têm ids fixos, então o editor sabe o que abrir. */
 export const MAIN_DOCUMENT_ID = 'main';
@@ -123,5 +124,5 @@ export function buildNewProject(input: {
 /** Nome e e-mail exibidos na lista de membros. */
 export function memberProfileOf(user: { displayName: string | null; email: string | null }): MemberProfile {
   const email = (user.email ?? '').toLowerCase();
-  return { name: user.displayName?.trim() || email.split('@')[0] || 'Sem nome', email };
+  return { name: user.displayName?.trim() || email.split('@')[0] || t('Sem nome'), email };
 }

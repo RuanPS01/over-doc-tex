@@ -9,6 +9,7 @@ import {
   type AiStructuredResult,
   type AiTask,
 } from '@/lib/ai/schemas';
+import { t } from '@/lib/i18n';
 
 export interface AiChatMessage {
   id: string;
@@ -65,7 +66,7 @@ export function useAiStream({ config, files }: { config: AiConfig | null; files:
       setMessages((previous) => [
         ...previous,
         { ...base, id: crypto.randomUUID(), role: 'user', text: prompt, status: 'complete', stage: null },
-        { ...base, id: assistantId, role: 'assistant', text: '', status: 'streaming', stage: 'Conectando' },
+        { ...base, id: assistantId, role: 'assistant', text: '', status: 'streaming', stage: t('Conectando') },
       ]);
 
       const update = (patch: (message: AiChatMessage) => Partial<AiChatMessage>) =>
@@ -133,7 +134,7 @@ export function useAiStream({ config, files }: { config: AiConfig | null; files:
         update((message) => ({
           status: 'error',
           stage: null,
-          error: failure?.message ?? 'Falha ao falar com o assistente.',
+          error: failure?.message ?? t('Falha ao falar com o assistente.'),
           text: failure?.discardPartial ? '' : message.text,
         }));
       }

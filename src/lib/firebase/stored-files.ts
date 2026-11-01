@@ -18,6 +18,7 @@ import {
 } from 'firebase/firestore';
 import { firestorePaths } from '@shared/firestore/paths';
 import type { FileChunkDoc, StoredFileDoc, StoredFileInfo } from '@shared/firestore/types';
+import { t } from '@/lib/i18n';
 import {
   CHUNKS_PER_BATCH,
   StoredFileError,
@@ -111,14 +112,14 @@ export async function readChunks(db: Firestore, parentPath: string, info: Stored
   }
   const data = joinChunks(parts, info);
   if ((await sha256Hex(data)) !== info.sha256) {
-    throw new StoredFileError('O arquivo guardado não confere com o hash registrado.');
+    throw new StoredFileError(t('O arquivo guardado não confere com o hash registrado.'));
   }
   return data;
 }
 
 export async function readStoredFile(db: Firestore, path: string): Promise<{ info: StoredFileInfo; data: Uint8Array }> {
   const header = await getDoc(doc(db, path));
-  if (!header.exists()) throw new StoredFileError('Arquivo não encontrado.');
+  if (!header.exists()) throw new StoredFileError(t('Arquivo não encontrado.'));
   const { totalBytes, contentType, sha256, chunkCount, chunkBytes } = header.data() as StoredFileDoc;
   const info: StoredFileInfo = { totalBytes, contentType, sha256, chunkCount, chunkBytes };
   return { info, data: await readChunks(db, path, info) };

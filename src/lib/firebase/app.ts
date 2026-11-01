@@ -11,6 +11,7 @@ import {
   persistentMultipleTabManager,
   type Firestore,
 } from 'firebase/firestore';
+import { getLocale, subscribeLocale, t } from '@/lib/i18n';
 
 const config = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -34,11 +35,17 @@ let services: FirebaseServices | null = null;
 export function getFirebase(): FirebaseServices {
   if (services) return services;
   if (!isFirebaseConfigured) {
-    throw new Error('Firebase não configurado: copie .env.example para .env e preencha as chaves.');
+    throw new Error(t('Firebase não configurado: copie .env.example para .env e preencha as chaves.'));
   }
 
   const app = initializeApp(config);
   const auth = getAuth(app);
+  // E-mails do Firebase (link de acesso, convite de revisão, troca de senha) e a
+  // página de troca de senha saem no idioma da interface, acompanhando a troca.
+  auth.languageCode = getLocale();
+  subscribeLocale(() => {
+    auth.languageCode = getLocale();
+  });
   // Cache persistente: o PWA continua mostrando projetos e comentários offline.
   const db = initializeFirestore(app, {
     localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),

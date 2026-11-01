@@ -21,8 +21,9 @@ service cloud.firestore {
       return request.auth.uid;
     }
 
+    // Sessão anônima (revisor pelo link) não tem e-mail: get() evita erro de avaliação.
     function verifiedEmail() {
-      return signedIn() && request.auth.token.email != null && request.auth.token.email_verified == true;
+      return signedIn() && request.auth.token.get('email', null) != null && request.auth.token.get('email_verified', false) == true;
     }
 
     function myEmail() {
@@ -69,8 +70,58 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/projects/$(pid)/reviews/$(rid)).data;
     }
 
+    // Revisor por e-mail: o convidado na criação ou um dos e-mails acrescentados depois.
+    function invitedEmail(review) {
+      return review.reviewerEmail == myEmail() || myEmail() in review.get('reviewerEmails', []);
+    }
+
     function isReviewer(pid, rid) {
-      return verifiedEmail() && reviewData(pid, rid).reviewerEmail == myEmail();
+      return verifiedEmail() && invitedEmail(reviewData(pid, rid));
+    }
+
+    // ------------------------------------------------ revisor pelo link (sem conta)
+    // Revisão aberta "por link": o link leva um código aleatório que é o id de
+    // reviews/{rid}/links/{código}. Quem abre o link entra com login anônimo e grava
+    // a ficha de visitante em snapshots/{sid}/guests/{uid}, apontando a revisão e o
+    // código. Quem já tem conta grava a mesma ficha com a conta. Vale enquanto a
+    // revisão continuar "por link" e o código existir.
+    function guestPath(pid, sid) {
+      return /databases/$(database)/documents/projects/$(pid)/snapshots/$(sid)/guests/$(uid());
+    }
+
+    function linkPath(pid, rid, token) {
+      return /databases/$(database)/documents/projects/$(pid)/reviews/$(rid)/links/$(token);
+    }
+
+    function linkOpen(pid, rid, token) {
+      return reviewData(pid, rid).get('access', 'email') == 'link' && exists(linkPath(pid, rid, token));
+    }
+
+    // Visitante com ficha válida nesta versão (para os arquivos e o diff dela).
+    function isGuestOfSnapshot(pid, sid) {
+      return signedIn()
+        && exists(guestPath(pid, sid))
+        && linkOpen(pid, get(guestPath(pid, sid)).data.reviewId, get(guestPath(pid, sid)).data.token);
+    }
+
+    // Visitante desta revisão.
+    function isGuest(pid, rid) {
+      let sid = reviewData(pid, rid).snapshotId;
+      return signedIn()
+        && exists(guestPath(pid, sid))
+        && get(guestPath(pid, sid)).data.reviewId == rid
+        && linkOpen(pid, rid, get(guestPath(pid, sid)).data.token);
+    }
+
+    // Documentos da revisão que trouxe o visitante a esta versão.
+    function guestDocuments(pid, sid) {
+      return reviewData(pid, get(guestPath(pid, sid)).data.reviewId).grantedDocumentIds;
+    }
+
+    // Identidade do visitante: o nome normalizado (o mesmo nome em outro aparelho é o mesmo
+    // revisor) ou, para quem entrou com a conta, "uid:" e o id dela.
+    function guestKey(pid, rid) {
+      return get(guestPath(pid, reviewData(pid, rid).snapshotId)).data.guestKey;
     }
 
     function onlyChanges(keys) {
@@ -150,7 +201,8 @@ service cloud.firestore {
           && request.resource.data.read == false
           && (isMember(request.resource.data.projectId)
             || (request.resource.data.reviewId != null
-              && isReviewer(request.resource.data.projectId, request.resource.data.reviewId)));
+              && (isReviewer(request.resource.data.projectId, request.resource.data.reviewId)
+                || isGuest(request.resource.data.projectId, request.resource.data.reviewId))));
       }
     }
 
@@ -286,7 +338,7 @@ service cloud.firestore {
 
       // Snapshot: criado uma vez, no mesmo lote que avança o contador; depois, imutável.
       match /snapshots/{sid} {
-        allow get: if isMember(pid) || hasGrant(pid, sid);
+        allow get: if isMember(pid) || hasGrant(pid, sid) || isGuestOfSnapshot(pid, sid);
         allow list: if isMember(pid);
         allow create: if canEdit(pid)
           && request.resource.data.createdBy == uid()
@@ -294,6 +346,30 @@ service cloud.firestore {
           && request.resource.data.sequence == projectAfter(pid).counters.snapshots
           && projectAfter(pid).latestSnapshotId == sid;
         allow update, delete: if false;
+
+        // Ficha do visitante que entrou pelo link de uma revisão desta versão (ver isGuest).
+        // Gravada por ele mesmo, com o código do link. Sem conta, o nome vira a identidade
+        // do revisor; com conta, a chave é "uid:" e o id dela.
+        match /guests/{guestUid} {
+          function validGuest() {
+            let d = request.resource.data;
+            return signedIn() && uid() == guestUid
+              && d.keys().hasOnly(['reviewId', 'token', 'name', 'guestKey', 'createdAt'])
+              && d.reviewId is string
+              && d.token is string && d.token.size() >= 20 && d.token.size() <= 128
+              && d.name is string && d.name.size() >= 1 && d.name.size() <= 80
+              && d.guestKey is string && d.guestKey.size() >= 1 && d.guestKey.size() <= 80
+              // Chave "uid:" é de quem entrou com a própria conta: só vale com o próprio id.
+              && (!d.guestKey.matches('uid:.*') || d.guestKey == 'uid:' + uid())
+              && reviewData(pid, d.reviewId).snapshotId == sid
+              && linkOpen(pid, d.reviewId, d.token);
+          }
+
+          allow get: if (signedIn() && uid() == guestUid) || isMember(pid);
+          allow list: if isMember(pid);
+          allow create, update: if validGuest();
+          allow delete: if canEdit(pid) || (signedIn() && uid() == guestUid);
+        }
 
         // Acesso do revisor, por e-mail (em minúsculas). Gravado por quem edita o projeto.
         match /grants/{email} {
@@ -317,7 +393,8 @@ service cloud.firestore {
           function readable() {
             return isMember(pid)
               || (hasGrant(pid, sid)
-                && name.split('\\.')[0] in get(grantPath(pid, sid, myEmail())).data.documentIds);
+                && name.split('\\.')[0] in get(grantPath(pid, sid, myEmail())).data.documentIds)
+              || (isGuestOfSnapshot(pid, sid) && name.split('\\.')[0] in guestDocuments(pid, sid));
           }
 
           function beforeFreeze() {
@@ -346,10 +423,18 @@ service cloud.firestore {
 
       match /reviews/{rid} {
         function amReviewer() {
-          return verifiedEmail() && resource.data.reviewerEmail == myEmail();
+          return verifiedEmail() && invitedEmail(resource.data);
         }
 
-        allow get, list: if isMember(pid) || amReviewer();
+        function validAccess(d) {
+          return d.get('access', 'email') in ['email', 'link']
+            && d.get('reviewerEmails', []) is list
+            && d.get('reviewerEmails', []).size() <= 50;
+        }
+
+        allow get: if isMember(pid) || amReviewer() || isGuest(pid, rid);
+        allow list: if isMember(pid) || amReviewer();
+        // Por e-mail, o convidado já tem a concessão na versão; por link, o e-mail pode vir vazio.
         allow create: if canEdit(pid)
           && next().requestedBy == uid()
           && next().number == projectData(pid).counters.reviews + 1
@@ -357,20 +442,42 @@ service cloud.firestore {
           && next().status == 'invited'
           && next().reviewerUid == null
           && next().reviewerEmail == next().reviewerEmail.lower()
+          && validAccess(next())
           && existsAfter(/databases/$(database)/documents/projects/$(pid)/snapshots/$(next().snapshotId))
-          && existsAfter(grantPath(pid, next().snapshotId, next().reviewerEmail));
+          && ((next().get('access', 'email') == 'link' && next().reviewerEmail == '')
+            || existsAfter(grantPath(pid, next().snapshotId, next().reviewerEmail)));
         allow update: if (canEdit(pid)
             && onlyChanges(['title', 'description', 'status', 'closedAt', 'lastActivityAt'])
             && next().status in ['in_review', 'closed'])
-          || (amReviewer()
+          // Envio da revisão: mais e-mails e o tipo de acesso (com login ou pelo link).
+          || (canEdit(pid)
+            && onlyChanges(['access', 'reviewerEmails', 'lastActivityAt'])
+            && validAccess(next()))
+          || ((amReviewer() || isGuest(pid, rid))
             && onlyChanges(['status', 'reviewerUid', 'reviewerName', 'lastActivityAt'])
             && next().reviewerUid == uid()
             && next().status in ['in_review', 'changes_requested', 'approved']);
         allow delete: if false;
 
+        // Código do link de acesso sem conta (o id é o código). Só quem edita vê, cria e revoga;
+        // o visitante prova que o conhece ao gravar a ficha (exists, nas regras acima).
+        match /links/{token} {
+          allow read: if canEdit(pid);
+          allow create: if canEdit(pid)
+            && token.size() >= 20 && token.size() <= 128
+            && request.resource.data.createdBy == uid();
+          allow update: if false;
+          allow delete: if canEdit(pid);
+        }
+
         match /threads/{tid} {
           function canParticipate() {
-            return isMember(pid) || isReviewer(pid, rid);
+            return isMember(pid) || isReviewer(pid, rid) || isGuest(pid, rid);
+          }
+
+          // Comentário de visitante leva a identidade dele (nome normalizado); os demais, nenhuma.
+          function validAuthorKey(d) {
+            return d.get('authorKey', null) == null || (isGuest(pid, rid) && d.authorKey == guestKey(pid, rid));
           }
 
           function validNewThread() {
@@ -423,9 +530,12 @@ service cloud.firestore {
               && request.resource.data.authorId == uid()
               && request.resource.data.kind in ['comment', 'status_change']
               && request.resource.data.body is string
-              && request.resource.data.body.size() <= 10000;
-            // Edição e exclusão lógica pelo próprio autor.
-            allow update: if signedIn() && resource.data.authorId == uid()
+              && request.resource.data.body.size() <= 10000
+              && validAuthorKey(request.resource.data);
+            // Edição e exclusão lógica pelo próprio autor (visitante: o mesmo nome, em qualquer aparelho).
+            allow update: if signedIn()
+              && (resource.data.authorId == uid()
+                || (resource.data.get('authorKey', null) != null && isGuest(pid, rid) && resource.data.authorKey == guestKey(pid, rid)))
               && onlyChanges(['body', 'editedAt', 'deletedAt']);
             allow delete: if false;
           }
@@ -446,7 +556,7 @@ service cloud.firestore {
               && lastChunkWritten(diffPath(), pdf));
         }
 
-        allow get: if isMember(pid) || hasGrant(pid, resource.data.targetSnapshotId);
+        allow get: if isMember(pid) || hasGrant(pid, resource.data.targetSnapshotId) || isGuestOfSnapshot(pid, resource.data.targetSnapshotId);
         allow list: if isMember(pid);
         allow create: if canEdit(pid)
           && request.resource.data.createdBy == uid()
@@ -460,7 +570,9 @@ service cloud.firestore {
 
           allow read: if isMember(pid)
             || (hasGrant(pid, diff().targetSnapshotId)
-              && diff().documentId in get(grantPath(pid, diff().targetSnapshotId, myEmail())).data.documentIds);
+              && diff().documentId in get(grantPath(pid, diff().targetSnapshotId, myEmail())).data.documentIds)
+            || (isGuestOfSnapshot(pid, diff().targetSnapshotId)
+              && diff().documentId in guestDocuments(pid, diff().targetSnapshotId));
           allow create, update: if canEdit(pid)
             && validChunkIndex(index)
             && !headerExists(diffPath())
@@ -493,9 +605,10 @@ service cloud.firestore {
       }
     }
 
-    // Painel "Minhas revisões": collectionGroup('reviews') filtrado pelo e-mail do revisor.
+    // Painel "Minhas revisões": collectionGroup('reviews') filtrado pelo e-mail do revisor
+    // (reviewerEmail == eu, ou reviewerEmails contém o meu).
     match /{path=**}/reviews/{rid} {
-      allow list: if verifiedEmail() && resource.data.reviewerEmail == myEmail();
+      allow list: if verifiedEmail() && invitedEmail(resource.data);
     }
   }
 }

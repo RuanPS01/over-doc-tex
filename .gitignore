@@ -15,3 +15,5 @@ coverage/
 dist-screenshots/
 # Repositório de pacotes LaTeX gerado por scripts/latex-packages.mjs
 public/texlive/
+# Catálogo público de modelos de IA gerado por scripts/ai-models-catalog.mjs
+public/ai-models.json

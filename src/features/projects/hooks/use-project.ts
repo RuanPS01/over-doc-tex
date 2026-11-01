@@ -5,9 +5,10 @@ import { firestorePaths } from '@shared/firestore/paths';
 import type { MemberProfile, ProjectDoc, ProjectRole } from '@shared/firestore/types';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { getFirebase, isFirebaseConfigured } from '@/lib/firebase/app';
+import { msg, t } from '@/lib/i18n';
 import { queryKeys } from '@/lib/query-keys';
 
-export const DEMO_PROJECT_NAME = 'Revisão Colaborativa de Documentos LaTeX';
+export const DEMO_PROJECT_NAME = msg('Revisão Colaborativa de Documentos LaTeX');
 
 export interface ProjectInfo {
   id: string;
@@ -38,15 +39,15 @@ function toProjectInfo(id: string, data: ProjectDoc): ProjectInfo {
   };
 }
 
-const DEMO_PROJECT: Omit<ProjectInfo, 'id'> = {
-  name: DEMO_PROJECT_NAME,
+const demoProject = (): Omit<ProjectInfo, 'id'> => ({
+  name: t(DEMO_PROJECT_NAME),
   description: null,
   ownerId: 'demo',
   members: { demo: 'owner' },
   pendingMembers: {},
-  memberProfiles: { demo: { name: 'Você', email: '' } },
+  memberProfiles: { demo: { name: t('Você'), email: '' } },
   latestSnapshotId: null,
-};
+});
 
 /**
  * Projeto aberto no editor. Nulo quando não existe ou o usuário não pode
@@ -73,7 +74,7 @@ export function useProject(projectId: string) {
   return useQuery({
     queryKey: queryKeys.project(projectId),
     queryFn: async (): Promise<ProjectInfo | null> => {
-      if (!isFirebaseConfigured) return { id: projectId, ...DEMO_PROJECT };
+      if (!isFirebaseConfigured) return { id: projectId, ...demoProject() };
       try {
         const snapshot = await getDoc(doc(getFirebase().db, firestorePaths.project(projectId)));
         const data = snapshot.data() as ProjectDoc | undefined;

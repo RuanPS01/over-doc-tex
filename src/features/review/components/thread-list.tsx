@@ -1,5 +1,6 @@
 import { MessageSquarePlus } from 'lucide-react';
 import { useEffect, useRef, type ReactNode } from 'react';
+import { useT } from '@/hooks/use-t';
 import type { ThreadSummary } from '../model/review';
 import { ThreadCard } from './thread-card';
 
@@ -34,6 +35,7 @@ export function ThreadList({
   onReply,
   onStatusChange,
 }: ThreadListProps) {
+  const { t } = useT();
   const cardRefs = useRef(new Map<string, HTMLLIElement>());
   const openCount = threads.filter((thread) => thread.status !== 'resolved').length;
 
@@ -47,9 +49,11 @@ export function ThreadList({
       <p className="text-xs text-muted-foreground">
         {threads.length === 0
           ? canWrite
-            ? 'Nenhum comentário ainda. Selecione um trecho do PDF, ou use Ponto ou Desenhar no topo.'
-            : 'Nenhum comentário ainda.'
-          : `${threads.length} ${threads.length === 1 ? 'comentário' : 'comentários'}, ${openCount} em aberto`}
+            ? t('Nenhum comentário ainda. Selecione um trecho do PDF, ou use Ponto ou Desenhar no topo.')
+            : t('Nenhum comentário ainda.')
+          : threads.length === 1
+            ? t('1 comentário, {open} em aberto', { open: openCount })
+            : t('{count} comentários, {open} em aberto', { count: threads.length, open: openCount })}
       </p>
       {threads.length === 0 && canWrite && !pendingPanel && <MessageSquarePlus className="mx-auto size-6 text-muted-foreground" aria-hidden />}
       <ol className="flex flex-col gap-2">

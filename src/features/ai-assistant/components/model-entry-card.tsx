@@ -1,12 +1,15 @@
-import { Loader2, PauseCircle, Trash2 } from 'lucide-react';
-import { useId } from 'react';
+import { CheckCircle2, FlaskConical, Loader2, PauseCircle, RefreshCw, Trash2, XCircle } from 'lucide-react';
+import { useId, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useT } from '@/hooks/use-t';
 import { maskApiKey } from '@/lib/ai/local-config-storage';
 import type { ModelHealth } from '@/lib/ai/model-chain';
-import { PROVIDERS, PROVIDER_IDS, detectProvider, type AiProviderId } from '@/lib/ai/providers';
-import { useProviderModels } from '../hooks/use-provider-models';
+import { PROVIDERS, PROVIDER_IDS, detectProvider, resolveModel, type AiProviderId } from '@/lib/ai/providers';
+import { getLocale, msg, t } from '@/lib/i18n';
+import { useModelTest, type ModelTestState } from '../hooks/use-model-test';
+import { useProviderModels, type ProviderModelsState } from '../hooks/use-provider-models';
 
 const DEFAULT_VALUE = '__default__';
 const CUSTOM_VALUE = '__custom__';
@@ -38,20 +41,82 @@ interface ModelEntryCardProps {
   onRemove?: () => void;
 }
 
+/** De onde veio a lista do campo Modelo, em uma frase. */
+function listCaption({ source, checkedAt, isFetching, error, canRefresh }: ProviderModelsState): string {
+  if (isFetching) return t('Consultando os modelos disponíveis no provedor...');
+  const when = checkedAt ? new Intl.DateTimeFormat(getLocale(), { dateStyle: 'short', timeStyle: 'short' }).format(checkedAt) : '';
+  const failure = error ? `${t('Não foi possível consultar o provedor ({error}).', { error })} ` : '';
+  const hint = (text: string) => (canRefresh ? '' : ` ${text}`);
+  switch (source) {
+    case 'live':
+      return t('Modelos disponíveis para a sua chave, consultados no provedor em {when}.', { when });
+    case 'remembered':
+      return `${failure}${t('Última lista do provedor, de {when}.', { when })}${hint(t('Informe a chave para atualizar.'))}`;
+    case 'catalog':
+      return `${failure}${t('Lista pública de modelos, atualizada em {when}.', { when })}${hint(t('Informe a chave para ver os disponíveis para você.'))}`;
+    case 'embedded':
+      return `${failure}${t('Lista conhecida pelo app.')}${hint(t('Informe a chave para consultar o provedor.'))}`;
+  }
+}
+
+const SOURCE_LABELS: Record<ProviderModelsState['source'], string> = {
+  live: msg('Disponíveis no provedor'),
+  remembered: msg('Última lista do provedor'),
+  catalog: msg('Lista pública'),
+  embedded: msg('Conhecidos pelo app'),
+};
+
+function TestResult({ state }: { state: ModelTestState }) {
+  const { t, locale } = useT();
+  if (state.status === 'ok') {
+    const { result } = state;
+    const elapsed =
+      result.durationMs < 1000 ? `${result.durationMs} ms` : `${(result.durationMs / 1000).toLocaleString(locale, { maximumFractionDigits: 1 })} s`;
+    return (
+      <p className="flex min-w-0 items-start gap-1.5 text-xs text-success" role="status">
+        <CheckCircle2 className="mt-0.5 size-3.5 shrink-0" />
+        <span className="min-w-0 break-words">
+          {result.reply
+            ? t('{model} respondeu em {elapsed}: "{reply}".', { model: result.model, elapsed, reply: result.reply })
+            : t('{model} respondeu em {elapsed}, sem texto.', { model: result.model, elapsed })}
+          {result.usedFallback && ` ${t('O provedor usou um modelo alternativo para responder.')}`}
+        </span>
+      </p>
+    );
+  }
+  if (state.status === 'error') {
+    return (
+      <p className="flex min-w-0 items-start gap-1.5 text-xs text-destructive" role="alert">
+        <XCircle className="mt-0.5 size-3.5 shrink-0" />
+        <span className="min-w-0 break-words">{state.message}</span>
+      </p>
+    );
+  }
+  return null;
+}
+
 function pauseLabel(health: ModelHealth): string {
   const minutes = Math.max(1, Math.ceil((health.until - Date.now()) / 60_000));
-  return `Em pausa por ${minutes} min: ${health.message}`;
+  return t('Em pausa por {minutes} min: {message}', { minutes, message: health.message });
 }
 
 export function ModelEntryCard({ index, entry, inheritFrom, effectiveKey, health, error, onChange, onRemove }: ModelEntryCardProps) {
+  const { t } = useT();
   const providerId = useId();
   const modelId = useId();
   const keyId = useId();
   const info = PROVIDERS[entry.provider];
-  const { models, live, isFetching, failed } = useProviderModels(entry.provider, effectiveKey);
+  const list = useProviderModels(entry.provider, effectiveKey);
+  const testEntry = useMemo(() => ({ provider: entry.provider, model: entry.model, apiKey: effectiveKey }), [entry.provider, entry.model, effectiveKey]);
+  const test = useModelTest(testEntry);
 
   const selectValue = entry.customModel ? CUSTOM_VALUE : (entry.model ?? DEFAULT_VALUE);
-  const options = entry.model && !entry.customModel && !models.includes(entry.model) ? [entry.model, ...models] : models;
+  // O modelo salvo continua na lista mesmo que a fonte atual não o traga.
+  const options =
+    entry.model && !entry.customModel && !list.models.some((model) => model.id === entry.model)
+      ? [{ id: entry.model, label: null, released: null }, ...list.models]
+      : list.models;
+  const canTest = Boolean(effectiveKey) && !(entry.customModel && !entry.model);
 
   const handleKeyInput = (value: string) => {
     // Colar uma chave de outro provedor troca o provedor do item.
@@ -63,13 +128,6 @@ export function ModelEntryCard({ index, entry, inheritFrom, effectiveKey, health
     }
   };
 
-  const modelCaption = isFetching
-    ? 'Consultando modelos no provedor...'
-    : live
-      ? 'Lista consultada agora no provedor.'
-      : failed
-        ? 'Não foi possível consultar o provedor; mostrando a lista conhecida.'
-        : 'Informe a chave para consultar a lista no provedor.';
 
   return (
     <section className="flex min-w-0 flex-col gap-3 rounded-xl border bg-card p-4">
@@ -78,10 +136,10 @@ export function ModelEntryCard({ index, entry, inheritFrom, effectiveKey, health
           {index + 1}
         </span>
         <h4 className="min-w-0 flex-1 truncate text-sm font-semibold">
-          {index === 0 ? 'Modelo principal' : `Modelo ${index + 1} (reserva)`}
+          {index === 0 ? t('Modelo principal') : t('Modelo {number} (reserva)', { number: index + 1 })}
         </h4>
         {onRemove && (
-          <Button type="button" variant="ghost" size="icon" aria-label={`Remover modelo ${index + 1}`} onClick={onRemove}>
+          <Button type="button" variant="ghost" size="icon" aria-label={t('Remover modelo {number}', { number: index + 1 })} onClick={onRemove}>
             <Trash2 />
           </Button>
         )}
@@ -97,7 +155,7 @@ export function ModelEntryCard({ index, entry, inheritFrom, effectiveKey, health
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="flex min-w-0 flex-col gap-1.5">
           <label htmlFor={providerId} className="text-sm font-medium">
-            Provedor
+            {t('Provedor')}
           </label>
           <Select
             value={entry.provider}
@@ -121,7 +179,7 @@ export function ModelEntryCard({ index, entry, inheritFrom, effectiveKey, health
 
         <div className="flex min-w-0 flex-col gap-1.5">
           <label htmlFor={modelId} className="text-sm font-medium">
-            Modelo
+            {t('Modelo')}
           </label>
           <Select
             value={selectValue}
@@ -137,26 +195,41 @@ export function ModelEntryCard({ index, entry, inheritFrom, effectiveKey, health
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={CUSTOM_VALUE}>Nome customizado</SelectItem>
-              <SelectItem value={DEFAULT_VALUE}>Padrão do provedor ({info.defaultModel})</SelectItem>
-              {options.map((model) => (
-                <SelectItem key={model} value={model}>
-                  {model}
-                </SelectItem>
-              ))}
+              <SelectItem value={DEFAULT_VALUE}>{t('Padrão do provedor ({model})', { model: info.defaultModel })}</SelectItem>
+              <SelectItem value={CUSTOM_VALUE}>{t('Nome personalizado...')}</SelectItem>
+              <SelectSeparator />
+              <SelectGroup>
+                <SelectLabel>{t(SOURCE_LABELS[list.source])}</SelectLabel>
+                {options.map((model) => (
+                  <SelectItem key={model.id} value={model.id} description={model.label && model.label !== model.id ? model.id : undefined}>
+                    {model.label ?? model.id}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
             </SelectContent>
           </Select>
-          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            {isFetching && <Loader2 className="size-3 animate-spin" />}
-            {modelCaption}
+          <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+            {list.isFetching && <Loader2 className="mt-0.5 size-3 shrink-0 animate-spin" />}
+            <span className="min-w-0">
+              {listCaption(list)}
+              {list.canRefresh && !list.isFetching && (
+                <>
+                  {' '}
+                  <button type="button" className="inline-flex items-center gap-1 text-primary underline" onClick={list.refresh}>
+                    <RefreshCw className="size-3" />
+                    {t('Atualizar')}
+                  </button>
+                </>
+              )}
+            </span>
           </p>
         </div>
       </div>
 
       {entry.customModel && (
         <Input
-          aria-label="Nome do modelo"
-          placeholder="Nome exato do modelo no provedor"
+          aria-label={t('Nome do modelo')}
+          placeholder={t('Nome exato do modelo no provedor')}
           value={entry.model ?? ''}
           onChange={(event) => onChange({ model: event.target.value.trim() || null })}
         />
@@ -164,13 +237,13 @@ export function ModelEntryCard({ index, entry, inheritFrom, effectiveKey, health
 
       <div className="flex min-w-0 flex-col gap-1.5">
         <label htmlFor={keyId} className="text-sm font-medium">
-          Chave de API
+          {t('Chave de API')}
         </label>
         {entry.inherit && inheritFrom !== null ? (
           <div className="flex flex-wrap items-center gap-2 rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
-            <span className="min-w-0 flex-1">Chave já preenchida no modelo {inheritFrom}.</span>
+            <span className="min-w-0 flex-1">{t('Chave já preenchida no modelo {number}.', { number: inheritFrom })}</span>
             <Button type="button" variant="link" size="sm" className="h-auto p-0" onClick={() => onChange({ inherit: false })}>
-              Usar outra chave
+              {t('Usar outra chave')}
             </Button>
           </div>
         ) : (
@@ -180,21 +253,21 @@ export function ModelEntryCard({ index, entry, inheritFrom, effectiveKey, health
               type="password"
               autoComplete="off"
               spellCheck={false}
-              placeholder={entry.storedKey ? `Chave salva (${maskApiKey(entry.storedKey)}). Deixe vazio para manter.` : 'Cole a chave do provedor'}
+              placeholder={entry.storedKey ? t('Chave salva ({key}). Deixe vazio para manter.', { key: maskApiKey(entry.storedKey) }) : t('Cole a chave do provedor')}
               value={entry.keyInput}
               onChange={(event) => handleKeyInput(event.target.value)}
             />
             <p className="text-xs text-muted-foreground">
-              Não tem chave?{' '}
+              {t('Não tem chave?')}{' '}
               <a href={info.keyUrl} target="_blank" rel="noopener noreferrer" className="text-primary underline">
-                Criar chave em {info.label}
+                {t('Criar chave em {provider}', { provider: info.label })}
               </a>
               {inheritFrom !== null && (
                 <>
                   {' '}
-                  ou{' '}
+                  {t('ou')}{' '}
                   <button type="button" className="text-primary underline" onClick={() => onChange({ inherit: true, keyInput: '' })}>
-                    usar a do modelo {inheritFrom}
+                    {t('usar a do modelo {number}', { number: inheritFrom })}
                   </button>
                 </>
               )}
@@ -204,7 +277,23 @@ export function ModelEntryCard({ index, entry, inheritFrom, effectiveKey, health
         )}
       </div>
 
-      {info.note && <p className="text-xs text-muted-foreground">{info.note}</p>}
+      <div className="flex min-w-0 flex-col gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="self-start"
+          disabled={!canTest || test.state.status === 'running'}
+          title={canTest ? t('Manda um pedido curto para {model}', { model: resolveModel(testEntry) }) : t('Informe a chave e o modelo para testar')}
+          onClick={() => void test.run()}
+        >
+          {test.state.status === 'running' ? <Loader2 className="animate-spin" /> : <FlaskConical />}
+          {test.state.status === 'running' ? t('Testando') : t('Testar modelo')}
+        </Button>
+        <TestResult state={test.state} />
+      </div>
+
+      {info.note && <p className="text-xs text-muted-foreground">{t(info.note)}</p>}
       {error && <p className="text-sm text-destructive">{error}</p>}
     </section>
   );

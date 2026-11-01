@@ -8,6 +8,8 @@
  */
 import { ApiError, FinishReason, GoogleGenAI, UrlRetrievalStatus, type Content } from '@google/genai';
 import { z } from 'zod';
+import { t } from '@/lib/i18n';
+import type { ProviderModel } from '../model-list';
 import { AiTaskError } from '../schemas';
 import {
   normalizeUrl,
@@ -46,10 +48,10 @@ function toUsage(metadata: { promptTokenCount?: number; candidatesTokenCount?: n
 
 function assertFinished(finishReason: FinishReason | undefined, blocked: boolean): void {
   if (blocked || REFUSAL_REASONS.has(finishReason)) {
-    throw new AiTaskError('refused', 'O modelo recusou este pedido.', false, true);
+    throw new AiTaskError('refused', t('O modelo recusou este pedido.'), false, true);
   }
   if (finishReason === FinishReason.MAX_TOKENS) {
-    throw new AiTaskError('truncated', 'A resposta excedeu o limite de tamanho.', false);
+    throw new AiTaskError('truncated', t('A resposta excedeu o limite de tamanho.'), false);
   }
 }
 
@@ -59,17 +61,17 @@ function toAiTaskError(error: unknown): unknown {
   if (error instanceof ApiError) {
     // A API do Gemini responde 400 para chave inválida.
     if (error.status === 401 || (error.status === 400 && /api key/i.test(error.message))) {
-      return new AiTaskError('invalid_key', 'Chave do Gemini inválida ou revogada. Confira a chave nas configurações da IA.', false);
+      return new AiTaskError('invalid_key', t('Chave do Gemini inválida ou revogada. Confira a chave nas configurações da IA.'), false);
     }
-    if (error.status === 403) return new AiTaskError('forbidden', 'A chave não tem permissão para este modelo.', false);
-    if (error.status === 404) return new AiTaskError('forbidden', 'Modelo indisponível para esta chave.', false);
+    if (error.status === 403) return new AiTaskError('forbidden', t('A chave não tem permissão para este modelo.'), false);
+    if (error.status === 404) return new AiTaskError('forbidden', t('Modelo indisponível para esta chave.'), false);
     if (error.status === 429) {
-      return new AiTaskError('rate_limited', 'Cota do Gemini esgotada ou limite por minuto atingido.', true);
+      return new AiTaskError('rate_limited', t('Cota do Gemini esgotada ou limite por minuto atingido.'), true);
     }
-    if (error.status >= 500) return new AiTaskError('upstream', 'A API do Gemini está indisponível no momento.', true);
-    return new AiTaskError('internal', `A API do Gemini recusou o pedido: ${readableProviderMessage(error.message)}`, false);
+    if (error.status >= 500) return new AiTaskError('upstream', t('A API do Gemini está indisponível no momento.'), true);
+    return new AiTaskError('internal', t('A API do Gemini recusou o pedido: {message}', { message: readableProviderMessage(error.message) }), false);
   }
-  if (error instanceof TypeError) return new AiTaskError('network', 'Sem conexão com a API do Gemini.', true);
+  if (error instanceof TypeError) return new AiTaskError('network', t('Sem conexão com a API do Gemini.'), true);
   return error;
 }
 
@@ -91,19 +93,16 @@ export const verifyGeminiKey = guarded(async (apiKey: string, model: string) => 
   await new GoogleGenAI({ apiKey }).models.get({ model });
 });
 
-/** Modelos de texto disponíveis para a chave (consultados ao vivo). */
-export const listGeminiModels = guarded(async (apiKey: string): Promise<string[]> => {
+/** Modelos disponíveis para a chave (consultados ao vivo); o Gemini não informa data, só o nome. */
+export const listGeminiModels = guarded(async (apiKey: string): Promise<ProviderModel[]> => {
   const pager = await new GoogleGenAI({ apiKey }).models.list({ config: { pageSize: 200 } });
-  const names: string[] = [];
+  const models: ProviderModel[] = [];
   for await (const model of pager) {
-    const name = model.name?.replace(/^models\//, '');
-    // Fora da lista: voz, imagem, transcrição e agentes que não conversam por texto.
-    const textModel =
-      model.supportedActions?.includes('generateContent') &&
-      !/tts|image|banana|transcribe|robotics|computer-use|antigravity|deep-research/i.test(name ?? '');
-    if (name && textModel) names.push(name);
+    const id = model.name?.replace(/^models\//, '');
+    // Só os que geram conteúdo; voz, imagem e agentes saem pelo filtro de model-list.ts.
+    if (id && model.supportedActions?.includes('generateContent')) models.push({ id, label: model.displayName || null, released: null });
   }
-  return names.sort();
+  return models;
 });
 
 // O SDK do Gemini não repete pedidos sozinho; `_options` existe pela interface comum.
@@ -156,11 +155,11 @@ export function createGeminiProvider(apiKey: string, model: string, _options: Pr
       try {
         raw = parseJsonFromText(response.text ?? '');
       } catch {
-        throw new AiTaskError('invalid_output', 'A IA devolveu um JSON inválido.', true);
+        throw new AiTaskError('invalid_output', t('A IA devolveu um JSON inválido.'), true);
       }
       const parsed = schema.safeParse(raw);
       if (!parsed.success) {
-        throw new AiTaskError('invalid_output', 'A IA devolveu dados fora do formato esperado.', true);
+        throw new AiTaskError('invalid_output', t('A IA devolveu dados fora do formato esperado.'), true);
       }
       return { data: parsed.data as z.infer<Schema>, usage: toUsage(response.usageMetadata) };
     }),

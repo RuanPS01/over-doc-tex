@@ -33,6 +33,23 @@ Cada cenário descreve o que o usuário vê e a mecânica interna. Não há serv
 3. As regras liberam snapshot e revisão porque o e-mail verificado dele bate com o grant e com `reviewerEmail`. Na primeira abertura, o app grava `reviewerUid`, `reviewerName` e `status: in_review`.
 4. Rodadas seguintes para o mesmo revisor repetem o lote 2 com o mesmo e-mail.
 
+### Revisão pelo link, com ou sem conta (implementado)
+
+1. Em "Solicitar revisão", o autor escolhe "Qualquer pessoa com o link". O e-mail fica opcional; o código do link nasce no mesmo lote da revisão e o diálogo mostra o link para copiar (`?k=código&v=versão`).
+2. Quem abre o link sem estar logado entra com login anônimo (sem tela de login) e informa o nome. A ficha de visitante é gravada com o código; o nome fica no navegador e, ao voltar, a pessoa entra direto.
+3. Em outro aparelho, a pessoa informa o mesmo nome (maiúsculas, acentos e espaços não importam) e continua como o mesmo revisor: os comentários levam a identidade do nome.
+4. A mesma tela oferece "Entrar ou criar conta": leva ao login com `?next=` igual ao link e, depois de entrar (Google, e-mail e senha, conta nova ou link de acesso), volta à revisão já com a conta.
+5. Quem já está logado e não foi convidado entra pelo link direto com a própria conta, sem informar nome: a ficha leva o nome da conta e a chave `uid:` mais o id dela, e os comentários são da conta (como os de qualquer conta, pelo `authorId`). Convidado por e-mail ou membro do projeto entra como sempre, pelo grant ou pelo papel.
+6. O cabeçalho do visitante sem conta mostra o nome dele (clique para trocar) e não tem a volta para a lista de projetos nem as notificações; quem entrou com conta vê o cabeçalho normal.
+
+### Envio da revisão (implementado)
+
+Na tela da revisão, dono e editores têm o botão "Envio" no cabeçalho (`ReviewSharingDialog`):
+
+- **Quem pode abrir:** "Só os e-mails convidados" (com login) ou "Qualquer pessoa com o link" (sem conta). Passar a "link" cria o código se não houver; voltar a "e-mails" corta o acesso de quem entrou pelo link.
+- **Link:** copiar e "Gerar novo link" (com confirmação), que derruba o anterior.
+- **E-mails convidados:** acrescentar vários de uma vez. Cada um ganha a concessão na versão com os mesmos documentos e recebe o link de acesso por e-mail; a revisão aparece em "Minhas revisões" da pessoa (consulta por `reviewerEmails`).
+
 ### Convite de coautoria (implementado)
 
 1. Em "Configurações do projeto", o dono informa o e-mail e o papel ("Edita" ou "Só lê"); o app grava `pendingMembers[email]` e mostra o link do projeto para enviar.
@@ -239,7 +256,7 @@ async function runDiff(job: DiffRequest): Promise<DiffOutcome> {
 
 ### O que o usuário vê
 
-1. Abre o assistente (painel flutuante no desktop, Sheet inferior no celular). Sem IA configurada, o painel mostra "Configurar a minha IA".
+1. Abre o assistente (janela no desktop, encaixada no rodapé ou solta; Sheet inferior no celular). Sem IA configurada, o painel mostra "Configurar a minha IA"; o mesmo diálogo abre por "Configurações de IA" no menu "Mais ações" do projeto.
 2. No diálogo "Usar a minha própria IA", escolhe provedor, modelo e cola a própria chave; pode adicionar modelos de reserva.
 3. Escolhe a tarefa ("Gerar rascunho", "Verificar referências"...) e escreve o pedido.
 4. Vê a etapa atual e o texto chegando aos poucos. Se um modelo falhar, a resposta recomeça pelo modelo de reserva, com o motivo da troca.
@@ -274,10 +291,12 @@ Verificado de ponta a ponta contra os emuladores de Auth e Firestore, com as reg
 
 ## Criar e abrir um projeto (implementado)
 
-1. Sem sessão, `/` leva a `/login?next=%2F`; depois de entrar (Google ou e-mail e senha, com opção de criar conta), o app volta para a rota pedida.
-2. "Meus projetos" lista, em tempo real, os projetos em que `memberIds` contém o usuário, do mais recente para o mais antigo (índice composto de `firestore.indexes.json`).
-3. "Novo projeto" pede o nome e grava, em duas etapas: o projeto, com o usuário como único membro (`owner`), sem convites e com contadores zerados (o que a regra de criação exige); depois, num lote, `documents/main` e `files/main` (`main.tex` com um modelo em português e o nome escapado no `\title`). São duas etapas porque as regras de `documents` e `files` conferem o papel lendo o projeto, que precisa já existir.
-4. O editor abre em `/p/{id}`. Projeto inexistente ou sem acesso mostra "Projeto não encontrado" (as regras respondem "sem permissão" nos dois casos). Se o arquivo `main` não existir (projeto importado), abre o `main.tex` da raiz, o primeiro `.tex` ou o primeiro arquivo de texto.
+1. Sem sessão, `/` leva a `/login?next=%2F`; depois de entrar (Google ou e-mail e senha, com opção de criar conta), o app volta para a rota pedida. "Esqueci a senha" manda, para o e-mail digitado, o link de troca de senha do Firebase (`sendPasswordResetEmail`); a página do Firebase cria a senha nova e volta ao login com o mesmo `?next=`. A mensagem não diz se a conta existe (proteção contra enumeração de e-mails do Firebase).
+2. Os e-mails do Firebase (link de acesso, convite de revisão, troca de senha) e a página de troca de senha saem no idioma da interface: o app mantém `auth.languageCode` igual ao idioma escolhido, e o Firebase usa o modelo de e-mail desse idioma. Modelos editados no console do Firebase valem só para o idioma em que foram editados.
+3. Perfil (menu da conta no cabeçalho de "Meus projetos"): o nome novo vai para o Firebase Authentication (`updateProfile`) e para a entrada da pessoa em `memberProfiles` de cada projeto em que ela é membro (lotes de até 400; as regras só deixam mudar a própria entrada). Comentários e notificações já gravados continuam com o nome antigo. A senha muda com a senha atual (`reauthenticateWithCredential` e `updatePassword`) ou pelo link de troca do Firebase, que também cria uma senha para quem só entrava com Google ou link de acesso.
+4. "Meus projetos" lista, em tempo real, os projetos em que `memberIds` contém o usuário, do mais recente para o mais antigo (índice composto de `firestore.indexes.json`).
+5. "Novo projeto" pede o nome e grava, em duas etapas: o projeto, com o usuário como único membro (`owner`), sem convites e com contadores zerados (o que a regra de criação exige); depois, num lote, `documents/main` e `files/main` (`main.tex` com um modelo em português e o nome escapado no `\title`). São duas etapas porque as regras de `documents` e `files` conferem o papel lendo o projeto, que precisa já existir.
+6. O editor abre em `/p/{id}`. Projeto inexistente ou sem acesso mostra "Projeto não encontrado" (as regras respondem "sem permissão" nos dois casos). Se o arquivo `main` não existir (projeto importado), abre o `main.tex` da raiz, o primeiro `.tex` ou o primeiro arquivo de texto.
 
 Verificado de ponta a ponta contra os emuladores de Auth e Firestore: redirecionamento para o login, criação de conta, lista vazia, criação do projeto, edição salva (revisão 2 no banco), texto mantido depois de recarregar, projeto na lista, aviso de projeto inexistente e saída da conta.
 

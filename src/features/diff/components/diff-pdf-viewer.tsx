@@ -2,6 +2,7 @@ import { ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { PdfDocumentView } from '@/features/pdf-viewer/components/pdf-document-view';
+import { useT } from '@/hooks/use-t';
 import { cn } from '@/lib/utils';
 import type { VisualDiff } from '../hooks/use-visual-diff';
 
@@ -21,6 +22,7 @@ interface DiffPdfViewerProps {
  * "Anterior" e "Próxima alteração".
  */
 export function DiffPdfViewer({ diff, loadingLabel, error, fileName }: DiffPdfViewerProps) {
+  const { t } = useT();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [current, setCurrent] = useState(-1);
   const changes = diff?.changes ?? [];
@@ -39,12 +41,17 @@ export function DiffPdfViewer({ diff, loadingLabel, error, fileName }: DiffPdfVi
     return (
       <p className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
         {loadingLabel ? <Loader2 className="size-4 animate-spin" /> : null}
-        {loadingLabel ?? 'A comparação em PDF não compilou; veja a aba Texto.'}
+        {loadingLabel ?? t('A comparação em PDF não compilou; veja as alterações na outra aba.')}
       </p>
     );
   }
 
-  const counter = changes.length === 0 ? 'Nenhuma alteração marcada' : current < 0 ? `${changes.length} alterações` : `${current + 1} de ${changes.length}`;
+  const counter =
+    changes.length === 0
+      ? t('Nenhuma alteração marcada')
+      : current < 0
+        ? t('{count} alterações', { count: changes.length })
+        : t('{current} de {total}', { current: current + 1, total: changes.length });
   return (
     <div className="flex h-full min-h-0 flex-col">
       <PdfDocumentView
@@ -54,16 +61,16 @@ export function DiffPdfViewer({ diff, loadingLabel, error, fileName }: DiffPdfVi
         title={
           <span className="text-xs font-normal">
             <span className="text-diff-added">+{diff.stats.insertedWords}</span> <span className="text-diff-removed">-{diff.stats.deletedWords}</span>{' '}
-            <span className="hidden text-muted-foreground xs:inline">{diff.granularity === 'paragraph' ? '(por parágrafo)' : ''}</span>
+            <span className="hidden text-muted-foreground xs:inline">{diff.granularity === 'paragraph' ? t('(por parágrafo)') : ''}</span>
           </span>
         }
         actions={
           <div className="flex shrink-0 items-center gap-0.5">
             <span className="hidden px-1 tabular-nums sm:inline">{counter}</span>
-            <Button variant="ghost" size="icon" className="size-8" aria-label="Alteração anterior" disabled={changes.length === 0} onClick={() => goTo(current <= 0 ? changes.length - 1 : current - 1)}>
+            <Button variant="ghost" size="icon" className="size-8" aria-label={t('Alteração anterior')} disabled={changes.length === 0} onClick={() => goTo(current <= 0 ? changes.length - 1 : current - 1)}>
               <ChevronUp />
             </Button>
-            <Button variant="ghost" size="icon" className="size-8" aria-label="Próxima alteração" disabled={changes.length === 0} onClick={() => goTo(current >= changes.length - 1 ? 0 : current + 1)}>
+            <Button variant="ghost" size="icon" className="size-8" aria-label={t('Próxima alteração')} disabled={changes.length === 0} onClick={() => goTo(current >= changes.length - 1 ? 0 : current + 1)}>
               <ChevronDown />
             </Button>
           </div>

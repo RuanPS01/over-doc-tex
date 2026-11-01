@@ -11,13 +11,14 @@ import { useMemo } from 'react';
 import { firestorePaths } from '@shared/firestore/paths';
 import type { MemberProfile } from '@shared/firestore/types';
 import { getFirebase } from '@/lib/firebase/app';
+import { t } from '@/lib/i18n';
 import { memberProfileOf } from '../model/new-project';
 
 export type InviteRole = 'editor' | 'viewer';
 
 function currentUser() {
   const user = getFirebase().auth.currentUser;
-  if (!user) throw new Error('Entre na sua conta para continuar.');
+  if (!user) throw new Error(t('Entre na sua conta para continuar.'));
   return user;
 }
 

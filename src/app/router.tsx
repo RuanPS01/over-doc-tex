@@ -29,7 +29,6 @@ function protectedPage(Page: ComponentType) {
 
 const ProtectedProjectsPage = protectedPage(ProjectsPage);
 const ProtectedEditorPage = protectedPage(EditorPage);
-const ProtectedReviewPage = protectedPage(ReviewPage);
 
 export function AppRouter() {
   return (
@@ -39,7 +38,8 @@ export function AppRouter() {
           <Route path="/" component={ProtectedProjectsPage} />
           <Route path="/login" component={LoginPage} />
           <Route path="/p/:projectId" component={ProtectedEditorPage} />
-          <Route path="/p/:projectId/reviews/:reviewId" component={ProtectedReviewPage} />
+          {/* A revisão cuida do login: pelo link (?k=), entra sem conta. */}
+          <Route path="/p/:projectId/reviews/:reviewId" component={ReviewPage} />
           <Route component={NotFoundPage} />
         </Switch>
       </Suspense>

@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useT } from '@/hooks/use-t';
 import { normalizeArchivePath } from '@/lib/project-archive/archive-paths';
 import {
   planImport,
@@ -50,6 +51,7 @@ function foldersOf(paths: readonly string[]): string[] {
  * aparece antes da confirmação.
  */
 export function ImportDialog() {
+  const { t } = useT();
   const { projectId, importOpen, setImportOpen } = useEditorStore();
   const { data: files = [] } = useProjectFiles(projectId);
   const { applyImport } = useProjectArchive(projectId);
@@ -95,10 +97,10 @@ export function ImportDialog() {
     setIsReading(true);
     try {
       const result = await read();
-      if (result.entries.length === 0) setError('Nenhum arquivo aproveitável encontrado.');
+      if (result.entries.length === 0) setError(t('Nenhum arquivo aproveitável encontrado.'));
       setSource({ label, ...result });
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : 'Não foi possível ler os arquivos.');
+      setError(failure instanceof Error ? failure.message : t('Não foi possível ler os arquivos.'));
     } finally {
       setIsReading(false);
     }
@@ -123,39 +125,41 @@ export function ImportDialog() {
       await applyImport(plan, files);
       setImportOpen(false);
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : 'A importação falhou.');
+      setError(failure instanceof Error ? failure.message : t('A importação falhou.'));
     } finally {
       setIsImporting(false);
     }
   };
 
   const canImport = plan.operations.length > 0 && !(folderChoice === NEW_FOLDER_VALUE && !targetFolder);
+  // A pasta aparece em <code> no meio da frase: o texto traduzido é dividido em volta dela.
+  const stripRootLabel = t('Importar o conteúdo de {folder} direto na pasta de destino').split('{folder}');
 
   return (
     <Dialog open={importOpen} onOpenChange={setImportOpen}>
       <DialogContent className="flex h-[calc(100dvh-1rem)] max-w-xl flex-col gap-0 overflow-hidden p-0 sm:h-auto sm:max-h-[88vh]">
         <DialogHeader className="shrink-0 border-b px-5 pb-4 pt-5">
-          <DialogTitle>Importar para o projeto</DialogTitle>
-          <DialogDescription>Um arquivo .zip, arquivos avulsos ou uma pasta inteira do seu dispositivo.</DialogDescription>
+          <DialogTitle>{t('Importar para o projeto')}</DialogTitle>
+          <DialogDescription>{t('Um arquivo .zip, arquivos avulsos ou uma pasta inteira do seu dispositivo.')}</DialogDescription>
         </DialogHeader>
 
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden px-5 py-4">
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             <Button type="button" variant="outline" disabled={isReading} onClick={() => zipInput.current?.click()}>
               <FileArchive />
-              Arquivo .zip
+              {t('Arquivo .zip')}
             </Button>
             <Button type="button" variant="outline" disabled={isReading} onClick={() => filesInput.current?.click()}>
               <FilePlus2 />
-              Arquivos
+              {t('Arquivos')}
             </Button>
             <Button type="button" variant="outline" disabled={isReading} onClick={() => folderInput.current?.click()}>
               <FolderInput />
-              Pasta
+              {t('Pasta')}
             </Button>
           </div>
           <input ref={zipInput} type="file" accept=".zip,application/zip" className="hidden" onChange={handleZip} />
-          <input ref={filesInput} type="file" multiple className="hidden" onChange={(event) => handleFiles(event, 'Arquivos escolhidos')} />
+          <input ref={filesInput} type="file" multiple className="hidden" onChange={(event) => handleFiles(event, t('Arquivos escolhidos'))} />
           <input
             ref={(node) => {
               // O atributo de escolha de pasta não existe na tipagem do React. Ref de callback
@@ -166,22 +170,22 @@ export function ImportDialog() {
             type="file"
             multiple
             className="hidden"
-            onChange={(event) => handleFiles(event, 'Pasta escolhida')}
+            onChange={(event) => handleFiles(event, t('Pasta escolhida'))}
           />
 
           {isReading && (
             <p className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="size-4 animate-spin" />
-              Lendo os arquivos
+              {t('Lendo os arquivos')}
             </p>
           )}
 
           {source && (
             <>
               <p className="rounded-md border bg-muted/50 px-3 py-2 text-sm">
-                <span className="font-medium">{source.label}</span>: {entries.length}{' '}
-                {entries.length === 1 ? 'arquivo' : 'arquivos'} ({formatSize(totalBytes)})
-                {source.skipped.length > 0 && `, ${source.skipped.length} ignorados`}
+                <span className="font-medium">{source.label}</span>:{' '}
+                {entries.length === 1 ? t('1 arquivo') : t('{count} arquivos', { count: entries.length })} ({formatSize(totalBytes)})
+                {source.skipped.length > 0 && `, ${t('{count} ignorados', { count: source.skipped.length })}`}
               </p>
 
               {root && (
@@ -193,34 +197,36 @@ export function ImportDialog() {
                     onChange={(event) => setStripRoot(event.target.checked)}
                   />
                   <span className="min-w-0">
-                    Importar o conteúdo de <code className="font-mono">{root}/</code> direto na pasta de destino
+                    {stripRootLabel[0]}
+                    <code className="font-mono">{root}/</code>
+                    {stripRootLabel[1]}
                   </span>
                 </label>
               )}
 
               <div className="flex min-w-0 flex-col gap-1.5">
                 <label htmlFor={folderSelectId} className="text-sm font-medium">
-                  Pasta de destino
+                  {t('Pasta de destino')}
                 </label>
                 <Select value={folderChoice} onValueChange={setFolderChoice}>
                   <SelectTrigger id={folderSelectId}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={ROOT_VALUE}>Raiz do projeto</SelectItem>
+                    <SelectItem value={ROOT_VALUE}>{t('Raiz do projeto')}</SelectItem>
                     {folders.map((folder) => (
                       <SelectItem key={folder} value={folder}>
                         {folder}/
                       </SelectItem>
                     ))}
-                    <SelectItem value={NEW_FOLDER_VALUE}>Nova pasta</SelectItem>
+                    <SelectItem value={NEW_FOLDER_VALUE}>{t('Nova pasta')}</SelectItem>
                   </SelectContent>
                 </Select>
                 {folderChoice === NEW_FOLDER_VALUE && (
                   <Input
                     id={newFolderId}
-                    aria-label="Nome da nova pasta"
-                    placeholder="Ex.: capitulos/novos"
+                    aria-label={t('Nome da nova pasta')}
+                    placeholder={t('Ex.: capitulos/novos')}
                     value={newFolder}
                     onChange={(event) => setNewFolder(event.target.value)}
                   />
@@ -228,11 +234,11 @@ export function ImportDialog() {
               </div>
 
               <fieldset className="flex flex-col gap-2">
-                <legend className="mb-1 text-sm font-medium">Arquivos com o mesmo nome na pasta</legend>
+                <legend className="mb-1 text-sm font-medium">{t('Arquivos com o mesmo nome na pasta')}</legend>
                 {(
                   [
-                    ['overwrite', 'Sobrescrever o arquivo existente'],
-                    ['keep-both', 'Manter os dois: o importado recebe -1, -2... no nome'],
+                    ['overwrite', t('Sobrescrever o arquivo existente')],
+                    ['keep-both', t('Manter os dois: o importado recebe -1, -2... no nome')],
                   ] as const
                 ).map(([value, label]) => (
                   <label key={value} className="flex items-start gap-2 text-sm">
@@ -250,9 +256,9 @@ export function ImportDialog() {
 
               <div className="flex flex-col gap-2">
                 <p className="text-sm font-medium">
-                  Resultado: {plan.createCount} {plan.createCount === 1 ? 'novo' : 'novos'}
-                  {plan.overwriteCount > 0 && `, ${plan.overwriteCount} sobrescritos`}
-                  {plan.renamedCount > 0 && `, ${plan.renamedCount} renomeados`}
+                  {plan.createCount === 1 ? t('Resultado: 1 novo') : t('Resultado: {count} novos', { count: plan.createCount })}
+                  {plan.overwriteCount > 0 && `, ${t('{count} sobrescritos', { count: plan.overwriteCount })}`}
+                  {plan.renamedCount > 0 && `, ${t('{count} renomeados', { count: plan.renamedCount })}`}
                 </p>
                 <ul className="max-h-56 overflow-y-auto rounded-md border text-xs">
                   {plan.operations.slice(0, PREVIEW_LIMIT).map((operation) => (
@@ -270,17 +276,17 @@ export function ImportDialog() {
                               : 'bg-success/15 text-success',
                         )}
                       >
-                        {operation.action === 'overwrite' ? 'sobrescreve' : operation.renamed ? 'renomeado' : 'novo'}
+                        {operation.action === 'overwrite' ? t('sobrescreve') : operation.renamed ? t('renomeado') : t('novo')}
                       </span>
                     </li>
                   ))}
                   {plan.operations.length > PREVIEW_LIMIT && (
-                    <li className="px-3 py-1.5 text-muted-foreground">e mais {plan.operations.length - PREVIEW_LIMIT}</li>
+                    <li className="px-3 py-1.5 text-muted-foreground">{t('e mais {count}', { count: plan.operations.length - PREVIEW_LIMIT })}</li>
                   )}
                 </ul>
                 {source.skipped.length > 0 && (
                   <details className="text-xs text-muted-foreground">
-                    <summary className="cursor-pointer">Ignorados ({source.skipped.length})</summary>
+                    <summary className="cursor-pointer">{t('Ignorados ({count})', { count: source.skipped.length })}</summary>
                     <ul className="mt-1 flex flex-col gap-0.5">
                       {source.skipped.map((item) => (
                         <li key={item.path} className="break-all">
@@ -299,11 +305,15 @@ export function ImportDialog() {
 
         <DialogFooter className="shrink-0 border-t bg-background px-5 py-4">
           <Button type="button" variant="outline" onClick={() => setImportOpen(false)}>
-            Cancelar
+            {t('Cancelar')}
           </Button>
           <Button type="button" disabled={!canImport || isImporting} onClick={() => void handleImport()}>
             {isImporting && <Loader2 className="animate-spin" />}
-            {isImporting ? 'Importando' : `Importar ${plan.operations.length || ''}`.trim()}
+            {isImporting
+              ? t('Importando')
+              : plan.operations.length
+                ? t('Importar {count}', { count: plan.operations.length })
+                : t('Importar')}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -1,11 +1,13 @@
+import { useT } from '@/hooks/use-t';
 import type { AiStructuredResult, OutlineProposal, ReferenceAudit } from '@/lib/ai/schemas';
+import { msg } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 
 const VERDICT_LABEL: Record<ReferenceAudit['results'][number]['verdict'], string> = {
-  matches: 'Confere',
-  mismatch: 'Não confere',
-  unreachable: 'Inacessível',
-  uncertain: 'Incerto',
+  matches: msg('Confere'),
+  mismatch: msg('Não confere'),
+  unreachable: msg('Inacessível'),
+  uncertain: msg('Incerto'),
 };
 
 const VERDICT_STYLE: Record<ReferenceAudit['results'][number]['verdict'], string> = {
@@ -16,10 +18,15 @@ const VERDICT_STYLE: Record<ReferenceAudit['results'][number]['verdict'], string
 };
 
 function ReferenceAuditView({ audit }: { audit: ReferenceAudit }) {
+  const { t } = useT();
   return (
     <div className="flex flex-col gap-2">
       <p className="text-xs text-muted-foreground">
-        {audit.summary.ok} conferem, {audit.summary.problems} com problema, {audit.summary.uncertain} incertas
+        {t('{ok} conferem, {problems} com problema, {uncertain} incertas', {
+          ok: audit.summary.ok,
+          problems: audit.summary.problems,
+          uncertain: audit.summary.uncertain,
+        })}
       </p>
       <ul className="flex flex-col gap-2">
         {audit.results.map((item) => (
@@ -27,7 +34,7 @@ function ReferenceAuditView({ audit }: { audit: ReferenceAudit }) {
             <div className="flex items-center gap-2">
               <span className="min-w-0 flex-1 truncate font-mono">{item.key}</span>
               <span className={cn('shrink-0 rounded px-1.5 py-0.5 font-medium', VERDICT_STYLE[item.verdict])}>
-                {VERDICT_LABEL[item.verdict]}
+                {t(VERDICT_LABEL[item.verdict])}
               </span>
             </div>
             {item.url && <p className="mt-1 truncate text-muted-foreground">{item.url}</p>}

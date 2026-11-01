@@ -39,9 +39,10 @@ export function useReviews(projectId: string, enabled = true) {
 }
 
 /**
- * Revisões pedidas ao e-mail do usuário, em qualquer projeto (índice de
- * collection group reviewerEmail + lastActivityAt). As regras exigem e-mail
- * verificado; sem ele a lista fica vazia.
+ * Revisões pedidas ao e-mail do usuário, em qualquer projeto: as que o
+ * convidaram na criação (reviewerEmail) e as que o acrescentaram depois
+ * (reviewerEmails), cada uma com o seu índice de collection group. As regras
+ * exigem e-mail verificado; sem ele a lista fica vazia.
  */
 export function useMyReviews() {
   const { user } = useAuth();
@@ -51,12 +52,15 @@ export function useMyReviews() {
     queryKey: ['my-reviews', email ?? ''] as const,
     enabled: isFirebaseConfigured && email !== null,
     queryFn: async (): Promise<ReviewSummary[]> => {
-      const snapshot = await getDocs(
-        query(collectionGroup(getFirebase().db, 'reviews'), where('reviewerEmail', '==', email), orderBy('lastActivityAt', 'desc')),
-      );
-      return snapshot.docs.map((item) =>
-        toReviewSummary(item.ref.parent.parent?.id ?? '', item.id, item.data({ serverTimestamps: 'estimate' }) as ReviewDoc),
-      );
+      const reviews = collectionGroup(getFirebase().db, 'reviews');
+      const [invited, added] = await Promise.all([
+        getDocs(query(reviews, where('reviewerEmail', '==', email), orderBy('lastActivityAt', 'desc'))),
+        getDocs(query(reviews, where('reviewerEmails', 'array-contains', email), orderBy('lastActivityAt', 'desc'))),
+      ]);
+      const byPath = new Map([...invited.docs, ...added.docs].map((item) => [item.ref.path, item]));
+      return [...byPath.values()]
+        .map((item) => toReviewSummary(item.ref.parent.parent?.id ?? '', item.id, item.data({ serverTimestamps: 'estimate' }) as ReviewDoc))
+        .sort((a, b) => (b.lastActivityAt?.getTime() ?? 0) - (a.lastActivityAt?.getTime() ?? 0));
     },
     staleTime: 60_000,
   });

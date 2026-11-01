@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DiffPdfViewer } from '@/features/diff/components/diff-pdf-viewer';
 import { DiffView } from '@/features/diff/components/diff-view';
+import { useT } from '@/hooks/use-t';
 import { slugify } from '@/lib/download';
 import { diffStats } from '@/lib/diff/word-diff';
 import { usePageTextDiff, useReviewVisualDiff } from '../hooks/use-review-files';
@@ -24,6 +25,7 @@ interface ReviewChangesDialogProps {
  * páginas da versão anterior comparado com o da atual (.pages).
  */
 export function ReviewChangesDialog({ review, documentId, role, open, onOpenChange }: ReviewChangesDialogProps) {
+  const { t } = useT();
   const [view, setView] = useState<'pdf' | 'text'>('pdf');
   const { segments, error } = usePageTextDiff(review, documentId, open && view === 'text');
   const visual = useReviewVisualDiff(review, documentId, open && view === 'pdf', role);
@@ -33,16 +35,16 @@ export function ReviewChangesDialog({ review, documentId, role, open, onOpenChan
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex h-[calc(100dvh-1rem)] max-w-3xl flex-col gap-0 overflow-hidden p-0">
         <DialogHeader className="shrink-0 border-b px-4 py-3 sm:px-5">
-          <DialogTitle>Alterações desde a rodada anterior</DialogTitle>
+          <DialogTitle>{t('Alterações desde a rodada anterior')}</DialogTitle>
           <DialogDescription>
-            Versão anterior comparada com a {review.snapshotLabel}: inserido em verde, removido riscado em vermelho.
+            {t('Versão anterior comparada com a {version}: inserido em verde, removido riscado em vermelho.', { version: review.snapshotLabel })}
           </DialogDescription>
         </DialogHeader>
         <div className="shrink-0 border-b px-4 py-2 sm:px-5">
           <Tabs value={view} onValueChange={(next) => setView(next as 'pdf' | 'text')}>
             <TabsList>
-              <TabsTrigger value="pdf">PDF marcado</TabsTrigger>
-              <TabsTrigger value="text">Texto</TabsTrigger>
+              <TabsTrigger value="pdf">{t('PDF marcado')}</TabsTrigger>
+              <TabsTrigger value="text">{t('Texto')}</TabsTrigger>
             </TabsList>
           </Tabs>
         </div>
@@ -50,9 +52,9 @@ export function ReviewChangesDialog({ review, documentId, role, open, onOpenChan
           <div className="min-h-0 flex-1">
             <DiffPdfViewer
               diff={visual.diff}
-              error={visual.error ?? (visual.missing ? 'O autor ainda não gerou a comparação em PDF desta rodada. Veja a aba Texto.' : null)}
-              loadingLabel={visual.diff ? null : role === 'author' ? 'Gerando a comparação em PDF' : 'Carregando a comparação'}
-              fileName={`${slugify(review.projectName)}-alteracoes-v${review.snapshotLabel}.pdf`}
+              error={visual.error ?? (visual.missing ? t('O autor ainda não gerou a comparação em PDF desta rodada. Veja a aba Texto.') : null)}
+              loadingLabel={visual.diff ? null : role === 'author' ? t('Gerando a comparação em PDF') : t('Carregando a comparação')}
+              fileName={`${slugify(review.projectName)}-${t('alteracoes')}-v${review.snapshotLabel}.pdf`}
             />
           </div>
         ) : (
@@ -62,15 +64,15 @@ export function ReviewChangesDialog({ review, documentId, role, open, onOpenChan
           ) : !segments ? (
             <p className="flex items-center gap-2 px-2 text-sm text-muted-foreground">
               <Loader2 className="size-4 animate-spin" />
-              Comparando
+              {t('Comparando')}
             </p>
           ) : stats && stats.insertedWords + stats.deletedWords === 0 ? (
-            <p className="px-2 text-sm text-muted-foreground">O texto do PDF não mudou.</p>
+            <p className="px-2 text-sm text-muted-foreground">{t('O texto do PDF não mudou.')}</p>
           ) : (
             <>
               <p role="status" className="mb-2 px-2 text-sm">
-                <span className="text-diff-added">{stats!.insertedWords} palavras inseridas</span>,{' '}
-                <span className="text-diff-removed">{stats!.deletedWords} removidas</span>.
+                <span className="text-diff-added">{t('{count} palavras inseridas', { count: stats!.insertedWords })}</span>,{' '}
+                <span className="text-diff-removed">{t('{count} removidas', { count: stats!.deletedWords })}</span>.
               </p>
               <DiffView segments={segments} showLineNumbers={false} />
             </>

@@ -3,9 +3,11 @@ import {
   createUserWithEmailAndPassword,
   isSignInWithEmailLink,
   onAuthStateChanged,
+  sendPasswordResetEmail,
   sendSignInLinkToEmail,
   signInWithEmailAndPassword,
   signInWithEmailLink,
+  signInAnonymously,
   signInWithPopup,
   signOut as firebaseSignOut,
   type User,
@@ -14,7 +16,8 @@ import { createContext, useEffect, useMemo, useState, type ReactNode } from 'rea
 import { emailLinkUrl } from '@/lib/email';
 import { getFirebase, isFirebaseConfigured } from '@/lib/firebase/app';
 
-export type AuthStatus = 'loading' | 'signed-in' | 'signed-out' | 'demo';
+/** "guest": sessão anônima de quem abriu um link de revisão sem conta (não entra nas telas de trabalho). */
+export type AuthStatus = 'loading' | 'signed-in' | 'guest' | 'signed-out' | 'demo';
 
 export interface AuthUser {
   uid: string;
@@ -23,6 +26,9 @@ export interface AuthUser {
   /** Google e o link por e-mail confirmam o endereço; e-mail e senha, não. Revisões exigem confirmado. */
   emailVerified: boolean;
   photoURL: string | null;
+  isAnonymous: boolean;
+  /** Formas de entrar ligadas à conta ("password", "google.com"...). */
+  providers: string[];
 }
 
 export interface AuthContextValue {
@@ -36,7 +42,13 @@ export interface AuthContextValue {
   /** A página atual veio de um link de acesso enviado por e-mail. */
   isEmailLink: () => boolean;
   completeEmailLink: (email: string) => Promise<void>;
+  /** E-mail para criar uma senha nova (página do Firebase), que volta ao login e depois a `next`. */
+  sendPasswordReset: (email: string, next: string) => Promise<void>;
+  /** Sessão anônima para revisar pelo link, sem conta (exige "Anônimo" ativo no Authentication). */
+  signInAsGuest: () => Promise<void>;
   signOut: () => Promise<void>;
+  /** Relê nome e foto da conta depois de uma mudança de perfil (o Firebase não avisa sozinho). */
+  refreshUser: () => void;
 }
 
 export const AuthContext = createContext<AuthContextValue | null>(null);
@@ -48,6 +60,8 @@ function toAuthUser(user: User): AuthUser {
     email: user.email,
     emailVerified: user.emailVerified,
     photoURL: user.photoURL,
+    isAnonymous: user.isAnonymous,
+    providers: user.providerData.map((provider) => provider.providerId),
   };
 }
 
@@ -60,7 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!isFirebaseConfigured) return;
     return onAuthStateChanged(getFirebase().auth, (current) => {
       setUser(current ? toAuthUser(current) : null);
-      setStatus(current ? 'signed-in' : 'signed-out');
+      setStatus(current ? (current.isAnonymous ? 'guest' : 'signed-in') : 'signed-out');
     });
   }, []);
 
@@ -83,7 +97,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       completeEmailLink: async (email) => {
         await signInWithEmailLink(getFirebase().auth, email, window.location.href);
       },
+      sendPasswordReset: (email, next) => sendPasswordResetEmail(getFirebase().auth, email, { url: emailLinkUrl(email, next) }),
+      signInAsGuest: async () => {
+        await signInAnonymously(getFirebase().auth);
+      },
       signOut: () => firebaseSignOut(getFirebase().auth),
+      refreshUser: () => {
+        const current = getFirebase().auth.currentUser;
+        setUser(current ? toAuthUser(current) : null);
+      },
     }),
     [status, user],
   );

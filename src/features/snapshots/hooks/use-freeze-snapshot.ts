@@ -17,6 +17,7 @@ import { readProjectDocuments, withMainDocument } from '@/features/projects/hook
 import { MAIN_DOCUMENT_ID } from '@/features/projects/model/new-project';
 import { getFirebase } from '@/lib/firebase/app';
 import { writeStoredFile } from '@/lib/firebase/stored-files';
+import { t } from '@/lib/i18n';
 import { compileLatex } from '@/lib/latex/compiler';
 import { buildCompileInput, hasDocumentClass, type TexIssue } from '@/lib/latex/prepare';
 import { encodeSyncData } from '@/lib/latex/synctex';
@@ -68,11 +69,11 @@ export function useFreezeSnapshot(projectId: string, projectName: string) {
     async ({ message, bump, reuseIfUnchanged, requiredDocumentIds = [], onStage }: FreezeInput): Promise<FreezeResult> => {
       const { db, auth } = getFirebase();
       const uid = auth.currentUser?.uid;
-      if (!uid) throw new FreezeError('Entre na sua conta para congelar versões.');
+      if (!uid) throw new FreezeError(t('Entre na sua conta para congelar versões.'));
 
       const { texts, binaries, mainPath, loadIssues } = await collectSources(null);
-      if (loadIssues.length > 0) throw new FreezeError('Alguns arquivos não puderam ser lidos. Tente de novo.', loadIssues);
-      if (!mainPath) throw new FreezeError('Nenhum arquivo .tex com \\documentclass no projeto.');
+      if (loadIssues.length > 0) throw new FreezeError(t('Alguns arquivos não puderam ser lidos. Tente de novo.'), loadIssues);
+      if (!mainPath) throw new FreezeError(t('Nenhum arquivo .tex com \\documentclass no projeto.'));
 
       const encoder = new TextEncoder();
       const textData = await Promise.all(
@@ -89,7 +90,7 @@ export function useFreezeSnapshot(projectId: string, projectName: string) {
 
       const projectRef = doc(db, firestorePaths.project(projectId));
       const project = (await getDoc(projectRef)).data() as ProjectDoc | undefined;
-      if (!project) throw new FreezeError('Projeto não encontrado.');
+      if (!project) throw new FreezeError(t('Projeto não encontrado.'));
       const latest = project.latestSnapshotId
         ? ((await getDoc(doc(db, firestorePaths.snapshot(projectId, project.latestSnapshotId)))).data() as SnapshotDoc | undefined)
         : undefined;
@@ -107,12 +108,17 @@ export function useFreezeSnapshot(projectId: string, projectName: string) {
       for (const document of documents) {
         const rootPath = document.role === 'main' ? (isRoot(document.rootPath) ? document.rootPath : mainPath) : document.rootPath;
         if (!isRoot(rootPath)) {
-          throw new FreezeError(`O documento "${document.title}" aponta para ${rootPath}, que não existe ou não tem \\documentclass.`);
+          throw new FreezeError(
+            t('O documento "{title}" aponta para {path}, que não existe ou não tem \\documentclass.', { title: document.title, path: rootPath }),
+          );
         }
         const compiled = await compileLatex(buildCompileInput(rootPath, texts, binaryData), rootPath, () => undefined);
         if (!compiled.pdf) {
-          const prefix = documents.length > 1 ? `"${document.title}": ` : '';
-          throw new FreezeError(`${prefix}a compilação falhou. Corrija os erros antes de congelar a versão.`, compiled.issues);
+          const failure =
+            documents.length > 1
+              ? t('"{title}": a compilação falhou. Corrija os erros antes de congelar a versão.', { title: document.title })
+              : t('a compilação falhou. Corrija os erros antes de congelar a versão.');
+          throw new FreezeError(failure, compiled.issues);
         }
         builds.push({ document, rootPath, pdf: compiled.pdf, synctex: compiled.synctex });
       }
@@ -176,7 +182,7 @@ export function useFreezeSnapshot(projectId: string, projectName: string) {
         await batch.commit();
       } catch (error) {
         if ((error as { code?: string }).code === 'permission-denied') {
-          throw new FreezeError('Sem permissão para congelar, ou outra pessoa congelou uma versão agora. Tente de novo.');
+          throw new FreezeError(t('Sem permissão para congelar, ou outra pessoa congelou uma versão agora. Tente de novo.'));
         }
         throw error;
       }

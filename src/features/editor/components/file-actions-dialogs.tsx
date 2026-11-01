@@ -2,6 +2,7 @@ import { Loader2, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { useT } from '@/hooks/use-t';
 import { FileActionError, useFileActions } from '../hooks/use-file-actions';
 import type { EditorFile } from '../model/editor-file';
 import { useEditorStore } from '../state/editor-store';
@@ -15,11 +16,11 @@ interface FileActionsDialogsProps {
   onClose: () => void;
 }
 
-const messageOf = (error: unknown) =>
-  error instanceof FileActionError ? error.message : 'Não foi possível salvar. Confira a conexão e a sua permissão no projeto.';
-
 /** Diálogos de criar, renomear e excluir arquivo, abertos pela árvore. */
 export function FileActionsDialogs({ action, files, onClose }: FileActionsDialogsProps) {
+  const { t } = useT();
+  const messageOf = (error: unknown) =>
+    error instanceof FileActionError ? error.message : t('Não foi possível salvar. Confira a conexão e a sua permissão no projeto.');
   const { projectId, openFile } = useEditorStore();
   const { createFile, renameFile, deleteFile } = useFileActions(projectId);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -35,10 +36,10 @@ export function FileActionsDialogs({ action, files, onClose }: FileActionsDialog
       <FileNameDialog
         open={action?.kind === 'create'}
         onOpenChange={setOpen}
-        title="Novo arquivo"
-        description="Informe o caminho. Pastas que não existem são criadas junto."
+        title={t('Novo arquivo')}
+        description={t('Informe o caminho. Pastas que não existem são criadas junto.')}
         initialValue={action?.kind === 'create' && action.folder ? `${action.folder}/` : ''}
-        submitLabel="Criar"
+        submitLabel={t('Criar')}
         onSubmit={async (path) => {
           try {
             openFile(await createFile(path, files));
@@ -51,10 +52,10 @@ export function FileActionsDialogs({ action, files, onClose }: FileActionsDialog
       <FileNameDialog
         open={action?.kind === 'rename'}
         onOpenChange={setOpen}
-        title="Renomear ou mover"
-        description="Mude o nome ou a pasta. Lembre de atualizar os \input e \includegraphics que apontam para ele."
+        title={t('Renomear ou mover')}
+        description={t('Mude o nome ou a pasta. Lembre de atualizar os \\input e \\includegraphics que apontam para ele.')}
         initialValue={action?.kind === 'rename' ? action.file.path : ''}
-        submitLabel="Renomear"
+        submitLabel={t('Renomear')}
         onSubmit={async (path) => {
           if (action?.kind !== 'rename') return null;
           try {
@@ -68,9 +69,9 @@ export function FileActionsDialogs({ action, files, onClose }: FileActionsDialog
       <Dialog open={action?.kind === 'delete'} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Excluir arquivo</DialogTitle>
+            <DialogTitle>{t('Excluir arquivo')}</DialogTitle>
             <DialogDescription>
-              {action?.kind === 'delete' ? `${action.file.path} sai do rascunho. As versões congeladas continuam com ele.` : ''}
+              {action?.kind === 'delete' ? t('{path} sai do rascunho. As versões congeladas continuam com ele.', { path: action.file.path }) : ''}
             </DialogDescription>
           </DialogHeader>
           {deleteError && (
@@ -80,7 +81,7 @@ export function FileActionsDialogs({ action, files, onClose }: FileActionsDialog
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>
-              Cancelar
+              {t('Cancelar')}
             </Button>
             <Button
               variant="destructive"
@@ -99,7 +100,7 @@ export function FileActionsDialogs({ action, files, onClose }: FileActionsDialog
               }}
             >
               {isDeleting ? <Loader2 className="animate-spin" /> : <Trash2 />}
-              Excluir
+              {t('Excluir')}
             </Button>
           </DialogFooter>
         </DialogContent>

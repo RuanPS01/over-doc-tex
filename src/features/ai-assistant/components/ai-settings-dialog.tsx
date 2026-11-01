@@ -2,9 +2,11 @@ import { Loader2, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { useT } from '@/hooks/use-t';
 import { healthOf } from '@/lib/ai/model-chain';
 import { PROVIDERS, inheritedKeySource, resolveChain, resolveModel, type AiConfig, type AiProviderId } from '@/lib/ai/providers';
 import { AiTaskError, MAX_AI_MODELS } from '@/lib/ai/schemas';
+import { t } from '@/lib/i18n';
 import { useAiConfig } from '../hooks/use-ai-config';
 import { ModelEntryCard, type DraftEntry } from './model-entry-card';
 
@@ -16,7 +18,8 @@ function toDraft(config: AiConfig | null): DraftEntry[] {
     id: crypto.randomUUID(),
     provider: entry.provider,
     model: entry.model,
-    customModel: entry.model !== null && !PROVIDERS[entry.provider].catalog.includes(entry.model),
+    // O modelo salvo aparece como item da lista (mesmo fora dela); o campo de nome só abre por escolha.
+    customModel: false,
     storedKey: entry.apiKey,
     keyInput: '',
     inherit: !entry.apiKey && inheritedKeySource(config.models, index) !== null,
@@ -41,9 +44,12 @@ function toConfig(draft: readonly DraftEntry[]): AiConfig {
 function describeConfig(config: AiConfig | null): string {
   const chain = config ? resolveChain(config) : [];
   const [primary, ...reserves] = chain;
-  if (!primary) return 'Nenhuma IA configurada. O assistente fica desativado até você salvar um modelo com a sua chave.';
-  const extra = reserves.length === 0 ? '' : `, com ${reserves.length} ${reserves.length === 1 ? 'reserva' : 'reservas'}`;
-  return `Assistente ativo com ${PROVIDERS[primary.provider].label} (${resolveModel(primary)})${extra}.`;
+  if (!primary) return t('Nenhuma IA configurada. O assistente fica desativado até você salvar um modelo com a sua chave.');
+  const params = { provider: PROVIDERS[primary.provider].label, model: resolveModel(primary), count: reserves.length };
+  if (reserves.length === 0) return t('Assistente ativo com {provider} ({model}).', params);
+  return reserves.length === 1
+    ? t('Assistente ativo com {provider} ({model}), com 1 reserva.', params)
+    : t('Assistente ativo com {provider} ({model}), com {count} reservas.', params);
 }
 
 interface AiSettingsDialogProps {
@@ -56,6 +62,7 @@ interface AiSettingsDialogProps {
  * cada um com provedor, modelo e chave. A plataforma não oferece IA própria.
  */
 export function AiSettingsDialog({ open, onOpenChange }: AiSettingsDialogProps) {
+  const { t } = useT();
   const { config, storage, save, clear } = useAiConfig();
   const [draft, setDraft] = useState<DraftEntry[]>(() => toDraft(config));
   const [errors, setErrors] = useState<Record<number, string>>({});
@@ -107,8 +114,8 @@ export function AiSettingsDialog({ open, onOpenChange }: AiSettingsDialogProps) 
   const handleSave = async () => {
     const found: Record<number, string> = {};
     resolved.forEach((entry, index) => {
-      if (!entry.apiKey) found[index] = 'Cole a chave do provedor.';
-      else if (draft[index]?.customModel && !entry.model) found[index] = 'Informe o nome do modelo.';
+      if (!entry.apiKey) found[index] = t('Cole a chave do provedor.');
+      else if (draft[index]?.customModel && !entry.model) found[index] = t('Informe o nome do modelo.');
     });
     if (Object.keys(found).length > 0) return setErrors(found);
 
@@ -120,7 +127,7 @@ export function AiSettingsDialog({ open, onOpenChange }: AiSettingsDialogProps) 
       );
       results.forEach((result, index) => {
         if (result.status === 'rejected') {
-          found[index] = result.reason instanceof AiTaskError ? result.reason.message : 'Não foi possível validar a chave.';
+          found[index] = result.reason instanceof AiTaskError ? result.reason.message : t('Não foi possível validar a chave.');
         }
       });
       if (Object.keys(found).length > 0) return setErrors(found);
@@ -143,13 +150,13 @@ export function AiSettingsDialog({ open, onOpenChange }: AiSettingsDialogProps) 
         <DialogHeader className="shrink-0 border-b px-5 pb-4 pt-5">
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="size-5 shrink-0 text-primary" />
-            Usar a minha própria IA
+            {t('Usar a minha própria IA')}
           </DialogTitle>
           <DialogDescription>
-            A IA do OverDocTeX funciona só com a sua chave: a plataforma não oferece IA própria.{' '}
+            {t('A IA do OverDocTeX funciona só com a sua chave: a plataforma não oferece IA própria.')}{' '}
             {storage === 'account'
-              ? 'A configuração fica guardada na sua conta e vale para todo recurso de IA: assistente, reescrita, sumário e verificação de referências.'
-              : 'Sem login, a configuração fica guardada só neste navegador.'}
+              ? t('A configuração fica guardada na sua conta e vale para todo recurso de IA: assistente, reescrita, sumário e verificação de referências.')
+              : t('Sem login, a configuração fica guardada só neste navegador.')}
           </DialogDescription>
         </DialogHeader>
 
@@ -158,10 +165,9 @@ export function AiSettingsDialog({ open, onOpenChange }: AiSettingsDialogProps) 
           <p className="rounded-md border bg-muted/50 px-3 py-2 text-sm text-muted-foreground">{describeConfig(config)}</p>
 
           <div className="flex flex-col gap-1">
-            <h3 className="text-sm font-semibold">Modelos</h3>
+            <h3 className="text-sm font-semibold">{t('Modelos')}</h3>
             <p className="text-xs text-muted-foreground">
-              Quando um modelo atinge o limite de uso ou falha, o OverDocTeX tenta o próximo da lista sozinho. O modelo que
-              bateu no limite sai da frente por alguns minutos, e as próximas chamadas já começam pelo seguinte.
+              {t('Quando um modelo atinge o limite de uso ou falha, o OverDocTeX tenta o próximo da lista sozinho. O modelo que bateu no limite sai da frente por alguns minutos, e as próximas chamadas já começam pelo seguinte.')}
             </p>
           </div>
 
@@ -185,7 +191,7 @@ export function AiSettingsDialog({ open, onOpenChange }: AiSettingsDialogProps) 
 
           <Button type="button" variant="outline" disabled={draft.length >= MAX_AI_MODELS} onClick={addReserve}>
             <Plus />
-            Adicionar modelo de reserva
+            {t('Adicionar modelo de reserva')}
           </Button>
         </div>
 
@@ -198,14 +204,14 @@ export function AiSettingsDialog({ open, onOpenChange }: AiSettingsDialogProps) 
             onClick={() => void handleClear()}
           >
             <Trash2 />
-            {confirmClear ? 'Clique de novo para limpar' : 'Limpar configuração'}
+            {confirmClear ? t('Clique de novo para limpar') : t('Limpar configuração')}
           </Button>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-            Cancelar
+            {t('Cancelar')}
           </Button>
           <Button type="button" disabled={isSaving} onClick={() => void handleSave()}>
             {isSaving && <Loader2 className="animate-spin" />}
-            {isSaving ? 'Verificando' : 'Salvar'}
+            {isSaving ? t('Verificando') : t('Salvar')}
           </Button>
         </DialogFooter>
       </DialogContent>

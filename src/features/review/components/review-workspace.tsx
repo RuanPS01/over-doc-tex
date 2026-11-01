@@ -6,13 +6,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet';
 import { PdfDocumentView } from '@/features/pdf-viewer/components/pdf-document-view';
 import { useLayoutMode } from '@/hooks/use-layout-mode';
+import { useT } from '@/hooks/use-t';
 import { slugify } from '@/lib/download';
+import { msg } from '@/lib/i18n';
 import { sourceAt } from '@/lib/latex/synctex';
 import { buildDrawing, flattenStroke, pinPointFor } from '@/lib/pdf/drawing';
 import { buildQuote, normalizeRects } from '@/lib/pdf/text-anchor';
 import { cn } from '@/lib/utils';
 import type { AnnotationColor, ParticipantRole, ReviewStatus, SourceLocation } from '@shared/firestore/types';
-import { useReviewActions, type NewAnnotation } from '../hooks/use-review-actions';
+import { useReviewActions, type GuestIdentity, type NewAnnotation } from '../hooks/use-review-actions';
 import { useReviewDocuments, useReviewPageTexts, useReviewPdf, useReviewSyncData } from '../hooks/use-review-files';
 import { useTextSelection } from '../hooks/use-text-selection';
 import { useThreads } from '../hooks/use-threads';
@@ -21,18 +23,24 @@ import { AnnotationLayer } from './annotation-layer';
 import { PendingAnnotationPanel } from './pending-annotation-panel';
 import { ReviewChangesDialog } from './review-changes-dialog';
 import { ReviewHeader } from './review-header';
+import { ReviewSharingDialog } from './review-sharing-dialog';
 import { SelectionPopover } from './selection-popover';
 import { ThreadList } from './thread-list';
 
 const TOOLS: Array<{ id: ReviewTool; label: string; icon: ReactNode }> = [
-  { id: 'select', label: 'Selecionar texto', icon: <TextSelect /> },
-  { id: 'pin', label: 'Ponto', icon: <MapPin /> },
-  { id: 'draw', label: 'Desenhar', icon: <PenLine /> },
+  { id: 'select', label: msg('Selecionar texto'), icon: <TextSelect /> },
+  { id: 'pin', label: msg('Ponto'), icon: <MapPin /> },
+  { id: 'draw', label: msg('Desenhar'), icon: <PenLine /> },
 ];
 
 interface ReviewWorkspaceProps {
   review: ReviewSummary;
   role: ParticipantRole;
+  /** Revisor pelo link, sem conta: comenta com este nome. */
+  guest?: GuestIdentity | null;
+  onChangeGuestName?: () => void;
+  /** Dono e editores do projeto: mostram o "Envio da revisão" no cabeçalho. */
+  canManage?: boolean;
 }
 
 /**
@@ -40,7 +48,8 @@ interface ReviewWorkspaceProps {
  * numerados e, ao lado (no celular, num Sheet), as threads. Mesma casca do
  * editor: altura da tela e só os painéis rolam.
  */
-export function ReviewWorkspace({ review, role }: ReviewWorkspaceProps) {
+export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName, canManage = false }: ReviewWorkspaceProps) {
+  const { t } = useT();
   const layoutMode = useLayoutMode();
   const isDesktop = layoutMode === 'desktop';
   const [, navigate] = useLocation();
@@ -49,7 +58,8 @@ export function ReviewWorkspace({ review, role }: ReviewWorkspaceProps) {
   const currentDocument = documents.find((item) => item.id === documentId);
   const { data: allThreads = [] } = useThreads(review.projectId, review.id, true);
   const threads = useMemo(() => allThreads.filter((thread) => thread.documentId === documentId), [allThreads, documentId]);
-  const actions = useReviewActions(review, role);
+  const actions = useReviewActions(review, role, guest);
+  const [sharingOpen, setSharingOpen] = useState(false);
   const { pdf, error: pdfError } = useReviewPdf(review, documentId);
   const pageTexts = useReviewPageTexts(review, documentId);
   const syncData = useReviewSyncData(review, documentId, Boolean(currentDocument?.hasSynctex));
@@ -130,7 +140,7 @@ export function ReviewWorkspace({ review, role }: ReviewWorkspaceProps) {
     else if (submitted.kind === 'pin') annotation = { kind: 'pin', page: submitted.page, point: submitted.point, drawing: null };
     else {
       const drawing = buildDrawing(submitted.strokes);
-      if (!drawing) throw new Error('Desenho vazio ou grande demais.');
+      if (!drawing) throw new Error(t('Desenho vazio ou grande demais.'));
       annotation = { kind: 'pin', page: submitted.page, point: pinPointFor(drawing.bounds), drawing };
     }
     // Trecho: o meio da primeira linha selecionada (o topo do retângulo cai na linha de cima).
@@ -157,7 +167,7 @@ export function ReviewWorkspace({ review, role }: ReviewWorkspaceProps) {
     try {
       await action();
     } catch {
-      setActionError('Não foi possível salvar. Confira a conexão e se a revisão continua aberta.');
+      setActionError(t('Não foi possível salvar. Confira a conexão e se a revisão continua aberta.'));
     }
   };
 
@@ -202,7 +212,7 @@ export function ReviewWorkspace({ review, role }: ReviewWorkspaceProps) {
           setPageSizes([]);
         }}
       >
-        <SelectTrigger className="h-8 w-auto max-w-[11rem] gap-1 border-0 bg-transparent px-1 text-xs font-medium" aria-label="Documento">
+        <SelectTrigger className="h-8 w-auto max-w-[11rem] gap-1 border-0 bg-transparent px-1 text-xs font-medium" aria-label={t('Documento')}>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -214,19 +224,19 @@ export function ReviewWorkspace({ review, role }: ReviewWorkspaceProps) {
         </SelectContent>
       </Select>
     ) : (
-      `Versão ${review.snapshotLabel}`
+      t('Versão {version}', { version: review.snapshotLabel })
     );
 
   const tools = canWrite ? (
-    <div role="radiogroup" aria-label="Ferramenta" className="flex shrink-0 items-center gap-0.5 rounded-md bg-muted p-0.5">
+    <div role="radiogroup" aria-label={t('Ferramenta')} className="flex shrink-0 items-center gap-0.5 rounded-md bg-muted p-0.5">
       {TOOLS.map((item) => (
         <button
           key={item.id}
           type="button"
           role="radio"
           aria-checked={tool === item.id}
-          aria-label={item.label}
-          title={item.label}
+          aria-label={t(item.label)}
+          title={t(item.label)}
           onClick={() => {
             setTool(item.id);
             if (item.id !== 'select') clearSelection();
@@ -237,7 +247,7 @@ export function ReviewWorkspace({ review, role }: ReviewWorkspaceProps) {
           )}
         >
           {item.icon}
-          <span className="hidden xl:inline">{item.label}</span>
+          <span className="hidden xl:inline">{t(item.label)}</span>
         </button>
       ))}
     </div>
@@ -250,7 +260,11 @@ export function ReviewWorkspace({ review, role }: ReviewWorkspaceProps) {
         role={role}
         onShowChanges={() => setChangesOpen(true)}
         onStatusChange={(status: ReviewStatus) => void run(() => actions.setReviewStatus(status))}
+        onOpenSharing={canManage ? () => setSharingOpen(true) : undefined}
+        guestName={guest?.name ?? null}
+        onChangeGuestName={onChangeGuestName}
       />
+      {canManage && <ReviewSharingDialog open={sharingOpen} onOpenChange={setSharingOpen} review={review} />}
       {actionError && (
         <p role="alert" className="shrink-0 border-b bg-destructive/10 px-3 py-1.5 text-xs text-destructive">
           {actionError}
@@ -258,7 +272,11 @@ export function ReviewWorkspace({ review, role }: ReviewWorkspaceProps) {
       )}
       {(tool !== 'select' || review.description) && (
         <p className="shrink-0 truncate border-b px-3 py-1.5 text-xs text-muted-foreground" title={review.description ?? undefined}>
-          {tool === 'pin' ? 'Clique no ponto do PDF que quer comentar.' : tool === 'draw' ? 'Desenhe sobre a página; depois escreva o comentário ao lado.' : review.description}
+          {tool === 'pin'
+            ? t('Clique no ponto do PDF que quer comentar.')
+            : tool === 'draw'
+              ? t('Desenhe sobre a página; depois escreva o comentário ao lado.')
+              : review.description}
         </p>
       )}
       <main className="relative flex min-h-0 flex-1">
@@ -290,13 +308,13 @@ export function ReviewWorkspace({ review, role }: ReviewWorkspaceProps) {
           />
         </div>
         {isDesktop ? (
-          <aside aria-label="Comentários" className="flex w-96 shrink-0 flex-col border-l bg-panel">
+          <aside aria-label={t('Comentários')} className="flex w-96 shrink-0 flex-col border-l bg-panel">
             {threadList}
           </aside>
         ) : (
           <Button className="absolute bottom-4 right-4 z-20 shadow-lg" onClick={() => setSheetOpen(true)}>
             <MessageSquare />
-            {pending ? 'Escrever comentário' : `Comentários (${threads.length})`}
+            {pending ? t('Escrever comentário') : t('Comentários ({count})', { count: threads.length })}
           </Button>
         )}
       </main>
@@ -304,8 +322,8 @@ export function ReviewWorkspace({ review, role }: ReviewWorkspaceProps) {
       {!isDesktop && (
         <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
           <SheetContent side="bottom" className="h-[75dvh] gap-0 p-0">
-            <SheetTitle className="px-4 pt-4">Comentários</SheetTitle>
-            <SheetDescription className="sr-only">Comentários da revisão, por página.</SheetDescription>
+            <SheetTitle className="px-4 pt-4">{t('Comentários')}</SheetTitle>
+            <SheetDescription className="sr-only">{t('Comentários da revisão, por página.')}</SheetDescription>
             {threadList}
           </SheetContent>
         </Sheet>

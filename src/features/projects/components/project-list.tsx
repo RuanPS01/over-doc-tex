@@ -1,15 +1,16 @@
 import { FileText } from 'lucide-react';
+import { useMemo } from 'react';
 import { Link } from 'wouter';
 import { Button } from '@/components/ui/button';
+import { useT } from '@/hooks/use-t';
+import { msg } from '@/lib/i18n';
 import { useProjects, type ProjectSummary } from '../hooks/use-projects';
 
 const ROLE_LABELS: Record<ProjectSummary['role'], string> = {
-  owner: 'Dono',
-  editor: 'Editor',
-  viewer: 'Leitor',
+  owner: msg('Dono'),
+  editor: msg('Editor'),
+  viewer: msg('Leitor'),
 };
-
-const dateFormat = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
 
 function ProjectCard({ href, title, subtitle }: { href: string; title: string; subtitle: string }) {
   return (
@@ -30,20 +31,23 @@ function ProjectCard({ href, title, subtitle }: { href: string; title: string; s
 
 /** Projeto de exemplo do modo demonstração (sem Firebase). */
 export function DemoProjectList() {
+  const { t } = useT();
   return (
     <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-      <ProjectCard href="/p/demo" title="Revisão Colaborativa de Documentos LaTeX" subtitle="Projeto de exemplo" />
+      <ProjectCard href="/p/demo" title={t('Revisão Colaborativa de Documentos LaTeX')} subtitle={t('Projeto de exemplo')} />
     </ul>
   );
 }
 
 /** Projetos de que o usuário é membro, mais recentes primeiro. */
 export function ProjectList({ onCreate }: { onCreate: () => void }) {
+  const { t, locale } = useT();
   const { data: projects, isPending, isError, error, refetch } = useProjects();
+  const dateFormat = useMemo(() => new Intl.DateTimeFormat(locale, { dateStyle: 'short', timeStyle: 'short' }), [locale]);
 
   if (isPending) {
     return (
-      <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2" aria-busy="true" aria-label="Carregando projetos">
+      <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2" aria-busy="true" aria-label={t('Carregando projetos')}>
         {[0, 1].map((key) => (
           <li key={key} className="h-[74px] animate-pulse rounded-lg border bg-muted/40" />
         ))}
@@ -54,10 +58,10 @@ export function ProjectList({ onCreate }: { onCreate: () => void }) {
   if (isError) {
     return (
       <div className="flex flex-col items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm" role="alert">
-        <p className="font-medium">Não foi possível carregar seus projetos.</p>
+        <p className="font-medium">{t('Não foi possível carregar seus projetos.')}</p>
         <p className="text-muted-foreground">{error.message}</p>
         <Button size="sm" variant="outline" onClick={() => void refetch()}>
-          Tentar de novo
+          {t('Tentar de novo')}
         </Button>
       </div>
     );
@@ -66,10 +70,10 @@ export function ProjectList({ onCreate }: { onCreate: () => void }) {
   if (projects.length === 0) {
     return (
       <div className="flex flex-col items-start gap-3 rounded-lg border border-dashed p-6 text-sm">
-        <p className="font-medium">Você ainda não tem projetos.</p>
-        <p className="text-muted-foreground">Crie um projeto em branco ou, dentro dele, importe um .zip com o seu documento LaTeX.</p>
+        <p className="font-medium">{t('Você ainda não tem projetos.')}</p>
+        <p className="text-muted-foreground">{t('Crie um projeto em branco ou, dentro dele, importe um .zip com o seu documento LaTeX.')}</p>
         <Button size="sm" onClick={onCreate}>
-          Criar o primeiro projeto
+          {t('Criar o primeiro projeto')}
         </Button>
       </div>
     );
@@ -82,7 +86,7 @@ export function ProjectList({ onCreate }: { onCreate: () => void }) {
           key={project.id}
           href={`/p/${project.id}`}
           title={project.name}
-          subtitle={[ROLE_LABELS[project.role], project.updatedAt && `atualizado em ${dateFormat.format(project.updatedAt)}`]
+          subtitle={[t(ROLE_LABELS[project.role]), project.updatedAt && t('atualizado em {date}', { date: dateFormat.format(project.updatedAt) })]
             .filter(Boolean)
             .join(', ')}
         />

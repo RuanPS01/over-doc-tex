@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Redirect, useLocation } from 'wouter';
 import { FullPageStatus } from '@/components/common/full-page-status';
+import { useT } from '@/hooks/use-t';
 import { useAuth } from '../hooks/use-auth';
 
 /**
@@ -9,10 +10,12 @@ import { useAuth } from '../hooks/use-auth';
  * No modo demonstração, passa direto.
  */
 export function RequireAuth({ children }: { children: ReactNode }) {
+  const { t } = useT();
   const { status } = useAuth();
   const [location] = useLocation();
 
-  if (status === 'loading') return <FullPageStatus title="Abrindo sua sessão" loading />;
-  if (status === 'signed-out') return <Redirect to={`/login?next=${encodeURIComponent(location)}`} />;
+  if (status === 'loading') return <FullPageStatus title={t('Abrindo sua sessão')} loading />;
+  // A sessão anônima de um link de revisão não abre as telas de trabalho.
+  if (status === 'signed-out' || status === 'guest') return <Redirect to={`/login?next=${encodeURIComponent(location)}`} />;
   return <>{children}</>;
 }

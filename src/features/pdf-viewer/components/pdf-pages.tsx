@@ -1,5 +1,6 @@
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask, TextLayer } from 'pdfjs-dist';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useT } from '@/hooks/use-t';
 import { loadPdfjs } from '@/lib/pdf/pdfjs';
 
 interface PdfPageProps {
@@ -16,6 +17,7 @@ interface PdfPageProps {
 
 /** Uma página: desenhada no canvas quando chega perto da área visível. */
 function PdfPage({ doc, pageNumber, cssWidth, aspect, overlay, withText, onDoubleClick }: PdfPageProps) {
+  const { t } = useT();
   const holderRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const textRef = useRef<HTMLDivElement>(null);
@@ -88,7 +90,7 @@ function PdfPage({ doc, pageNumber, cssWidth, aspect, overlay, withText, onDoubl
     <div
       ref={holderRef}
       role="img"
-      aria-label={`Página ${pageNumber}`}
+      aria-label={t('Página {number}', { number: pageNumber })}
       data-pdf-page={pageNumber}
       onDoubleClick={
         onDoubleClick
@@ -127,6 +129,7 @@ interface PdfPagesProps {
 
 /** Páginas do PDF compilado, desenhadas pelo pdf.js. */
 export function PdfPages({ data, availableWidth, zoom, onError, renderOverlay, textLayer = false, onPageSizes, onPageDoubleClick }: PdfPagesProps) {
+  const { t } = useT();
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [aspects, setAspects] = useState<number[]>([]);
   const onErrorRef = useRef(onError);
@@ -155,14 +158,14 @@ export function PdfPages({ data, availableWidth, zoom, onError, renderOverlay, t
         setDoc(loaded);
       })
       .catch((error: unknown) => {
-        if (!cancelled) onErrorRef.current(`Não foi possível abrir o PDF: ${String(error)}`);
+        if (!cancelled) onErrorRef.current(t('Não foi possível abrir o PDF: {error}', { error: String(error) }));
       });
     // Troca de PDF ou saída do painel: libera o documento e o worker do pdf.js.
     return () => {
       cancelled = true;
       void task?.destroy();
     };
-  }, [data]);
+  }, [data, t]);
 
   // Passos de 8 px evitam redesenhar a cada pixel ao arrastar a divisória dos painéis.
   const cssWidth = Math.max(160, Math.round((Math.min(availableWidth, 820) * zoom) / 100 / 8) * 8);

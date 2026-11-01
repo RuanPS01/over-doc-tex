@@ -6,6 +6,7 @@ import { firestorePaths } from '@shared/firestore/paths';
 import { downloadBytes, slugify } from '@/lib/download';
 import { getFirebase, isFirebaseConfigured } from '@/lib/firebase/app';
 import { readStoredFile, writeStoredFile } from '@/lib/firebase/stored-files';
+import { t } from '@/lib/i18n';
 import { classifyFileKind, contentTypeOf, fileNameOf, isTextPath } from '@/lib/project-archive/archive-paths';
 import type { ImportPlan } from '@/lib/project-archive/import-plan';
 import { buildZip } from '@/lib/project-archive/zip';
@@ -96,7 +97,7 @@ export function useProjectArchive(projectId: string) {
 
       const { db, auth } = getFirebase();
       const uid = auth.currentUser?.uid;
-      if (!uid) throw new Error('Faça login para importar arquivos.');
+      if (!uid) throw new Error(t('Faça login para importar arquivos.'));
 
       let batch = writeBatch(db);
       let pending = 0;

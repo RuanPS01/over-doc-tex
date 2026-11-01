@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useLayoutMode } from '@/hooks/use-layout-mode';
+import { t } from '@/lib/i18n';
 import type { CompileStage } from '@/lib/latex/compiler';
 import type { TexIssue } from '@/lib/latex/prepare';
 import { pdfAt, type SyncData } from '@/lib/latex/synctex';
@@ -64,7 +65,7 @@ export function CompileStoreProvider({ children }: { children: ReactNode }) {
           mainPath: null,
           durationMs: 0,
           synctex: null,
-          issues: [{ kind: 'error', message: `Não foi possível iniciar o compilador: ${String(error)}`, file: null, line: null } satisfies TexIssue],
+          issues: [{ kind: 'error', message: t('Não foi possível iniciar o compilador: {error}', { error: String(error) }), file: null, line: null } satisfies TexIssue],
         });
       })
       .finally(() => {

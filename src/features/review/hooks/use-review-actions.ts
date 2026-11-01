@@ -16,11 +16,12 @@ import type {
 import { sendNotifications } from '@/features/notifications/hooks/use-notifications';
 import { memberProfileOf } from '@/features/projects/model/new-project';
 import { getFirebase } from '@/lib/firebase/app';
+import { t } from '@/lib/i18n';
 import { REVIEW_STATUS_LABELS, type ReviewSummary, type ThreadSummary } from '../model/review';
 
 function currentUser() {
   const user = getFirebase().auth.currentUser;
-  if (!user) throw new Error('Entre na sua conta para comentar.');
+  if (!user) throw new Error(t('Entre na sua conta para comentar.'));
   return user;
 }
 
@@ -34,25 +35,41 @@ export type NewAnnotation =
 const firstLine = (body: string) => body.split('\n')[0]!.slice(0, 200);
 
 /**
+ * Revisor que entrou pelo link: sem conta, o nome digitado e a identidade (o
+ * nome normalizado); com conta (viaAccount), o nome da conta e accountGuestKey.
+ */
+export interface GuestIdentity {
+  name: string;
+  key: string;
+  viaAccount?: boolean;
+}
+
+/**
  * Gravações da revisão, cada uma no formato que as regras conferem: thread
  * nova junto com o primeiro comentário; resposta junto com o contador da
  * thread (+1); status da thread; status da revisão (revisor ou autor). Depois
  * de cada uma, notifica o outro lado (melhor esforço).
  */
-export function useReviewActions(review: ReviewSummary | null | undefined, role: ParticipantRole) {
+export function useReviewActions(review: ReviewSummary | null | undefined, role: ParticipantRole, guest: GuestIdentity | null = null) {
   return useMemo(() => {
     const db = () => getFirebase().db;
     const projectId = review?.projectId ?? '';
     const reviewId = review?.id ?? '';
-    const label = review ? `${review.projectName}, revisão #${review.number}` : '';
+    // Montado na hora do envio, no idioma de quem envia.
+    const label = () => (review ? t('{project}, revisão #{number}', { project: review.projectName, number: review.number }) : '');
     // O revisor fala com quem pediu; o autor, com o revisor.
     const otherSide = () => (role === 'reviewer' ? [review?.requestedBy] : [review?.reviewerUid]);
+
+    // Visitante sem conta assina com o nome que informou e a chave do nome; com conta, vale o id da conta.
+    const nameGuest = guest && !guest.viaAccount ? guest : null;
+    const authorName = (user: { displayName: string | null; email: string | null }) => nameGuest?.name ?? memberProfileOf(user).name;
 
     const comment = (body: string): NewComment => {
       const user = currentUser();
       return {
         authorId: user.uid,
-        authorName: memberProfileOf(user).name,
+        authorName: authorName(user),
+        authorKey: nameGuest?.key ?? null,
         authorPhotoURL: user.photoURL,
         authorRole: role,
         kind: 'comment',
@@ -101,7 +118,7 @@ export function useReviewActions(review: ReviewSummary | null | undefined, role:
           projectId,
           reviewId,
           threadId: threadRef.id,
-          title: `Novo comentário: ${label}`,
+          title: t('Novo comentário: {review}', { review: label() }),
           body: firstLine(body),
         });
         return threadRef.id;
@@ -123,7 +140,7 @@ export function useReviewActions(review: ReviewSummary | null | undefined, role:
           projectId,
           reviewId,
           threadId: thread.id,
-          title: `Resposta: ${label}`,
+          title: t('Resposta: {review}', { review: label() }),
           body: firstLine(body),
         });
       },
@@ -144,7 +161,7 @@ export function useReviewActions(review: ReviewSummary | null | undefined, role:
           projectId,
           reviewId,
           threadId: thread.id,
-          title: `${status === 'resolved' ? 'Comentário resolvido' : 'Comentário reaberto'}: ${label}`,
+          title: status === 'resolved' ? t('Comentário resolvido: {review}', { review: label() }) : t('Comentário reaberto: {review}', { review: label() }),
           body: '',
         });
       },
@@ -154,7 +171,7 @@ export function useReviewActions(review: ReviewSummary | null | undefined, role:
         const user = currentUser();
         await updateDoc(doc(db(), firestorePaths.review(projectId, reviewId)), {
           reviewerUid: user.uid,
-          reviewerName: memberProfileOf(user).name,
+          reviewerName: authorName(user),
           status: 'in_review',
           lastActivityAt: serverTimestamp(),
         });
@@ -163,26 +180,30 @@ export function useReviewActions(review: ReviewSummary | null | undefined, role:
           projectId,
           reviewId,
           threadId: null,
-          title: `O revisor abriu: ${label}`,
-          body: `${memberProfileOf(user).name} começou a revisar a versão ${review?.snapshotLabel ?? ''}.`,
+          title: t('O revisor abriu: {review}', { review: label() }),
+          body: t('{name} começou a revisar a versão {version}.', { name: authorName(user), version: review?.snapshotLabel ?? '' }),
         });
       },
 
       setReviewStatus: async (status: ReviewStatus) => {
+        const user = currentUser();
         await updateDoc(doc(db(), firestorePaths.review(projectId, reviewId)), {
           status,
           lastActivityAt: serverTimestamp(),
-          ...(role === 'author' ? { closedAt: status === 'closed' ? serverTimestamp() : null } : {}),
+          // Com vários revisores, fica registrado quem decidiu por último.
+          ...(role === 'author'
+            ? { closedAt: status === 'closed' ? serverTimestamp() : null }
+            : { reviewerUid: user.uid, reviewerName: authorName(user) }),
         });
         void sendNotifications(otherSide(), {
           type: 'review_status_changed',
           projectId,
           reviewId,
           threadId: null,
-          title: `${REVIEW_STATUS_LABELS[status]}: ${label}`,
+          title: `${t(REVIEW_STATUS_LABELS[status])}: ${label()}`,
           body: '',
         });
       },
     };
-  }, [review, role]);
+  }, [review, role, guest]);
 }

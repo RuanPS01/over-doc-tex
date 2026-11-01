@@ -4,9 +4,9 @@
 
 | Rota | Página | Quem acessa | Estado |
 | --- | --- | --- | --- |
-| `/login` | `LoginPage` | Visitante | Implementada: Google, e-mail e senha, criar conta, volta para `?next=` |
+| `/login` | `LoginPage` | Visitante | Implementada: Google, e-mail e senha, criar conta, "Esqueci a senha" (link do Firebase para criar uma senha nova), volta para `?next=` |
 | `/login` (link de acesso) | `LoginPage` | Quem abriu o link enviado por e-mail | Implementada: confirma o e-mail e conclui a entrada sem senha (convite de revisão, coautor ou "Receber link de acesso por e-mail") |
-| `/` | `ProjectsPage` | Usuário com sessão | Implementada: projetos de que é membro, em tempo real, "Novo projeto" e "Revisões para você" (consulta `collectionGroup('reviews')` pelo e-mail verificado) |
+| `/` | `ProjectsPage` | Usuário com sessão | Implementada: projetos de que é membro, em tempo real, "Novo projeto" e "Revisões para você" (consulta `collectionGroup('reviews')` pelo e-mail verificado). No cabeçalho: "Configurações de IA", idioma, tema, notificações e o menu da conta (`AccountMenu`: "Perfil" e "Sair da conta"). No celular, o título fica numa linha e os botões na seguinte |
 | `/p/:projectId` | `EditorPage` | Membro; convidado com e-mail verificado | Implementada: layout responsivo, salvamento automático, diálogos do cabeçalho, aceite de convite de coautoria, aviso de projeto inexistente ou sem acesso |
 | `/p/:projectId/reviews/:reviewId` | `ReviewPage` | Membro (autor) e revisor com grant | Implementada: PDF da versão, pins numerados, threads, aprovar ou pedir alterações, "Ver alterações" desde a rodada anterior |
 
@@ -24,7 +24,7 @@ EditorPage                               pages/editor-page.tsx (papel, convite p
     ├── EditorDialogs                    na própria página: junta snapshots, diff, review e projects
     │   ├── VersionHistorySheet          abas Versões (congelar, PDF, comparar, .zip) e Revisões (ProjectReviewQueue)
     │   ├── ChangesDialog                abas Código (diff por palavra) e PDF marcado (DiffPdfViewer)
-    │   ├── RequestReviewDialog          documentos concedidos, congela se mudou, abre a revisão, gera o diff em PDF e envia o link
+    │   ├── RequestReviewDialog          acesso (e-mails ou link), documentos concedidos, congela se mudou, abre a revisão, gera o diff em PDF e envia o link
     │   └── ProjectSettingsDialog        nome, descrição, documentos (ProjectDocumentsSection), membros e convites
     └── EditorShell                      .h-viewport flex-col overflow-hidden
       └── CompileStoreProvider           estado da compilação; Ctrl+S e Ctrl+Enter compilam
@@ -37,7 +37,7 @@ EditorPage                               pages/editor-page.tsx (papel, convite p
         │   ├── Assistente de IA         botão alternável
         │   ├── ThemeMenu                tema claro, escuro ou do sistema (a partir de sm; no celular, dentro de "Mais")
         │   ├── NotificationBell         notificações da conta (a partir de 360px)
-        │   └── DropdownMenu "Mais"      o que a largura escondeu, Importar, Exportar (.zip), Configurações do projeto e, no celular, Tema
+        │   └── DropdownMenu "Mais"      o que a largura escondeu, Importar, Exportar (.zip), Configurações do projeto, Configurações de IA e, no celular, Tema
         ├── main
         │   ├── DesktopWorkspace         layoutMode = desktop
         │   │   └── ResizablePanelGroup  layout salvo em localStorage
@@ -50,14 +50,14 @@ EditorPage                               pages/editor-page.tsx (papel, convite p
         │       └── PdfPane              montado sempre, oculto com `hidden`; compilar com sucesso mostra o PDF
         ├── FileTreeSheet                Sheet lateral (fora do desktop)
         ├── ImportDialog                 .zip, arquivos ou pasta; destino e política de conflito
-        └── AiAssistantPanel             painel flutuante (desktop) ou Sheet inferior (celular)
+        └── AiAssistantPanel             janela encaixada no rodapé ou solta (desktop) ou Sheet inferior (celular)
             ├── AiChat
             │   ├── estado vazio         "Configurar a minha IA" quando não há modelo
             │   ├── AiMessage            Markdown sanitizado, fontes, modelo que respondeu, erros
             │   │   └── StructuredResultView
             │   └── AiComposer           seletor de tarefa, texto, enviar ou parar
             └── AiSettingsDialog         "Usar a minha própria IA"
-                └── ModelEntryCard       provedor, modelo (lista ao vivo) e chave, por item da fila
+                └── ModelEntryCard       provedor, modelo (lista do provedor) e chave, por item da fila; botão Testar modelo
 ```
 
 ### 2.2 Responsabilidades e dono de cada estado
@@ -75,7 +75,7 @@ EditorPage                               pages/editor-page.tsx (papel, convite p
 | `CompileStoreProvider` | Compilar o projeto e guardar o resultado | compilando, etapa, último PDF bom, último resultado | `useLatexCompile` |
 | `PdfPane` | Passar estado e ações da compilação ao visualizador | nenhum | `useCompileStore`, `useProjectFiles` |
 | `PdfPreviewPanel` | Páginas do PDF (pdf.js), zoom, download, andamento e lista de erros com arquivo e linha | zoom, lista aberta | props |
-| `AiAssistantPanel` | Conter o chat no formato certo para o layout | conversa (`useAiStream`), diálogo de configuração aberto | `useAiConfig`; `files`, `open` e `onOpenChange` vêm do `EditorShell` por props |
+| `AiAssistantPanel` | Conter o chat no formato certo para o layout. No desktop é uma janela: encaixada no rodapé à direita (padrão), à esquerda ou no meio, sempre com o mesmo tamanho (até 420 x 640) e em exibição compacta (cabeçalho de 36px, menos espaço, campo de mensagem de uma linha); ou solta, arrastada pelo título, sem sair da tela nem subir sobre o cabeçalho. O botão de encaixe do cabeçalho escolhe a posição ou "Janela solta" (também pelo teclado). Posição lembrada neste navegador (`overdoctex.ai-window`); lógica pura em `model/assistant-window.ts` | conversa (`useAiStream`), diálogo de configuração aberto, posição da janela (`useAssistantWindow`) | `useAiConfig`; `files`, `open` e `onOpenChange` vêm do `EditorShell` por props |
 | `AiSettingsDialog` | Editar e validar a fila de modelos | rascunho da fila, erros por item | `useAiConfig` |
 | `ImportDialog` | Ler a origem, montar e aplicar o plano de importação | origem lida, destino, política de conflito | `useProjectFiles`, `useProjectArchive` |
 
@@ -92,7 +92,7 @@ Regras que esta divisão garante:
 | --- | --- | --- | --- |
 | Árvore de arquivos | Coluna redimensionável e recolhível | Sheet lateral | Sheet lateral |
 | Editor e PDF | Colunas lado a lado redimensionáveis | Duas colunas curtas fixas | Um por vez, abas Código e PDF |
-| Assistente de IA | Painel flutuante 420px no canto inferior direito | Sheet inferior 85dvh | Sheet inferior 85dvh |
+| Assistente de IA | Janela de 420px encaixada no rodapé (direita, esquerda ou meio) ou solta e arrastável | Sheet inferior 85dvh | Sheet inferior 85dvh |
 | Ações do cabeçalho | Todas visíveis | Parte no menu "Mais" | Quase todas no menu "Mais" |
 
 O código está em `src/features/editor/components/` e as regras completas em `08-responsividade.md`.
@@ -102,7 +102,7 @@ O código está em `src/features/editor/components/` e as regras completas em `0
 ```
 ReviewPage                               pages/review-page.tsx: membro entra como autor, quem não é membro como revisor
 └── ReviewWorkspace                      .h-viewport, mesma casca do editor
-    ├── ReviewHeader                     "#1 título", versão, status; aprovar, pedir alterações, encerrar ou reabrir; ThemeMenu; NotificationBell
+    ├── ReviewHeader                     "#1 título", versão, status; aprovar, pedir alterações, encerrar ou reabrir; Envio (dono e editores); nome do visitante; ThemeMenu; NotificationBell
     ├── PdfDocumentView                  features/pdf-viewer (pdf.js) com a camada de texto ligada, zoom e download
     │   ├── título                       seletor de documento quando a revisão concede mais de um
     │   ├── ferramentas                  Selecionar texto | Ponto | Desenhar (na barra do PDF)
@@ -123,6 +123,7 @@ Pontos de atenção:
 - **Linha do código:** ao criar a thread, o SyncTeX da versão (`.synctex`) dá `sourceHint`; o autor usa "Abrir no código", que abre o editor em `/p/{id}?arquivo=...&linha=...`.
 - **Primeira abertura do revisor:** grava `reviewerUid`, `reviewerName` e `status: in_review` (as regras só aceitam esses campos do revisor) e notifica o autor.
 - **Quem não pode ver:** sem e-mail verificado (conta de e-mail e senha) ou com outro e-mail, a página explica e oferece "Entrar com outra conta".
+- **Entrada pelo link (`GuestReviewGate`):** sem conta, pede o nome e oferece "Entrar ou criar conta" (login com volta ao link); com a conta aberta e sem convite, grava a ficha com a conta e mostra a revisão sem pedir nome, com o cabeçalho normal.
 
 ## 4. Catálogo de componentes
 
@@ -147,7 +148,9 @@ Pontos de atenção:
 | `MarkdownContent` | Único ponto com `dangerouslySetInnerHTML`; recebe Markdown, sanitiza com DOMPurify |
 | `FullPageStatus` | Tela inteira de espera, aviso ou erro (abrindo sessão, abrindo projeto, projeto não encontrado) |
 | `ThemeMenu`, `ThemeMenuItems` | Botão de tema (ícone do tema atual: sol, lua ou monitor) com Claro, Escuro e Padrão do sistema; `ThemeMenuItems` põe as mesmas opções dentro de outro menu. Está nos cabeçalhos de projetos, editor e revisão (`useThemePreference`, `src/lib/theme.ts`) |
-| `PageCornerBar` | Cabeçalho mínimo, só com o `ThemeMenu` no canto, das telas sem barra própria (login e página não encontrada) |
+| `LanguageMenu`, `LanguageMenuItems` | Botão de idioma com a sigla do atual (PT, EN, ES): Português (Brasil), English, Español e Idioma do sistema, com os nomes sempre no próprio idioma e `translate="no"`. Fica ao lado do `ThemeMenu` nos cabeçalhos de projetos, editor (no celular, dentro de "Mais ações") e revisão (`src/lib/i18n/locale.ts`) |
+| `AccountMenu`, `ProfileDialog` (`features/auth`) | Botão redondo com a foto ou a inicial; o menu mostra nome e e-mail, "Perfil" e "Sair da conta". `ProfileDialog` troca o nome (no Firebase Authentication e em `memberProfiles` dos projetos) e a senha (com a atual, ou link por e-mail; quem só entra com Google ou link de acesso recebe um link para criar uma). Operações em `useProfile` |
+| `PageCornerBar` | Cabeçalho mínimo, só com o `LanguageMenu` e o `ThemeMenu` no canto, das telas sem barra própria (login e página não encontrada) |
 
 ### Domínio (`src/features/*/components`)
 
@@ -160,7 +163,7 @@ Pontos de atenção:
 | `projects` | `ProjectList`, `DemoProjectList`, `NewProjectDialog`, `ProjectSettingsDialog`, `ProjectDocumentsSection` |
 | `notifications` | `NotificationBell` (contagem, lista, marcar como lidas, abrir a revisão) |
 | `snapshots` | `VersionHistorySheet`, `FreezeVersionForm`, `VersionCard`, `VersionPdfDialog`, `IssueList` |
-| `review` | `ReviewWorkspace`, `ReviewHeader`, `AnnotationLayer`, `SelectionPopover`, `PendingAnnotationPanel`, `ThreadList`, `ThreadCard`, `CommentComposer`, `ReviewChangesDialog`, `RequestReviewDialog`, `ReviewList`, `ProjectReviewQueue`, `MyReviewsSection` |
+| `review` | `ReviewWorkspace`, `ReviewHeader`, `ReviewSharingDialog`, `ReviewAccessChoice`, `GuestReviewGate`, `AnnotationLayer`, `SelectionPopover`, `PendingAnnotationPanel`, `ThreadList`, `ThreadCard`, `CommentComposer`, `ReviewChangesDialog`, `RequestReviewDialog`, `ReviewList`, `ProjectReviewQueue`, `MyReviewsSection` |
 | `diff` | `ChangesDialog`, `FileChangeCard`, `DiffView` (texto com `<ins>` e `<del>`, linhas sem mudança recolhidas), `DiffPdfViewer` (PDF marcado com marcas na margem e "Próxima alteração") |
 
 ### Hooks de integração
@@ -195,5 +198,6 @@ Pontos de atenção:
 | `useExportProject` | editor | Exportação do projeto aberto, usada pela árvore e pelo menu |
 | `useAiConfig` | ai-assistant | Configuração da IA na conta (`users/{uid}/private/ai`) ou no navegador |
 | `useAiStream` | ai-assistant | Conversa com a fila de modelos, deltas por quadro, troca de modelo |
-| `useProviderModels` | ai-assistant | Lista de modelos ao vivo do provedor, com catálogo de reserva |
+| `useProviderModels` | ai-assistant | Lista de modelos do provedor (ao vivo com a chave; senão a última consultada, a pública do deploy ou a embutida) |
+| `useModelTest` | ai-assistant | Pedido curto ao modelo escolhido para saber se ele responde |
 | `useAuth` | auth | Sessão e login |

@@ -10,6 +10,7 @@
  */
 import siglumWorkerUrl from 'siglum-worker?url';
 import type { SiglumCompiler } from '@siglum/engine';
+import { t } from '@/lib/i18n';
 import { mainLineOffset, parseTexLog, projectPathFromTex, type CompileInput, type TexIssue } from './prepare';
 import { parseSynctex, type SyncData } from './synctex';
 import { fetchLooseFiles, texliveRevision } from './texlive-files';
@@ -152,7 +153,7 @@ export function compileLatex(
             })
           : null;
       if (!pdf && !issues.some((issue) => issue.kind !== 'warning')) {
-        issues.unshift({ kind: 'error', message: result.error ?? 'A compilação falhou sem mensagem do TeX.', file: null, line: null });
+        issues.unshift({ kind: 'error', message: result.error ?? t('A compilação falhou sem mensagem do TeX.'), file: null, line: null });
       }
       return { ok: pdf !== null, pdf, issues, durationMs: Math.round(performance.now() - started), synctex };
     } finally {

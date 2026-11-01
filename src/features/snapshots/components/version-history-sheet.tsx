@@ -3,6 +3,7 @@ import { useState, type ReactNode } from 'react';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { MemberProfile } from '@shared/firestore/types';
+import { useT } from '@/hooks/use-t';
 import { buildZip } from '@/lib/project-archive/zip';
 import { downloadBytes, slugify } from '@/lib/download';
 import type { TexIssue } from '@/lib/latex/prepare';
@@ -39,13 +40,14 @@ export function VersionHistorySheet({
   onIssueSelect,
   reviewsTab,
 }: VersionHistorySheetProps) {
+  const { t } = useT();
   const { data: snapshots = [], isPending, isError } = useSnapshots(projectId, open);
   const { readSources } = useSnapshotFiles(projectId);
   const [pdfSnapshot, setPdfSnapshot] = useState<SnapshotSummary | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const authorOf = (uid: string) => (uid === currentUid ? 'por você' : (memberProfiles[uid]?.name ?? null));
+  const authorOf = (uid: string) => (uid === currentUid ? t('por você') : (memberProfiles[uid]?.name ?? null));
 
   const handleDownload = async (snapshot: SnapshotSummary) => {
     setDownloadingId(snapshot.id);
@@ -55,7 +57,7 @@ export function VersionHistorySheet({
       const entries = snapshot.files.map((file) => ({ path: file.path, data: sources.get(file.path)! }));
       downloadBytes(buildZip(entries), `${slugify(projectName)}-v${snapshot.label}.zip`, 'application/zip');
     } catch {
-      setNotice(`Não foi possível baixar o código da versão ${snapshot.label}.`);
+      setNotice(t('Não foi possível baixar o código da versão {label}.', { label: snapshot.label }));
     } finally {
       setDownloadingId(null);
     }
@@ -66,13 +68,13 @@ export function VersionHistorySheet({
       <Sheet open={open} onOpenChange={onOpenChange}>
         <SheetContent side="right" className="w-full gap-0 p-0 sm:max-w-md">
           <SheetHeader className="pb-3 pr-10">
-            <SheetTitle>Versões e revisões</SheetTitle>
-            <SheetDescription>Cópias congeladas do projeto e as revisões pedidas sobre elas.</SheetDescription>
+            <SheetTitle>{t('Versões e revisões')}</SheetTitle>
+            <SheetDescription>{t('Cópias congeladas do projeto e as revisões pedidas sobre elas.')}</SheetDescription>
           </SheetHeader>
           <Tabs defaultValue="versions" className="flex min-h-0 flex-1 flex-col">
             <TabsList className="mx-4 grid grid-cols-2">
-              <TabsTrigger value="versions">Versões</TabsTrigger>
-              <TabsTrigger value="reviews">Revisões</TabsTrigger>
+              <TabsTrigger value="versions">{t('Versões')}</TabsTrigger>
+              <TabsTrigger value="reviews">{t('Revisões')}</TabsTrigger>
             </TabsList>
             <TabsContent value="reviews" className="min-h-0 flex-1 overflow-y-auto p-4">
               {reviewsTab}
@@ -83,7 +85,7 @@ export function VersionHistorySheet({
                   projectId={projectId}
                   projectName={projectName}
                   latest={snapshots[0]?.version ?? null}
-                  onFrozen={(label) => setNotice(`Versão ${label} congelada.`)}
+                  onFrozen={(label) => setNotice(t('Versão {label} congelada.', { label }))}
                   onIssueSelect={(issue) => {
                     onOpenChange(false);
                     onIssueSelect(issue);
@@ -98,13 +100,13 @@ export function VersionHistorySheet({
               {isPending ? (
                 <p className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="size-4 animate-spin" />
-                  Carregando as versões
+                  {t('Carregando as versões')}
                 </p>
               ) : isError ? (
-                <p className="text-sm text-destructive">Não foi possível carregar as versões.</p>
+                <p className="text-sm text-destructive">{t('Não foi possível carregar as versões.')}</p>
               ) : snapshots.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  Nenhuma versão ainda. Congele a primeira para pedir revisão ou comparar alterações depois.
+                  {t('Nenhuma versão ainda. Congele a primeira para pedir revisão ou comparar alterações depois.')}
                 </p>
               ) : (
                 <ul className="flex flex-col gap-2">

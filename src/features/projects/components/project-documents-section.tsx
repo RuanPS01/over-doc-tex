@@ -3,6 +3,7 @@ import { useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useT } from '@/hooks/use-t';
 import { useProjectDocuments, withMainDocument } from '../hooks/use-project-documents';
 
 interface ProjectDocumentsSectionProps {
@@ -19,6 +20,7 @@ interface ProjectDocumentsSectionProps {
  * principal e os secundários escolhidos em "Solicitar revisão".
  */
 export function ProjectDocumentsSection({ projectId, projectName, canEdit, rootCandidates }: ProjectDocumentsSectionProps) {
+  const { t } = useT();
   const { data = [], addDocument, removeDocument } = useProjectDocuments(projectId);
   const documents = withMainDocument(data, projectName);
   const available = rootCandidates.filter((file) => !documents.some((document) => document.rootPath === file.path));
@@ -39,7 +41,7 @@ export function ProjectDocumentsSection({ projectId, projectName, canEdit, rootC
       setRootId('');
       setTitle('');
     } catch {
-      setError('Não foi possível adicionar o documento.');
+      setError(t('Não foi possível adicionar o documento.'));
     } finally {
       setBusy(null);
     }
@@ -47,7 +49,7 @@ export function ProjectDocumentsSection({ projectId, projectName, canEdit, rootC
 
   return (
     <section className="flex flex-col gap-2 border-t pt-4">
-      <h3 className="text-sm font-semibold">Documentos</h3>
+      <h3 className="text-sm font-semibold">{t('Documentos')}</h3>
       <ul className="flex flex-col gap-1">
         {documents.map((document) => (
           <li key={document.id} className="flex min-w-0 items-center gap-2 rounded-md border px-2 py-1.5">
@@ -56,18 +58,18 @@ export function ProjectDocumentsSection({ projectId, projectName, canEdit, rootC
               <span className="truncate font-mono text-xs text-muted-foreground">{document.rootPath}</span>
             </span>
             {document.role === 'main' ? (
-              <span className="shrink-0 text-xs text-muted-foreground">Principal</span>
+              <span className="shrink-0 text-xs text-muted-foreground">{t('Principal')}</span>
             ) : (
               canEdit && (
                 <Button
                   variant="ghost"
                   size="icon"
                   className="size-8 shrink-0"
-                  aria-label={`Remover o documento ${document.title}`}
+                  aria-label={t('Remover o documento {title}', { title: document.title })}
                   disabled={busy !== null}
                   onClick={async () => {
                     setBusy(document.id);
-                    await removeDocument(document.id).catch(() => setError('Não foi possível remover o documento.'));
+                    await removeDocument(document.id).catch(() => setError(t('Não foi possível remover o documento.')));
                     setBusy(null);
                   }}
                 >
@@ -82,8 +84,8 @@ export function ProjectDocumentsSection({ projectId, projectName, canEdit, rootC
         (available.length > 0 ? (
           <form onSubmit={(event) => void handleAdd(event)} className="flex min-w-0 flex-col gap-2 sm:flex-row">
             <Select value={rootId} onValueChange={setRootId}>
-              <SelectTrigger className="min-w-0 sm:w-48" aria-label="Arquivo raiz do documento">
-                <SelectValue placeholder="Arquivo raiz" />
+              <SelectTrigger className="min-w-0 sm:w-48" aria-label={t('Arquivo raiz do documento')}>
+                <SelectValue placeholder={t('Arquivo raiz')} />
               </SelectTrigger>
               <SelectContent>
                 {available.map((file) => (
@@ -96,19 +98,19 @@ export function ProjectDocumentsSection({ projectId, projectName, canEdit, rootC
             <Input
               value={title}
               maxLength={120}
-              placeholder="Título (ex.: Apêndice)"
-              aria-label="Título do documento"
+              placeholder={t('Título (ex.: Apêndice)')}
+              aria-label={t('Título do documento')}
               className="min-w-0 sm:flex-1"
               onChange={(event) => setTitle(event.target.value)}
             />
             <Button type="submit" variant="outline" disabled={!rootId || busy !== null}>
               {busy === 'add' ? <Loader2 className="animate-spin" /> : <FilePlus2 />}
-              Adicionar
+              {t('Adicionar')}
             </Button>
           </form>
         ) : (
           <p className="text-xs text-muted-foreground">
-            Para um documento secundário, crie outro .tex com \documentclass (ex.: apendice.tex) e adicione aqui.
+            {t('Para um documento secundário, crie outro .tex com \\documentclass (ex.: apendice.tex) e adicione aqui.')}
           </p>
         ))}
       {error && <p className="text-sm text-destructive">{error}</p>}

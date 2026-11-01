@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { useT } from '@/hooks/use-t';
 import { toDiffRows, type DiffSegment } from '@/lib/diff/word-diff';
 
 /**
@@ -7,13 +8,14 @@ import { toDiffRows, type DiffSegment } from '@/lib/diff/word-diff';
  * das alterações ficam recolhidas.
  */
 export function DiffView({ segments, showLineNumbers = true }: { segments: readonly DiffSegment[]; showLineNumbers?: boolean }) {
+  const { t } = useT();
   const rows = useMemo(() => toDiffRows(segments), [segments]);
   return (
     <div className="overflow-x-auto font-mono text-xs leading-5">
       {rows.map((row, index) =>
         row.kind === 'skip' ? (
           <div key={index} className="select-none bg-muted/50 px-2 py-0.5 text-muted-foreground">
-            {row.count} {row.count === 1 ? 'linha sem alteração' : 'linhas sem alteração'}
+            {row.count === 1 ? t('1 linha sem alteração') : t('{count} linhas sem alteração', { count: row.count })}
           </div>
         ) : (
           <div key={index} className="flex min-w-0">

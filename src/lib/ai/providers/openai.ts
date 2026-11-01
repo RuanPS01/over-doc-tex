@@ -8,6 +8,8 @@
 import OpenAI from 'openai';
 import { zodTextFormat } from 'openai/helpers/zod';
 import type { z } from 'zod';
+import { t } from '@/lib/i18n';
+import type { ProviderModel } from '../model-list';
 import { AiTaskError } from '../schemas';
 import {
   pagesForRequestedUrls,
@@ -34,30 +36,30 @@ function assertCompleted(response: OpenAI.Responses.Response): void {
     (item) => item.type === 'message' && item.content.some((part) => part.type === 'refusal'),
   );
   if (refused || response.incomplete_details?.reason === 'content_filter') {
-    throw new AiTaskError('refused', 'O modelo recusou este pedido.', false, true);
+    throw new AiTaskError('refused', t('O modelo recusou este pedido.'), false, true);
   }
   if (response.incomplete_details?.reason === 'max_output_tokens') {
-    throw new AiTaskError('truncated', 'A resposta excedeu o limite de tamanho.', false);
+    throw new AiTaskError('truncated', t('A resposta excedeu o limite de tamanho.'), false);
   }
 }
 
 function toAiTaskError(error: unknown): unknown {
   if (error instanceof AiTaskError || error instanceof OpenAI.APIUserAbortError) return error;
   if (error instanceof OpenAI.AuthenticationError) {
-    return new AiTaskError('invalid_key', 'Chave da OpenAI inválida ou revogada. Confira a chave nas configurações da IA.', false);
+    return new AiTaskError('invalid_key', t('Chave da OpenAI inválida ou revogada. Confira a chave nas configurações da IA.'), false);
   }
   if (error instanceof OpenAI.PermissionDeniedError || error instanceof OpenAI.NotFoundError) {
-    return new AiTaskError('forbidden', 'A chave não tem acesso a este modelo.', false);
+    return new AiTaskError('forbidden', t('A chave não tem acesso a este modelo.'), false);
   }
   if (error instanceof OpenAI.RateLimitError) {
-    return new AiTaskError('rate_limited', 'Limite de uso ou créditos da chave da OpenAI esgotados.', true);
+    return new AiTaskError('rate_limited', t('Limite de uso ou créditos da chave da OpenAI esgotados.'), true);
   }
-  if (error instanceof OpenAI.APIConnectionError) return new AiTaskError('network', 'Sem conexão com a API da OpenAI.', true);
+  if (error instanceof OpenAI.APIConnectionError) return new AiTaskError('network', t('Sem conexão com a API da OpenAI.'), true);
   if (error instanceof OpenAI.APIError && (error.status ?? 0) >= 500) {
-    return new AiTaskError('upstream', 'A API da OpenAI está indisponível no momento.', true);
+    return new AiTaskError('upstream', t('A API da OpenAI está indisponível no momento.'), true);
   }
   if (error instanceof OpenAI.APIError) {
-    return new AiTaskError('internal', `A API da OpenAI recusou o pedido: ${readableProviderMessage(error.message)}`, false);
+    return new AiTaskError('internal', t('A API da OpenAI recusou o pedido: {message}', { message: readableProviderMessage(error.message) }), false);
   }
   return error;
 }
@@ -76,14 +78,13 @@ export const verifyOpenAiKey = guarded(async (apiKey: string, model: string) => 
   await createClient(apiKey).models.retrieve(model);
 });
 
-export const listOpenAiModels = guarded(async (apiKey: string): Promise<string[]> => {
-  const names: string[] = [];
+/** Modelos disponíveis para a chave (consultados ao vivo); o filtro de texto fica em model-list.ts. */
+export const listOpenAiModels = guarded(async (apiKey: string): Promise<ProviderModel[]> => {
+  const models: ProviderModel[] = [];
   for await (const model of createClient(apiKey).models.list()) {
-    if (/^(gpt-|o\d)/.test(model.id) && !/audio|realtime|transcribe|tts|image|search|embedding/i.test(model.id)) {
-      names.push(model.id);
-    }
+    models.push({ id: model.id, label: null, released: model.created ? model.created * 1000 : null });
   }
-  return names.sort();
+  return models;
 });
 
 export function createOpenAiProvider(apiKey: string, model: string, options: ProviderOptions): AiProvider {
@@ -127,11 +128,11 @@ export function createOpenAiProvider(apiKey: string, model: string, options: Pro
       try {
         raw = parseJsonFromText(response.output_text);
       } catch {
-        throw new AiTaskError('invalid_output', 'A IA devolveu um JSON inválido.', true);
+        throw new AiTaskError('invalid_output', t('A IA devolveu um JSON inválido.'), true);
       }
       const parsed = schema.safeParse(raw);
       if (!parsed.success) {
-        throw new AiTaskError('invalid_output', 'A IA devolveu dados fora do formato esperado.', true);
+        throw new AiTaskError('invalid_output', t('A IA devolveu dados fora do formato esperado.'), true);
       }
       return { data: parsed.data as z.infer<Schema>, usage: toUsage(response) };
     }),

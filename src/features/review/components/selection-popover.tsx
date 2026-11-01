@@ -1,5 +1,6 @@
 import { MessageSquareQuote } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useT } from '@/hooks/use-t';
 import type { PageSelection } from '../hooks/use-text-selection';
 
 /**
@@ -7,6 +8,7 @@ import type { PageSelection } from '../hooks/use-text-selection';
  * para não sair da tela em 360px nem ficar sob a barra do celular).
  */
 export function SelectionPopover({ selection, onComment }: { selection: PageSelection; onComment: () => void }) {
+  const { t } = useT();
   const last = selection.rects.at(-1);
   if (!last) return null;
   const top = Math.min(window.innerHeight - 56, last.bottom + 8);
@@ -21,7 +23,7 @@ export function SelectionPopover({ selection, onComment }: { selection: PageSele
         onClick={onComment}
       >
         <MessageSquareQuote />
-        Comentar trecho
+        {t('Comentar trecho')}
       </Button>
     </div>
   );

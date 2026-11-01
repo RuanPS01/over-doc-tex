@@ -1,6 +1,7 @@
 import { Download, Loader2, ZoomIn, ZoomOut } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { Button } from '@/components/ui/button';
+import { useT } from '@/hooks/use-t';
 import { downloadBytes } from '@/lib/download';
 import { cn } from '@/lib/utils';
 import { PdfPages } from './pdf-pages';
@@ -42,6 +43,7 @@ export function PdfDocumentView({
   textLayer,
   onPageSizes,
 }: PdfDocumentViewProps) {
+  const { t } = useT();
   const [zoomIndex, setZoomIndex] = useState(2);
   const zoom = ZOOM_STEPS[zoomIndex] ?? 100;
   const [viewerError, setViewerError] = useState<string | null>(null);
@@ -71,7 +73,7 @@ export function PdfDocumentView({
           variant="ghost"
           size="icon"
           className="size-8"
-          aria-label="Baixar PDF"
+          aria-label={t('Baixar PDF')}
           disabled={!pdf}
           onClick={() => pdf && downloadBytes(pdf, fileName, 'application/pdf')}
         >
@@ -81,7 +83,7 @@ export function PdfDocumentView({
           variant="ghost"
           size="icon"
           className="size-8"
-          aria-label="Diminuir zoom"
+          aria-label={t('Diminuir zoom')}
           disabled={zoomIndex === 0}
           onClick={() => setZoomIndex((index) => Math.max(0, index - 1))}
         >
@@ -92,7 +94,7 @@ export function PdfDocumentView({
           variant="ghost"
           size="icon"
           className="size-8"
-          aria-label="Aumentar zoom"
+          aria-label={t('Aumentar zoom')}
           disabled={zoomIndex === ZOOM_STEPS.length - 1}
           onClick={() => setZoomIndex((index) => Math.min(ZOOM_STEPS.length - 1, index + 1))}
         >
@@ -115,7 +117,7 @@ export function PdfDocumentView({
         ) : (
           <p className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="size-4 animate-spin" aria-hidden />
-            {loadingLabel ?? 'Carregando o PDF'}
+            {loadingLabel ?? t('Carregando o PDF')}
           </p>
         )}
       </div>
