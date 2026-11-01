@@ -35,8 +35,9 @@ EditorPage                               pages/editor-page.tsx (papel, convite p
         │   ├── Solicitar revisão        visível a partir de sm (só dono e editores)
         │   ├── Versões, Ver alterações  visíveis a partir de lg; abrem os diálogos pelo store (openDialog)
         │   ├── Assistente de IA         botão alternável
+        │   ├── ThemeMenu                tema claro, escuro ou do sistema (a partir de sm; no celular, dentro de "Mais")
         │   ├── NotificationBell         notificações da conta (a partir de 360px)
-        │   └── DropdownMenu "Mais"      o que a largura escondeu, Importar, Exportar (.zip) e Configurações do projeto
+        │   └── DropdownMenu "Mais"      o que a largura escondeu, Importar, Exportar (.zip), Configurações do projeto e, no celular, Tema
         ├── main
         │   ├── DesktopWorkspace         layoutMode = desktop
         │   │   └── ResizablePanelGroup  layout salvo em localStorage
@@ -101,7 +102,7 @@ O código está em `src/features/editor/components/` e as regras completas em `0
 ```
 ReviewPage                               pages/review-page.tsx: membro entra como autor, quem não é membro como revisor
 └── ReviewWorkspace                      .h-viewport, mesma casca do editor
-    ├── ReviewHeader                     "#1 título", versão, status; aprovar, pedir alterações, encerrar ou reabrir; NotificationBell
+    ├── ReviewHeader                     "#1 título", versão, status; aprovar, pedir alterações, encerrar ou reabrir; ThemeMenu; NotificationBell
     ├── PdfDocumentView                  features/pdf-viewer (pdf.js) com a camada de texto ligada, zoom e download
     │   ├── título                       seletor de documento quando a revisão concede mais de um
     │   ├── ferramentas                  Selecionar texto | Ponto | Desenhar (na barra do PDF)
@@ -145,6 +146,8 @@ Pontos de atenção:
 | --- | --- |
 | `MarkdownContent` | Único ponto com `dangerouslySetInnerHTML`; recebe Markdown, sanitiza com DOMPurify |
 | `FullPageStatus` | Tela inteira de espera, aviso ou erro (abrindo sessão, abrindo projeto, projeto não encontrado) |
+| `ThemeMenu`, `ThemeMenuItems` | Botão de tema (ícone do tema atual: sol, lua ou monitor) com Claro, Escuro e Padrão do sistema; `ThemeMenuItems` põe as mesmas opções dentro de outro menu. Está nos cabeçalhos de projetos, editor e revisão (`useThemePreference`, `src/lib/theme.ts`) |
+| `PageCornerBar` | Cabeçalho mínimo, só com o `ThemeMenu` no canto, das telas sem barra própria (login e página não encontrada) |
 
 ### Domínio (`src/features/*/components`)
 

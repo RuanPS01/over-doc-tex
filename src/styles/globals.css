@@ -70,6 +70,11 @@
     --editor-comment: 142 40% 38%;
     --editor-math: 280 60% 45%;
 
+    /* Fundo atrás de modais e menus laterais: escurece nos dois temas (a opacidade fica na classe). */
+    --overlay: 0 0% 0%;
+    /* Linha luminosa da animação de TV antiga ligando e desligando. */
+    --crt-glow: 0 0% 100%;
+
     --header-height: 3rem;
   }
 
@@ -134,6 +139,143 @@
     overflow-x: hidden;
     overflow-x: clip;
     overscroll-behavior: none;
+  }
+}
+
+/*
+ * Modais: TV antiga. Ao abrir, um ponto vira linha horizontal e a linha se
+ * abre na vertical, com o brilho da tela se apagando; ao fechar, o inverso
+ * (a imagem achata numa linha, a linha vira ponto e some). O fundo ganha
+ * opacidade junto e perde ao fechar. `scale` (propriedade própria) não briga
+ * com o translate que centraliza o diálogo. O Radix espera a animação de
+ * fechamento terminar antes de tirar o modal da tela.
+ */
+@layer components {
+  .tv-screen[data-state='open'] {
+    animation: tv-on 520ms cubic-bezier(0.22, 0.9, 0.3, 1) both;
+  }
+
+  .tv-screen[data-state='closed'] {
+    animation: tv-off 420ms cubic-bezier(0.55, 0, 0.75, 0.4) both;
+  }
+
+  .tv-screen::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: hsl(var(--crt-glow));
+    box-shadow: 0 0 24px 6px hsl(var(--crt-glow) / 0.6);
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .tv-screen[data-state='open']::after {
+    animation: tv-glow-on 520ms ease-out both;
+  }
+
+  .tv-screen[data-state='closed']::after {
+    animation: tv-glow-off 420ms ease-in both;
+  }
+
+  .scrim[data-state='open'] {
+    animation: scrim-in 520ms ease-out both;
+  }
+
+  .scrim[data-state='closed'] {
+    animation: scrim-out 420ms ease-in both;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .tv-screen[data-state='open'],
+    .scrim[data-state='open'] {
+      animation: scrim-in 150ms ease-out both;
+    }
+
+    .tv-screen[data-state='closed'],
+    .scrim[data-state='closed'] {
+      animation: scrim-out 150ms ease-in both;
+    }
+
+    .tv-screen::after {
+      display: none;
+    }
+  }
+}
+
+@keyframes tv-on {
+  0% {
+    scale: 0.015 0.004;
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  42% {
+    scale: 1 0.004;
+  }
+  80% {
+    scale: 1 1.015;
+  }
+  100% {
+    scale: 1 1;
+    opacity: 1;
+  }
+}
+
+@keyframes tv-glow-on {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes tv-off {
+  0% {
+    scale: 1 1;
+    opacity: 1;
+  }
+  48% {
+    scale: 1 0.004;
+  }
+  82% {
+    scale: 0.015 0.004;
+    opacity: 1;
+  }
+  100% {
+    scale: 0 0;
+    opacity: 0;
+  }
+}
+
+@keyframes tv-glow-off {
+  0% {
+    opacity: 0;
+  }
+  45%,
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes scrim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes scrim-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
   }
 }
 

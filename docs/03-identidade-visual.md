@@ -26,6 +26,8 @@ Paleta monocromática (Colab Arena). Definida em `src/styles/globals.css` como c
 | `--warning` | `#f59e0b` | `#f59e0b` | `bg-warning/10`, `border-warning/50` | Avisos, modo demonstração, veredito incerto |
 | `--status-online`, `-away`, `-busy`, `-offline` | `#22c55e`, `#f59e0b`, `#ef4444`, `#9ca3af` | iguais | `bg-status-online`... | Indicadores de presença |
 | `--pdf-canvas` | `#e5e5e5` | `#212121` | `bg-pdf-canvas` | Fundo atrás das páginas do PDF |
+| `--overlay` | preto | preto | `bg-overlay/45` (claro), `dark:bg-overlay/70` | Fundo atrás de modais e menus laterais: escurece a tela nos dois temas (usar `--foreground` clareava a tela no escuro) |
+| `--crt-glow` | branco | branco | (só no CSS de `.tv-screen`) | Linha luminosa da animação de TV antiga dos modais |
 | `--diff-*` | verde e vermelho | verde e vermelho | `text-diff-added`, `bg-diff-removed-bg`... | Inserções e remoções no diff (cor de conteúdo, fora da paleta neutra) |
 | `--annotation-1` a `--annotation-4` | amarelo, vermelho, azul, verde | idem | `text-annotation-1`... | Paleta do revisor (cor de conteúdo); pins abertos da revisão usam `bg-annotation-3` com `text-background`, e os resolvidos, `bg-muted` com borda; trechos comentados, `bg-annotation-1/35`; traços do desenho, `stroke-annotation-*` (a cor escolhida, gravada como token) |
 | `--editor-*` | neutros da paleta | neutros da paleta | (lidos em runtime) | Tema do Monaco; comandos, comentários e matemática mantêm cor para leitura do código |
@@ -39,7 +41,7 @@ Paleta monocromática (Colab Arena). Definida em `src/styles/globals.css` como c
 
 **Hover e seleção.** Botões `outline` e `ghost`, itens de menu e de lista e cartões usam `hover:bg-muted`; `bg-accent` fica para o estado selecionado, sempre com `text-accent-foreground`.
 
-O tema escuro redefine os mesmos tokens sob `.dark`. A classe é aplicada no `<html>` por `ThemeSync` (`src/app/providers.tsx`) conforme a preferência do sistema.
+O tema escuro redefine os mesmos tokens sob `.dark`. A pessoa escolhe **Claro**, **Escuro** ou **Padrão do sistema** (o padrão) no botão de tema do cabeçalho de todas as telas (`ThemeMenu`, em `src/components/common/theme-menu.tsx`; no editor em celular, dentro de "Mais ações"; no login e na página não encontrada, no canto superior). A escolha fica no localStorage deste navegador (`overdoctex.theme`) e `src/lib/theme.ts` aplica a classe `dark` e o `color-scheme` no `<html>`; em "Padrão do sistema", ela acompanha a troca do aparelho na hora. Um script curto no `index.html` aplica a mesma regra antes do primeiro desenho, para a página não piscar no tema errado.
 
 ### Cores de anotação gravadas no banco
 
@@ -70,6 +72,7 @@ Escala: `text-xs` (metadados, barras de painel), `text-sm` (padrão da interface
 - Altura do cabeçalho do editor: token `--header-height` (`h-header`, 3rem).
 - Barras de painel (nome do arquivo, zoom do PDF): `h-9`.
 - Elevação: `shadow-sm` em botões, `shadow-md` em páginas de PDF e menus, `shadow-2xl` só no painel flutuante de IA.
+- Modais abrem e fecham como **TV antiga** (`.tv-screen` e `.scrim` em `globals.css`): ao abrir, um ponto luminoso vira linha horizontal e a linha se abre na vertical enquanto o brilho se apaga (520 ms); ao fechar, a imagem achata numa linha, a linha vira ponto e some (420 ms). O fundo ganha opacidade junto e perde ao fechar. A animação usa a propriedade `scale`, que não interfere no `translate` que centraliza o diálogo. Com "reduzir movimento" no sistema, vira um esmaecimento de 150 ms. Menus laterais (`Sheet`) continuam deslizando, com o mesmo fundo.
 
 ## 5. Ícones
 
