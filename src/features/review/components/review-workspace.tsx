@@ -273,14 +273,15 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
       <span className="font-medium text-foreground">{t('Mensagem:')}</span> {review.description}
     </>
   ) : null;
+  // A mensagem fica à direita do espaço livre, encostada nas ferramentas a que ela se refere.
   const toolbarTitle = (
-    <div className="flex min-w-0 items-center gap-3">
+    <div className="flex w-full min-w-0 items-center gap-3">
       <div className="shrink-0">{title}</div>
       {(toolHint || authorMessage) && (
         <p
           role={toolHint ? 'status' : undefined}
           title={toolHint ?? review.description ?? undefined}
-          className="hidden min-w-0 truncate text-xs font-normal text-muted-foreground md:block"
+          className="ml-auto hidden min-w-0 truncate pr-1 text-right text-xs font-normal text-muted-foreground md:block"
         >
           {toolHint ?? authorMessage}
         </p>

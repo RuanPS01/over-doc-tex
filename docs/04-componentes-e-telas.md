@@ -105,8 +105,8 @@ ReviewPage                               pages/review-page.tsx: membro entra com
 └── ReviewWorkspace                      .h-viewport, mesma casca do editor
     ├── ReviewHeader                     "#1 título", versão, status; aprovar, pedir alterações, encerrar ou reabrir; Envio (dono e editores); nome do visitante; ThemeMenu; NotificationBell
     ├── PdfDocumentView                  features/pdf-viewer (pdf.js) com a camada de texto ligada, zoom, download e o índice do documento aberto por padrão
-    │   ├── título                       seletor de documento quando a revisão concede mais de um; ao lado, no espaço livre da barra,
-    │   │                                a dica da ferramenta (Ponto, Desenhar) ou a mensagem de quem pediu a revisão
+    │   ├── título                       seletor de documento quando a revisão concede mais de um; no espaço livre da barra, à direita,
+    │   │                                junto das ferramentas, a dica da ferramenta (Ponto, Desenhar) ou a mensagem de quem pediu a revisão
     │   ├── ferramentas                  Selecionar texto | Ponto | Desenhar (na barra do PDF)
     │   └── AnnotationLayer (por página) destaques dos trechos, desenhos em SVG, pins numerados e a marcação pendente
     ├── SelectionPopover                 "Comentar trecho" logo abaixo da seleção de texto
@@ -120,7 +120,7 @@ ReviewPage                               pages/review-page.tsx: membro entra com
 Pontos de atenção:
 
 - **Índice do documento:** na revisão, o índice (marcadores do PDF) abre por padrão ao lado das páginas para guiar a leitura; a escolha de fechar fica lembrada neste navegador (`overdoctex.pdf-outline.review`). Num visualizador estreito (celular), começa fechado e abre por cima do PDF.
-- **Dica e mensagem sem faixa nova:** a dica de "Ponto" e "Desenhar" e a mensagem do pedido de revisão ficam no espaço livre da barra do PDF, ao lado do título, então escolher uma ferramenta não empurra o PDF para baixo. No celular a barra não tem espaço: a dica flutua sobre o topo do PDF (sem ocupar espaço) e a mensagem fica no topo do painel de comentários.
+- **Dica e mensagem sem faixa nova:** a dica de "Ponto" e "Desenhar" e a mensagem do pedido de revisão ficam no espaço livre da barra do PDF, alinhadas à direita, junto das ferramentas, então escolher uma ferramenta não empurra o PDF para baixo. No celular a barra não tem espaço: a dica flutua sobre o topo do PDF (sem ocupar espaço) e a mensagem fica no topo do painel de comentários.
 - **Painéis redimensionáveis (desktop):** como as colunas do editor, o índice, as páginas e os comentários ficam lado a lado e as bordas entre eles arrastam para mudar a largura. Arrastar o índice ou os comentários até a borda recolhe o painel, e puxar a borda abre de novo. O índice também abre e fecha pelo botão no começo da barra do PDF; os comentários, pelo botão com o total de comentários na mesma barra e pelo botão no topo do painel. Começar um comentário (trecho, ponto ou desenho) ou escolher uma marcação no PDF reabre os comentários. Ao reabrir, o painel volta com a última largura usada, e não com o mínimo. Comentários: 384px por padrão, de 260px até 55% da tela, grupo lembrado em `review-desktop`. Índice: 224px por padrão, de 160px até metade do visualizador.
 - **Coordenadas normalizadas:** destaques, traços e pins usam valores de 0 a 1, então zoom e tamanho de tela não exigem recalcular nada no banco. Os traços são SVG com `vector-effect: non-scaling-stroke`.
 - **Camadas:** canvas, camada de texto do pdf.js (spans transparentes) e `AnnotationLayer` por cima. Em "Selecionar texto" a camada de anotação deixa o ponteiro passar (`pointer-events: none`), menos nos pins; em "Desenhar" ela captura o ponteiro com `touch-action: none` só sobre a página.
