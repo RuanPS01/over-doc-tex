@@ -37,7 +37,7 @@ A interface une os painéis clássicos de editores LaTeX online (árvore de arqu
 
 Dentro:
 
-- Login com Google e e-mail/senha.
+- Login com Google e e-mail/senha, com troca de senha por e-mail.
 - Projetos com múltiplos arquivos e documentos (principal e secundários).
 - Editor Monaco com realce LaTeX, compilação e PDF ao lado.
 - Snapshots, convite por e-mail, revisão com comentários em texto e pins com desenho.

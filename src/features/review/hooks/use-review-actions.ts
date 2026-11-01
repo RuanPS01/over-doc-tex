@@ -34,10 +34,14 @@ export type NewAnnotation =
 
 const firstLine = (body: string) => body.split('\n')[0]!.slice(0, 200);
 
-/** Revisor que entrou pelo link, sem conta: nome digitado e identidade (nome normalizado). */
+/**
+ * Revisor que entrou pelo link: sem conta, o nome digitado e a identidade (o
+ * nome normalizado); com conta (viaAccount), o nome da conta e accountGuestKey.
+ */
 export interface GuestIdentity {
   name: string;
   key: string;
+  viaAccount?: boolean;
 }
 
 /**
@@ -56,15 +60,16 @@ export function useReviewActions(review: ReviewSummary | null | undefined, role:
     // O revisor fala com quem pediu; o autor, com o revisor.
     const otherSide = () => (role === 'reviewer' ? [review?.requestedBy] : [review?.reviewerUid]);
 
-    // Visitante assina com o nome que informou; os demais, com o nome da conta.
-    const authorName = (user: { displayName: string | null; email: string | null }) => guest?.name ?? memberProfileOf(user).name;
+    // Visitante sem conta assina com o nome que informou e a chave do nome; com conta, vale o id da conta.
+    const nameGuest = guest && !guest.viaAccount ? guest : null;
+    const authorName = (user: { displayName: string | null; email: string | null }) => nameGuest?.name ?? memberProfileOf(user).name;
 
     const comment = (body: string): NewComment => {
       const user = currentUser();
       return {
         authorId: user.uid,
         authorName: authorName(user),
-        authorKey: guest?.key ?? null,
+        authorKey: nameGuest?.key ?? null,
         authorPhotoURL: user.photoURL,
         authorRole: role,
         kind: 'comment',

@@ -200,6 +200,8 @@ const messages: Record<string, string> = {
   '{name} começou a revisar a versão {version}.': '{name} comenzó a revisar la versión {version}.',
   // Parte do nome do PDF baixado: sem acento nem espaço.
   alteracoes: 'cambios',
+  'Entrar ou criar conta': 'Iniciar sesión o crear cuenta',
+  'Com uma conta, você revisa com ela em qualquer aparelho, sem informar o nome.': 'Con una cuenta, revisas con ella en cualquier dispositivo, sin indicar tu nombre.',
 };
 
 export default messages;

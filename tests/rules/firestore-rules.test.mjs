@@ -413,6 +413,12 @@ await runScenarios('Revisão por link', [
     assertFails(setDoc(doc(anon('g2'), 'projects/p7/snapshots/s1/guests/g2'), guest({ reviewId: 'r6', token: TOKEN6 })))],
   ['ficha em nome de outro uid é negada', () =>
     assertFails(setDoc(doc(anon('g1'), 'projects/p7/snapshots/s1/guests/g3'), guest()))],
+  ['conta não convidada grava a ficha com a chave da própria conta', () =>
+    assertSucceeds(setDoc(doc(env.authenticatedContext('conta1').firestore(), 'projects/p7/snapshots/s1/guests/conta1'), guest({ name: 'Carla', guestKey: 'uid:conta1' })))],
+  ['chave "uid:" de outra conta é negada', async () => {
+    await assertFails(setDoc(doc(anon('g2'), 'projects/p7/snapshots/s1/guests/g2'), guest({ guestKey: 'uid:conta1' })));
+    await assertFails(setDoc(doc(env.authenticatedContext('conta2').firestore(), 'projects/p7/snapshots/s1/guests/conta2'), guest({ guestKey: 'uid:conta1' })));
+  }],
   ['ficha com campo extra ou nome vazio é negada', async () => {
     await assertFails(setDoc(doc(anon('g2'), 'projects/p7/snapshots/s1/guests/g2'), guest({ role: 'owner' })));
     await assertFails(setDoc(doc(anon('g2'), 'projects/p7/snapshots/s1/guests/g2'), guest({ name: '' })));

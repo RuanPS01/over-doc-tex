@@ -4,7 +4,7 @@
 
 | Rota | Página | Quem acessa | Estado |
 | --- | --- | --- | --- |
-| `/login` | `LoginPage` | Visitante | Implementada: Google, e-mail e senha, criar conta, volta para `?next=` |
+| `/login` | `LoginPage` | Visitante | Implementada: Google, e-mail e senha, criar conta, "Esqueci a senha" (link do Firebase para criar uma senha nova), volta para `?next=` |
 | `/login` (link de acesso) | `LoginPage` | Quem abriu o link enviado por e-mail | Implementada: confirma o e-mail e conclui a entrada sem senha (convite de revisão, coautor ou "Receber link de acesso por e-mail") |
 | `/` | `ProjectsPage` | Usuário com sessão | Implementada: projetos de que é membro, em tempo real, "Novo projeto" e "Revisões para você" (consulta `collectionGroup('reviews')` pelo e-mail verificado) |
 | `/p/:projectId` | `EditorPage` | Membro; convidado com e-mail verificado | Implementada: layout responsivo, salvamento automático, diálogos do cabeçalho, aceite de convite de coautoria, aviso de projeto inexistente ou sem acesso |
@@ -123,6 +123,7 @@ Pontos de atenção:
 - **Linha do código:** ao criar a thread, o SyncTeX da versão (`.synctex`) dá `sourceHint`; o autor usa "Abrir no código", que abre o editor em `/p/{id}?arquivo=...&linha=...`.
 - **Primeira abertura do revisor:** grava `reviewerUid`, `reviewerName` e `status: in_review` (as regras só aceitam esses campos do revisor) e notifica o autor.
 - **Quem não pode ver:** sem e-mail verificado (conta de e-mail e senha) ou com outro e-mail, a página explica e oferece "Entrar com outra conta".
+- **Entrada pelo link (`GuestReviewGate`):** sem conta, pede o nome e oferece "Entrar ou criar conta" (login com volta ao link); com a conta aberta e sem convite, grava a ficha com a conta e mostra a revisão sem pedir nome, com o cabeçalho normal.
 
 ## 4. Catálogo de componentes
 

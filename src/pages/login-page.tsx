@@ -1,4 +1,4 @@
-import { Mail } from 'lucide-react';
+import { KeyRound, Mail } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
 import { useLocation, useSearch } from 'wouter';
 import { PageCornerBar } from '@/components/common/page-corner-bar';
@@ -23,6 +23,8 @@ const AUTH_ERRORS: Record<string, string> = {
   'auth/operation-not-allowed': msg('Este método de login não está ativado no Firebase Authentication.'),
   'auth/invalid-action-code': msg('O link de acesso expirou ou já foi usado. Peça um novo.'),
   'auth/expired-action-code': msg('O link de acesso expirou. Peça um novo.'),
+  'auth/missing-email': msg('Informe o e-mail.'),
+  'auth/user-not-found': msg('Não há conta com este e-mail. Crie uma conta ou entre com o Google.'),
 };
 
 /** Chave da mensagem de erro (traduzir com t()). */
@@ -40,7 +42,7 @@ function safeNext(search: string): string {
 /** Rota /login: Google ou e-mail e senha (Firebase Authentication). */
 export default function LoginPage() {
   const { t } = useT();
-  const { signInWithGoogle, signInWithEmail, signUpWithEmail, sendEmailLink, isEmailLink, completeEmailLink, status } = useAuth();
+  const { signInWithGoogle, signInWithEmail, signUpWithEmail, sendEmailLink, sendPasswordReset, isEmailLink, completeEmailLink, status } = useAuth();
   const [, navigate] = useLocation();
   const search = useSearch();
   const next = safeNext(search);
@@ -76,23 +78,40 @@ export default function LoginPage() {
     void run(() => (mode === 'sign-up' ? signUpWithEmail(email, password) : signInWithEmail(email, password)));
   };
 
-  const handleSendLink = async () => {
+  /** Envia um e-mail (link de acesso ou troca de senha) para o endereço digitado e avisa o resultado. */
+  const sendByEmail = async (missing: string, send: (address: string) => Promise<void>, sent: string) => {
     setError(null);
     setNotice(null);
-    if (!email.trim()) {
-      setError(t('Informe o e-mail para receber o link de acesso.'));
+    const address = email.trim().toLowerCase();
+    if (!address) {
+      setError(missing);
       return;
     }
     setIsBusy(true);
     try {
-      await sendEmailLink(email.trim().toLowerCase(), next);
-      setNotice(t('Enviamos um link de acesso para {email}. Abra o e-mail e toque no link para entrar.', { email: email.trim() }));
+      await send(address);
+      setNotice(sent);
     } catch (caught) {
       setError(t(messageFor(caught)));
     } finally {
       setIsBusy(false);
     }
   };
+
+  const handleSendLink = () =>
+    sendByEmail(
+      t('Informe o e-mail para receber o link de acesso.'),
+      (address) => sendEmailLink(address, next),
+      t('Enviamos um link de acesso para {email}. Abra o e-mail e toque no link para entrar.', { email: email.trim() }),
+    );
+
+  // Com a proteção contra enumeração do Firebase, o envio não diz se a conta existe.
+  const handleResetPassword = () =>
+    sendByEmail(
+      t('Informe o e-mail da conta para receber o link de troca de senha.'),
+      (address) => sendPasswordReset(address, next),
+      t('Se houver uma conta com {email}, enviamos um link para criar uma senha nova. Confira também a caixa de spam.', { email: email.trim() }),
+    );
 
   const isDemo = status === 'demo';
   const isSignUp = mode === 'sign-up';
@@ -155,6 +174,19 @@ export default function LoginPage() {
             value={password}
             onChange={(event) => setPassword(event.target.value)}
           />
+          {!isSignUp && (
+            <Button
+              type="button"
+              variant="link"
+              size="sm"
+              className="h-auto self-end p-0 text-xs"
+              disabled={isDemo || isBusy}
+              onClick={() => void handleResetPassword()}
+            >
+              <KeyRound />
+              {t('Esqueci a senha')}
+            </Button>
+          )}
           <Button type="submit" disabled={isDemo || isBusy}>
             {isSignUp ? t('Criar conta') : t('Entrar com e-mail')}
           </Button>

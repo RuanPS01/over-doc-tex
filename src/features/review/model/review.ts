@@ -58,6 +58,15 @@ export function guestKeyOf(name: string): string {
     .slice(0, 80);
 }
 
+/**
+ * Identidade de quem entrou pelo link com a própria conta: "uid:" e o id da
+ * conta. O ":" nunca sai de guestKeyOf, então nenhum nome digitado chega nela,
+ * e as regras só aceitam "uid:" seguido do próprio id.
+ */
+export function accountGuestKey(uid: string): string {
+  return `uid:${uid}`;
+}
+
 /** Código secreto do link (24 bytes aleatórios, em base64url: 32 caracteres). */
 export function newLinkToken(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(24));

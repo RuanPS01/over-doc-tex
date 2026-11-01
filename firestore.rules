@@ -83,7 +83,8 @@ service cloud.firestore {
     // Revisão aberta "por link": o link leva um código aleatório que é o id de
     // reviews/{rid}/links/{código}. Quem abre o link entra com login anônimo e grava
     // a ficha de visitante em snapshots/{sid}/guests/{uid}, apontando a revisão e o
-    // código. Vale enquanto a revisão continuar "por link" e o código existir.
+    // código. Quem já tem conta grava a mesma ficha com a conta. Vale enquanto a
+    // revisão continuar "por link" e o código existir.
     function guestPath(pid, sid) {
       return /databases/$(database)/documents/projects/$(pid)/snapshots/$(sid)/guests/$(uid());
     }
@@ -117,7 +118,8 @@ service cloud.firestore {
       return reviewData(pid, get(guestPath(pid, sid)).data.reviewId).grantedDocumentIds;
     }
 
-    // Identidade do visitante: o nome normalizado. O mesmo nome em outro aparelho é o mesmo revisor.
+    // Identidade do visitante: o nome normalizado (o mesmo nome em outro aparelho é o mesmo
+    // revisor) ou, para quem entrou com a conta, "uid:" e o id dela.
     function guestKey(pid, rid) {
       return get(guestPath(pid, reviewData(pid, rid).snapshotId)).data.guestKey;
     }
@@ -346,7 +348,8 @@ service cloud.firestore {
         allow update, delete: if false;
 
         // Ficha do visitante que entrou pelo link de uma revisão desta versão (ver isGuest).
-        // Gravada por ele mesmo, com o código do link; o nome vira a identidade do revisor.
+        // Gravada por ele mesmo, com o código do link. Sem conta, o nome vira a identidade
+        // do revisor; com conta, a chave é "uid:" e o id dela.
         match /guests/{guestUid} {
           function validGuest() {
             let d = request.resource.data;
@@ -356,6 +359,8 @@ service cloud.firestore {
               && d.token is string && d.token.size() >= 20 && d.token.size() <= 128
               && d.name is string && d.name.size() >= 1 && d.name.size() <= 80
               && d.guestKey is string && d.guestKey.size() >= 1 && d.guestKey.size() <= 80
+              // Chave "uid:" é de quem entrou com a própria conta: só vale com o próprio id.
+              && (!d.guestKey.matches('uid:.*') || d.guestKey == 'uid:' + uid())
               && reviewData(pid, d.reviewId).snapshotId == sid
               && linkOpen(pid, d.reviewId, d.token);
           }

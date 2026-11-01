@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ReviewDoc } from '@shared/firestore/types';
-import { guestKeyOf, newLinkToken, parseEmails, reviewerLabel, reviewLinkUrl, toReviewSummary } from '@/features/review/model/review';
+import { accountGuestKey, guestKeyOf, newLinkToken, parseEmails, reviewerLabel, reviewLinkUrl, toReviewSummary } from '@/features/review/model/review';
 
 const timestamp = { toDate: () => new Date(0), toMillis: () => 0 };
 
@@ -37,5 +37,11 @@ describe('revisão pelo link', () => {
     expect(reviewerLabel({ reviewerName: null, reviewerEmails: [], access: 'link' })).toBe('Revisão pelo link');
     expect(reviewerLabel({ reviewerName: null, reviewerEmails: ['a@x.br', 'b@x.br'], access: 'email' })).toBe('a@x.br +1');
     expect(reviewerLabel({ reviewerName: 'Maria', reviewerEmails: [], access: 'link' })).toBe('Maria');
+  });
+
+  it('a chave de quem entra com a conta não sai de nenhum nome digitado', () => {
+    expect(accountGuestKey('AbC123')).toBe('uid:AbC123');
+    expect(guestKeyOf('uid:AbC123')).not.toBe(accountGuestKey('AbC123'));
+    expect(guestKeyOf('uid:AbC123')).not.toContain(':');
   });
 });

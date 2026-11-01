@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { roleOf, useProject } from '@/features/projects/hooks/use-project';
 import { GuestReviewGate } from '@/features/review/components/guest-review-gate';
+import type { GuestIdentity } from '@/features/review/hooks/use-review-actions';
 import { ReviewWorkspace } from '@/features/review/components/review-workspace';
 import { useReview } from '@/features/review/hooks/use-review';
 import { useT } from '@/hooks/use-t';
@@ -13,7 +14,7 @@ interface ReviewLink {
   snapshotId: string;
 }
 
-/** Revisão de quem entrou pelo link (visitante ou conta não convidada), com o nome informado. */
+/** Revisão de quem entrou pelo link: visitante com o nome informado ou conta não convidada (com o nome dela). */
 function GuestReview({ projectId, reviewId, link }: { projectId: string; reviewId: string; link: ReviewLink }) {
   return (
     <GuestReviewGate projectId={projectId} reviewId={reviewId} snapshotId={link.snapshotId} token={link.token}>
@@ -30,7 +31,7 @@ function GuestWorkspace({
 }: {
   projectId: string;
   reviewId: string;
-  identity: { name: string; key: string };
+  identity: GuestIdentity;
   onChangeName: () => void;
 }) {
   const { t } = useT();
@@ -44,6 +45,8 @@ function GuestWorkspace({
       />
     );
   }
+  // Com a própria conta, a revisão aparece como para qualquer conta (voltar, notificações) e assina com ela.
+  if (identity.viaAccount) return <ReviewWorkspace review={review} role="reviewer" />;
   return <ReviewWorkspace review={review} role="reviewer" guest={identity} onChangeGuestName={onChangeName} />;
 }
 
@@ -58,7 +61,7 @@ function AccountReview({ projectId, reviewId, link }: { projectId: string; revie
   if (isPending || isProjectPending) return <FullPageStatus title={t('Abrindo a revisão')} loading />;
 
   if (!review) {
-    // Conta sem convite, mas com o link da revisão: entra como revisor pelo link, com nome.
+    // Conta sem convite, mas com o link da revisão: entra como revisor pelo link, com a própria conta.
     if (link) return <GuestReview projectId={projectId} reviewId={reviewId} link={link} />;
     const switchAccount = async () => {
       await signOut();
@@ -94,7 +97,8 @@ function AccountReview({ projectId, reviewId, link }: { projectId: string; revie
  * Rota /p/:projectId/reviews/:reviewId: PDF da versão congelada com os
  * comentários. Membros entram como autores; e-mails convidados, como
  * revisores. Com ?k=código&v=versão (revisão aberta pelo link), quem não tem
- * conta entra como visitante, informando o nome.
+ * conta entra como visitante, informando o nome (ou entra e volta ao link), e
+ * quem tem conta entra com ela.
  */
 export default function ReviewPage() {
   const { projectId = '', reviewId = '' } = useParams<{ projectId: string; reviewId: string }>();

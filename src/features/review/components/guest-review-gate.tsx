@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { Loader2, UserRound } from 'lucide-react';
+import { Loader2, LogIn, UserRound } from 'lucide-react';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { Link, useLocation, useSearch } from 'wouter';
 import { FullPageStatus } from '@/components/common/full-page-status';
 import { PageCornerBar } from '@/components/common/page-corner-bar';
 import { Button } from '@/components/ui/button';
@@ -22,6 +23,10 @@ interface GuestReviewGateProps {
 function GuestNameForm({ suggestion, isSaving, onSubmit }: { suggestion: string; isSaving: boolean; onSubmit: (name: string) => void }) {
   const { t } = useT();
   const [name, setName] = useState(suggestion);
+  // Depois de entrar (ou criar a conta), o login volta para este mesmo link.
+  const [location] = useLocation();
+  const search = useSearch();
+  const loginHref = `/login?next=${encodeURIComponent(`${location}${search ? `?${search}` : ''}`)}`;
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (guestKeyOf(name)) onSubmit(name);
@@ -47,13 +52,28 @@ function GuestNameForm({ suggestion, isSaving, onSubmit }: { suggestion: string;
           {isSaving && <Loader2 className="animate-spin" />}
           {t('Começar a revisar')}
         </Button>
+        <div className="flex items-center gap-3 text-xs text-muted-foreground" aria-hidden>
+          <span className="h-px flex-1 bg-border" />
+          {t('ou')}
+          <span className="h-px flex-1 bg-border" />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Button asChild variant="outline" className={isSaving ? 'pointer-events-none opacity-50' : undefined}>
+            <Link href={loginHref}>
+              <LogIn />
+              {t('Entrar ou criar conta')}
+            </Link>
+          </Button>
+          <p className="text-xs text-muted-foreground">{t('Com uma conta, você revisa com ela em qualquer aparelho, sem informar o nome.')}</p>
+        </div>
       </form>
     </div>
   );
 }
 
 /**
- * Entrada pelo link de revisão, sem conta: sessão de visitante, nome e ficha.
+ * Entrada pelo link de revisão: sessão de visitante e nome, ou a conta já
+ * aberta (sem pedir nome), e a ficha.
  * Pronta, descarta a revisão do cache (uma tentativa sem a ficha pode ter
  * guardado "sem acesso") e mostra a revisão com a identidade do visitante.
  */

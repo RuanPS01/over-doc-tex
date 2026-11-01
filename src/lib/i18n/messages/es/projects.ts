@@ -143,6 +143,11 @@ const messages: Record<string, string> = {
   'Receber link de acesso por e-mail': 'Recibir enlace de acceso por correo',
   'Já tenho conta: entrar': 'Ya tengo cuenta: iniciar sesión',
   'Não tem conta? Criar com e-mail': '¿No tienes cuenta? Crear con correo',
+  'Informe o e-mail.': 'Indica el correo electrónico.',
+  'Não há conta com este e-mail. Crie uma conta ou entre com o Google.': 'No hay ninguna cuenta con este correo. Crea una cuenta o inicia sesión con Google.',
+  'Informe o e-mail da conta para receber o link de troca de senha.': 'Indica el correo de tu cuenta para recibir el enlace para cambiar la contraseña.',
+  'Se houver uma conta com {email}, enviamos um link para criar uma senha nova. Confira também a caixa de spam.': 'Si hay una cuenta con {email}, enviamos un enlace para crear una contraseña nueva. Revisa también la carpeta de spam.',
+  'Esqueci a senha': 'Olvidé la contraseña',
 };
 
 export default messages;

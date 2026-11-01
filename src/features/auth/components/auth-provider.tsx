@@ -3,6 +3,7 @@ import {
   createUserWithEmailAndPassword,
   isSignInWithEmailLink,
   onAuthStateChanged,
+  sendPasswordResetEmail,
   sendSignInLinkToEmail,
   signInWithEmailAndPassword,
   signInWithEmailLink,
@@ -39,6 +40,8 @@ export interface AuthContextValue {
   /** A página atual veio de um link de acesso enviado por e-mail. */
   isEmailLink: () => boolean;
   completeEmailLink: (email: string) => Promise<void>;
+  /** E-mail para criar uma senha nova (página do Firebase), que volta ao login e depois a `next`. */
+  sendPasswordReset: (email: string, next: string) => Promise<void>;
   /** Sessão anônima para revisar pelo link, sem conta (exige "Anônimo" ativo no Authentication). */
   signInAsGuest: () => Promise<void>;
   signOut: () => Promise<void>;
@@ -89,6 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       completeEmailLink: async (email) => {
         await signInWithEmailLink(getFirebase().auth, email, window.location.href);
       },
+      sendPasswordReset: (email, next) => sendPasswordResetEmail(getFirebase().auth, email, { url: emailLinkUrl(email, next) }),
       signInAsGuest: async () => {
         await signInAnonymously(getFirebase().auth);
       },

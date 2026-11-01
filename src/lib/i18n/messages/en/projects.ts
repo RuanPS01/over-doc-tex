@@ -143,6 +143,11 @@ const messages: Record<string, string> = {
   'Receber link de acesso por e-mail': 'Get a sign-in link by email',
   'Já tenho conta: entrar': 'I have an account: sign in',
   'Não tem conta? Criar com e-mail': 'No account? Create one with email',
+  'Informe o e-mail.': 'Enter your email.',
+  'Não há conta com este e-mail. Crie uma conta ou entre com o Google.': 'There is no account with this email. Create an account or sign in with Google.',
+  'Informe o e-mail da conta para receber o link de troca de senha.': 'Enter your account email to receive the password reset link.',
+  'Se houver uma conta com {email}, enviamos um link para criar uma senha nova. Confira também a caixa de spam.': 'If there is an account for {email}, we sent a link to create a new password. Check your spam folder too.',
+  'Esqueci a senha': 'Forgot password',
 };
 
 export default messages;
