@@ -39,12 +39,17 @@ export function VersionPdfDialog({ projectId, projectName, snapshot, onClose }: 
 
   return (
     <Dialog open={snapshot !== null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="flex h-[calc(100dvh-1rem)] max-w-4xl flex-col gap-0 overflow-hidden p-0">
+      {/* O X fica no meio da altura da barra do PDF (h-10), no espaço reservado pelo pr-10. */}
+      <DialogContent
+        className="flex h-[calc(100dvh-1rem)] max-w-4xl flex-col gap-0 overflow-hidden p-0"
+        closeClassName="right-1 top-1 flex size-8 items-center justify-center p-0"
+      >
         <DialogTitle className="sr-only">{t('PDF da versão {label}', { label: shown?.label ?? '' })}</DialogTitle>
         <DialogDescription className="sr-only">{t('Visualização do PDF guardado nesta versão.')}</DialogDescription>
         <div className="min-h-0 flex-1">
           <PdfDocumentView
             toolbarClassName="pr-10"
+            outlineKey="version"
             pdf={pdf}
             error={error}
             title={t('Versão {label}', { label: shown?.label ?? '' })}

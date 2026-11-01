@@ -1,30 +1,12 @@
-import { useDefaultLayout, type LayoutStorage } from 'react-resizable-panels';
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
+import { useDefaultLayout } from 'react-resizable-panels';
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup, safeLayoutStorage } from '@/components/ui/resizable';
 import { CodeEditorPanel } from './code-editor-panel';
 import { PdfPane } from './pdf-pane';
 import { FileTreePanel } from './file-tree-panel';
 
-/** localStorage pode falhar (aba anônima, cota): o layout salvo é só conveniência. */
-const safeStorage: LayoutStorage = {
-  getItem: (key) => {
-    try {
-      return localStorage.getItem(key);
-    } catch {
-      return null;
-    }
-  },
-  setItem: (key, value) => {
-    try {
-      localStorage.setItem(key, value);
-    } catch {
-      // Ignorado de propósito.
-    }
-  },
-};
-
 /** Desktop: árvore | editor | PDF em colunas redimensionáveis, com layout lembrado. */
 export function DesktopWorkspace() {
-  const { defaultLayout, onLayoutChanged } = useDefaultLayout({ id: 'editor-desktop', storage: safeStorage });
+  const { defaultLayout, onLayoutChanged } = useDefaultLayout({ id: 'editor-desktop', storage: safeLayoutStorage });
 
   return (
     <ResizablePanelGroup orientation="horizontal" defaultLayout={defaultLayout} onLayoutChanged={onLayoutChanged}>

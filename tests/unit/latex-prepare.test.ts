@@ -84,6 +84,20 @@ describe('entrada do compilador', () => {
     );
     expect(input.texlivePackages).toEqual(['babel-french', 'babel-portuges', 'datatool', 'lastpage']);
   });
+
+  it('com hyperref e sem referências, força a segunda passagem (marcadores do índice do PDF)', () => {
+    const marker = '% \\label{} (OverDocTeX';
+    const compile = (main: string, extra: Array<[string, string]> = []) =>
+      buildCompileInput('main.tex', [tex('main.tex', main), ...extra.map(([path, content]) => tex(path, content))], new Map()).source;
+    expect(compile('\\documentclass{article}\\usepackage{hyperref}\\begin{document}\\section{A}\\end{document}')).toContain(marker);
+    expect(compile('\\documentclass{abntex2}\\begin{document}\\chapter{A}\\end{document}')).toContain(marker);
+    expect(compile('\\documentclass{article}\\input{preambulo}\\begin{document}\\end{document}', [['preambulo.tex', '\\usepackage[hidelinks]{hyperref}']])).toContain(marker);
+    // Sem hyperref, ou com sumário/referências (o Siglum já faz mais de uma passagem): nada muda.
+    expect(compile('\\documentclass{article}\\begin{document}\\section{A}\\end{document}')).not.toContain(marker);
+    expect(compile('\\documentclass{article}\\usepackage{hyperref}\\begin{document}\\tableofcontents\\end{document}')).not.toContain(marker);
+    expect(compile('\\documentclass{article}\\usepackage{hyperref}\\begin{document}\\section{A}\\label{s}\\end{document}')).not.toContain(marker);
+    expect(compile('\\documentclass{article}\n% \\usepackage{hyperref}\n\\begin{document}\\end{document}')).not.toContain(marker);
+  });
 });
 
 describe('log do TeX', () => {

@@ -141,7 +141,7 @@ Em 360px a barra tem: Arquivos, título truncado, Compilar, IA e Mais.
 | Páginas do PDF | largura proporcional ao painel; zoom acima de 100% rola dentro do painel |
 | Áreas seguras (notch, barra de gestos) | `.pt-safe` no cabeçalho, `.pb-safe` no Sheet inferior e `viewport-fit=cover` no `index.html` |
 | Diálogos de leitura (PDF da versão, "Ver alterações") | `h-[calc(100dvh-1rem)] max-w-4xl flex flex-col gap-0 overflow-hidden p-0`; só o corpo rola; a barra do PDF reserva `pr-10` para o botão de fechar |
-| Lateral de comentários da revisão | `w-96` no desktop; no celular vira Sheet inferior de `75dvh`, aberto por um botão flutuante "Comentários (N)" (vira "Escrever comentário" com um desenho pendente: abrir o Sheet a cada traço impediria desenhar) |
+| Lateral de comentários da revisão | No desktop, painel redimensionável à direita do PDF (384px por padrão, de 260px até 55%), recolhível pelo botão ou arrastando a borda até o fim, e o índice do PDF à esquerda, também redimensionável e recolhível; no celular vira Sheet inferior de `75dvh`, aberto por um botão flutuante "Comentários (N)" (vira "Escrever comentário" com um desenho pendente: abrir o Sheet a cada traço impediria desenhar) |
 | Ferramentas da revisão e seletor de documento | Na barra do PDF, só ícones abaixo de `xl` (rótulos em `title` e `aria-label`); o seletor de documento tem `max-w-[11rem]` com o texto truncado |
 | Botão "Comentar trecho" | `fixed`, logo abaixo da seleção, preso às bordas da janela (`min` e `max` com a largura e a altura visíveis) |
 | Ações por arquivo na árvore | botão "..." visível no hover e sempre visível em telas de toque (`[@media(hover:none)]:opacity-100`) |

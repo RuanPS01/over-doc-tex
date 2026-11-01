@@ -75,6 +75,11 @@ const messages: Record<string, string> = {
   'O conteúdo do zip passa de {size}.': 'El contenido del zip supera {size}.',
   'Escolha no máximo {count} arquivos.': 'Elige como máximo {count} archivos.',
   'Os arquivos somam mais de {size}.': 'Los archivos suman más de {size}.',
+  'Índice do documento': 'Índice del documento',
+  'Recolher {title}': 'Contraer {title}',
+  'Expandir {title}': 'Expandir {title}',
+  'Índice': 'Índice',
+  'Fechar o índice': 'Cerrar el índice',
 };
 
 export default messages;

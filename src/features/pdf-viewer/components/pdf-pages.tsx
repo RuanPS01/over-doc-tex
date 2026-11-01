@@ -125,10 +125,12 @@ interface PdfPagesProps {
   onPageSizes?: (sizes: Array<{ width: number; height: number }>) => void;
   /** Duplo clique numa página, com o ponto normalizado (0 a 1). */
   onPageDoubleClick?: (pageNumber: number, x: number, y: number) => void;
+  /** Documento aberto (para o índice); nulo ao trocar de PDF ou sair. */
+  onDocument?: (doc: PDFDocumentProxy | null) => void;
 }
 
 /** Páginas do PDF compilado, desenhadas pelo pdf.js. */
-export function PdfPages({ data, availableWidth, zoom, onError, renderOverlay, textLayer = false, onPageSizes, onPageDoubleClick }: PdfPagesProps) {
+export function PdfPages({ data, availableWidth, zoom, onError, renderOverlay, textLayer = false, onPageSizes, onPageDoubleClick, onDocument }: PdfPagesProps) {
   const { t } = useT();
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [aspects, setAspects] = useState<number[]>([]);
@@ -136,6 +138,8 @@ export function PdfPages({ data, availableWidth, zoom, onError, renderOverlay, t
   onErrorRef.current = onError;
   const onPageSizesRef = useRef(onPageSizes);
   onPageSizesRef.current = onPageSizes;
+  const onDocumentRef = useRef(onDocument);
+  onDocumentRef.current = onDocument;
 
   useEffect(() => {
     let cancelled = false;
@@ -156,6 +160,7 @@ export function PdfPages({ data, availableWidth, zoom, onError, renderOverlay, t
         setAspects(sizes.map((size) => size.height / size.width));
         onPageSizesRef.current?.(sizes);
         setDoc(loaded);
+        onDocumentRef.current?.(loaded);
       })
       .catch((error: unknown) => {
         if (!cancelled) onErrorRef.current(t('Não foi possível abrir o PDF: {error}', { error: String(error) }));
@@ -163,6 +168,7 @@ export function PdfPages({ data, availableWidth, zoom, onError, renderOverlay, t
     // Troca de PDF ou saída do painel: libera o documento e o worker do pdf.js.
     return () => {
       cancelled = true;
+      onDocumentRef.current?.(null);
       void task?.destroy();
     };
   }, [data, t]);

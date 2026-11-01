@@ -125,6 +125,28 @@ export function withBackrefFromAux(source: string): string {
   return `${source.slice(0, begin.index)}${BACKREF_FROM_AUX}${source.slice(begin.index)}`;
 }
 
+/** Classes que carregam o hyperref sozinhas (e com ele os marcadores do PDF). */
+const HYPERREF_CLASSES = new Set(['abntex2', 'beamer']);
+
+/**
+ * Mesmas expressões do Siglum (predictRequiredPasses, no worker dele): com uma
+ * delas no principal, ele já compila mais de uma vez quando o log pede.
+ */
+const SIGLUM_MULTIPASS =
+  /\\(?:tableofcontents|listoffigures|listoftables|printindex|makeindex)\b|\\(?:ref\{|pageref\{|eqref\{|autoref\{|cite[pt]?\{|citep\{|citet\{|autocite\{|textcite\{|label\{|bibliography\{|printbibliography|addbibresource)/;
+
+/**
+ * Os marcadores do hyperref (o índice do PDF) só entram na segunda passagem:
+ * a primeira grava o .out e o log pede "Rerun to get outlines right". O Siglum
+ * decide as passagens pelo texto do principal e, sem referências nem sumário,
+ * faria uma só. O comentário no fim (depois do \end{document}, sem efeito no
+ * documento) libera a segunda passagem, que ainda depende do aviso no log.
+ */
+export function withOutlinePass(source: string, usesHyperref: boolean): string {
+  if (!usesHyperref || SIGLUM_MULTIPASS.test(source)) return source;
+  return `${source}\n% \\label{} (OverDocTeX: os marcadores do hyperref, o índice do PDF, saem na segunda passagem)\n`;
+}
+
 /** Caminho visto a partir da pasta do arquivo principal (o compilador roda nela). */
 export function relativeToMain(path: string, mainPath: string): string {
   const folder = mainPath.includes('/') ? mainPath.slice(0, mainPath.lastIndexOf('/') + 1) : '';
@@ -151,6 +173,11 @@ export function buildCompileInput(
   }
   for (const [path, data] of binaries) additionalFiles[relativeToMain(path, mainPath)] = data;
   let source = withBackrefFromAux(adaptBabel(main.content));
+  // Pacotes pedidos no principal ou em outros arquivos do projeto (preâmbulo separado, .sty próprio).
+  const sources = [main.content, ...texts.filter((file) => file.path !== mainPath && /\.(tex|sty|cls)$/.test(file.path)).map((file) => file.content)];
+  const usedPackages = sources.flatMap((text) =>
+    [...stripComments(text).matchAll(/\\(?:usepackage|RequirePackage)\s*(?:\[[^\]]*\])?\s*\{([^}]+)\}/g)].flatMap((match) => match[1]!.split(',').map((name) => name.trim())),
+  );
   // O compilador não tem bibtex: o .bbl vem pronto (o principal roda como document.tex).
   const bibliography = buildBbl(new Map(texts.map((file) => [file.path, file.content])), mainPath);
   if (bibliography) {
@@ -158,12 +185,9 @@ export function buildCompileInput(
     // O Siglum decide as passagens olhando só o principal; sem \cite nele, faria uma só e as citações ficariam [?].
     if (!/\\(cite|bibliography)/.test(main.content)) source += '\n% \\bibliography{} (OverDocTeX: citações em arquivos de \\input)\n';
   }
-  // Pacotes com arquivos soltos no site (ex.: .ldf): idiomas do babel e pacotes pedidos no
-  // principal ou em outros arquivos do projeto (preâmbulo separado, .sty próprio).
-  const sources = [main.content, ...texts.filter((file) => file.path !== mainPath && /\.(tex|sty|cls)$/.test(file.path)).map((file) => file.content)];
-  const usedPackages = sources.flatMap((text) =>
-    [...stripComments(text).matchAll(/\\(?:usepackage|RequirePackage)\s*(?:\[[^\]]*\])?\s*\{([^}]+)\}/g)].flatMap((match) => match[1]!.split(',').map((name) => name.trim())),
-  );
+  const documentClass = /\\documentclass\s*(?:\[[^\]]*\])?\s*\{([^}]+)\}/.exec(stripComments(main.content))?.[1]?.trim() ?? '';
+  source = withOutlinePass(source, usedPackages.includes('hyperref') || usedPackages.includes('bookmark') || HYPERREF_CLASSES.has(documentClass));
+  // Pacotes com arquivos soltos no site (ex.: .ldf): idiomas do babel e os pedidos pelo projeto.
   const texlivePackages = [...new Set([...babelLanguagePackages(sources.join('\n')), ...usedPackages.filter(Boolean)])];
   return { source, additionalFiles, texlivePackages };
 }

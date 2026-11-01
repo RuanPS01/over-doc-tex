@@ -1,9 +1,13 @@
 import { Download, Loader2, ZoomIn, ZoomOut } from 'lucide-react';
+import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { Button } from '@/components/ui/button';
 import { useT } from '@/hooks/use-t';
 import { downloadBytes } from '@/lib/download';
 import { cn } from '@/lib/utils';
+import { usePdfOutline } from '../hooks/use-pdf-outline';
+import { PdfOutlineToggle } from './pdf-outline';
+import { PdfOutlineFrame } from './pdf-outline-frame';
 import { PdfPages } from './pdf-pages';
 
 const ZOOM_STEPS = [50, 75, 100, 125, 150, 200] as const;
@@ -24,11 +28,16 @@ interface PdfDocumentViewProps {
   toolbarClassName?: string;
   textLayer?: boolean;
   onPageSizes?: (sizes: Array<{ width: number; height: number }>) => void;
+  /** Onde a escolha de abrir o índice fica lembrada (ex.: "review", "version"). */
+  outlineKey?: string;
+  /** Índice aberto antes de a pessoa escolher (a revisão abre, para guiar a leitura). */
+  outlineDefaultOpen?: boolean;
 }
 
 /**
- * PDF pronto (de uma versão ou da revisão) com zoom e download. O zoom acima
- * de 100% rola só dentro da área do PDF, nunca no body.
+ * PDF pronto (de uma versão ou da revisão) com zoom, download e o índice do
+ * documento (marcadores do hyperref). O zoom acima de 100% rola só dentro da
+ * área do PDF, nunca no body.
  */
 export function PdfDocumentView({
   pdf,
@@ -42,6 +51,8 @@ export function PdfDocumentView({
   toolbarClassName,
   textLayer,
   onPageSizes,
+  outlineKey = 'document',
+  outlineDefaultOpen = false,
 }: PdfDocumentViewProps) {
   const { t } = useT();
   const [zoomIndex, setZoomIndex] = useState(2);
@@ -50,6 +61,16 @@ export function PdfDocumentView({
   const ownRef = useRef<HTMLDivElement>(null);
   const areaRef = scrollRef ?? ownRef;
   const [availableWidth, setAvailableWidth] = useState(0);
+  const frameRef = useRef<HTMLDivElement>(null);
+  const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
+  const outline = usePdfOutline({
+    doc,
+    scrollRef: areaRef,
+    frameRef,
+    storageKey: `overdoctex.pdf-outline.${outlineKey}`,
+    defaultOpen: outlineDefaultOpen,
+    layoutKey: `${zoom}:${availableWidth}`,
+  });
 
   useEffect(() => {
     const element = areaRef.current;
@@ -67,6 +88,7 @@ export function PdfDocumentView({
   return (
     <section aria-label="PDF" className="flex h-full min-h-0 min-w-0 flex-col bg-pdf-canvas">
       <div className={cn('flex h-10 shrink-0 items-center gap-1 border-b bg-background px-2 text-xs text-muted-foreground', toolbarClassName)}>
+        {outline.available && <PdfOutlineToggle open={outline.open} className="size-8" onToggle={() => outline.setOpen(!outline.open)} />}
         <div className="min-w-0 flex-1 truncate font-medium text-foreground">{title}</div>
         {actions}
         <Button
@@ -101,26 +123,29 @@ export function PdfDocumentView({
           <ZoomIn />
         </Button>
       </div>
-      <div ref={areaRef} className="relative min-h-0 flex-1 overflow-auto p-3 sm:p-4">
-        {shownError ? (
-          <p className="m-auto max-w-sm p-6 text-center text-sm text-destructive">{shownError}</p>
-        ) : pdf ? (
-          <PdfPages
-            data={pdf}
-            availableWidth={availableWidth}
-            zoom={zoom}
-            onError={setViewerError}
-            renderOverlay={renderOverlay}
-            textLayer={textLayer}
-            onPageSizes={onPageSizes}
-          />
-        ) : (
-          <p className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" aria-hidden />
-            {loadingLabel ?? t('Carregando o PDF')}
-          </p>
-        )}
-      </div>
+      <PdfOutlineFrame outline={outline} frameRef={frameRef} widthKey={`overdoctex.pdf-outline-width.${outlineKey}`}>
+        <div ref={areaRef} className="relative min-h-0 min-w-0 flex-1 overflow-auto p-3 sm:p-4">
+          {shownError ? (
+            <p className="m-auto max-w-sm p-6 text-center text-sm text-destructive">{shownError}</p>
+          ) : pdf ? (
+            <PdfPages
+              data={pdf}
+              availableWidth={availableWidth}
+              zoom={zoom}
+              onError={setViewerError}
+              renderOverlay={renderOverlay}
+              textLayer={textLayer}
+              onPageSizes={onPageSizes}
+              onDocument={setDoc}
+            />
+          ) : (
+            <p className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="size-4 animate-spin" aria-hidden />
+              {loadingLabel ?? t('Carregando o PDF')}
+            </p>
+          )}
+        </div>
+      </PdfOutlineFrame>
     </section>
   );
 }

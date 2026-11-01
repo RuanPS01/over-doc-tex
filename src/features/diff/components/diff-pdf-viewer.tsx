@@ -56,6 +56,7 @@ export function DiffPdfViewer({ diff, loadingLabel, error, fileName }: DiffPdfVi
     <div className="flex h-full min-h-0 flex-col">
       <PdfDocumentView
         pdf={diff.pdf}
+        outlineKey="diff"
         fileName={fileName}
         scrollRef={scrollRef}
         title={
