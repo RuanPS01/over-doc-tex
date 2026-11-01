@@ -1,6 +1,7 @@
 import { Mail } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
 import { useLocation, useSearch } from 'wouter';
+import { PageCornerBar } from '@/components/common/page-corner-bar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/features/auth/hooks/use-auth';
@@ -93,6 +94,7 @@ export default function LoginPage() {
   if (isCompletingLink) {
     return (
       <div className="flex min-h-viewport items-center justify-center px-4">
+        <PageCornerBar />
         <form
           className="flex w-full max-w-sm flex-col gap-4 rounded-xl border bg-card p-6 shadow-sm"
           onSubmit={(event) => {
@@ -118,6 +120,7 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-viewport items-center justify-center px-4">
+      <PageCornerBar />
       <div className="flex w-full max-w-sm flex-col gap-4 rounded-xl border bg-card p-6 shadow-sm">
         <h1 className="text-lg font-semibold">{isSignUp ? 'Criar conta no OverDocTeX' : 'Entrar no OverDocTeX'}</h1>
         {isDemo && (

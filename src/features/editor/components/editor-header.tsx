@@ -13,6 +13,7 @@ import {
   Upload,
 } from 'lucide-react';
 import { Link } from 'wouter';
+import { ThemeMenu, ThemeMenuItems } from '@/components/common/theme-menu';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -99,6 +100,7 @@ export function EditorHeader({ projectName, layoutMode }: EditorHeaderProps) {
         <Sparkles />
       </Button>
 
+      <ThemeMenu className="hidden sm:inline-flex" />
       <NotificationBell className="hidden xs:inline-flex" />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -144,6 +146,9 @@ export function EditorHeader({ projectName, layoutMode }: EditorHeaderProps) {
             <Settings />
             Configurações do projeto
           </DropdownMenuItem>
+          {/* No celular o botão de tema não cabe na barra: as opções vêm aqui. */}
+          <DropdownMenuSeparator className="sm:hidden" />
+          <ThemeMenuItems className="sm:hidden" />
         </DropdownMenuContent>
       </DropdownMenu>
     </header>

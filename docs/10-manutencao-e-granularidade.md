@@ -8,7 +8,7 @@
 | Tamanho de componente | até cerca de 150 linhas | Extrair subcomponentes ou um hook quando o JSX tiver mais de uma responsabilidade (ex.: `AiSettingsDialog` e `ModelEntryCard`) |
 | Hook de dados | um recurso por hook (`useProjectFiles`, `useAiConfig`) | Nunca um hook que busca "tudo da tela" |
 | Módulos do motor de IA | um arquivo por responsabilidade (`rag.ts`, `prompts.ts`, `model-chain.ts`, `providers/<id>.ts`) | Quando um arquivo misturar chamada de rede e regra pura |
-| Funções puras | sem I/O, testáveis isoladamente | RAG, fila de modelos, plano de importação, caminhos do zip, parser BibTeX, âncoras, futuro motor de diff |
+| Funções puras | sem I/O, testáveis isoladamente | RAG, fila de modelos, plano de importação, caminhos do zip, parser BibTeX, âncoras, ordenação da árvore de arquivos, futuro motor de diff |
 
 Preferir composição a props booleanas que mudam o comportamento inteiro do componente.
 

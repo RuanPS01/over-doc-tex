@@ -1,17 +1,40 @@
-import { BookMarked, Download, FileCode2, FileImage, FilePlus, FileText, Folder, MoreHorizontal, Pencil, Trash2, Upload } from 'lucide-react';
+import {
+  ArrowDownUp,
+  BookMarked,
+  ChevronRight,
+  ChevronsDownUp,
+  ChevronsUpDown,
+  Download,
+  FileCode2,
+  FileImage,
+  FilePlus,
+  FileText,
+  Folder,
+  FolderOpen,
+  MoreHorizontal,
+  Pencil,
+  Trash2,
+  Upload,
+} from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import type { FileKind } from '@shared/firestore/types';
 import { cn } from '@/lib/utils';
 import { useExportProject } from '../hooks/use-export-project';
+import { useFileTreeView, type FileTreeView } from '../hooks/use-file-tree-view';
 import { useProjectFiles } from '../hooks/use-project-files';
-import type { EditorFile } from '../model/editor-file';
+import { FILE_TREE_SORTS, isFileTreeSort } from '../model/file-tree';
 import { useEditorStore } from '../state/editor-store';
 import { FileActionsDialogs, type FileAction } from './file-actions-dialogs';
 
@@ -22,28 +45,41 @@ const ICONS: Partial<Record<FileKind, typeof FileText>> = {
   pdf: FileImage,
 };
 
-interface TreeRow {
-  key: string;
-  depth: number;
-  label: string;
-  file: EditorFile | null;
-}
-
-/** Achata os caminhos em linhas indentadas, inserindo as pastas implícitas. */
-function toRows(files: readonly EditorFile[]): TreeRow[] {
-  const rows: TreeRow[] = [];
-  const seenFolders = new Set<string>();
-  for (const file of [...files].sort((a, b) => a.path.localeCompare(b.path))) {
-    const parts = file.path.split('/');
-    parts.slice(0, -1).forEach((folder, index) => {
-      const key = parts.slice(0, index + 1).join('/');
-      if (seenFolders.has(key)) return;
-      seenFolders.add(key);
-      rows.push({ key, depth: index, label: folder, file: null });
-    });
-    rows.push({ key: file.id, depth: parts.length - 1, label: file.name, file });
-  }
-  return rows;
+/** Ordenação, pastas no topo e abrir ou recolher todas as pastas. */
+function FileTreeSortMenu({ view }: { view: FileTreeView }) {
+  const { options, setOptions, expandAll, collapseAll } = view;
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" className="size-7" aria-label="Ordenar e organizar arquivos" title="Ordenar e organizar">
+          <ArrowDownUp />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-64">
+        <DropdownMenuLabel>Ordenar por</DropdownMenuLabel>
+        <DropdownMenuRadioGroup value={options.sort} onValueChange={(value) => isFileTreeSort(value) && setOptions({ ...options, sort: value })}>
+          {FILE_TREE_SORTS.map((sort) => (
+            <DropdownMenuRadioItem key={sort.value} value={sort.value}>
+              {sort.label}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuCheckboxItem checked={options.foldersFirst} onCheckedChange={(checked) => setOptions({ ...options, foldersFirst: checked === true })}>
+          Pastas no topo
+        </DropdownMenuCheckboxItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={expandAll}>
+          <ChevronsUpDown />
+          Abrir todas as pastas
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={collapseAll}>
+          <ChevronsDownUp />
+          Recolher todas as pastas
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 }
 
 export function FileTreePanel({ className }: { className?: string }) {
@@ -51,6 +87,7 @@ export function FileTreePanel({ className }: { className?: string }) {
   const { data: files = [], isPending } = useProjectFiles(projectId);
   const { exportProject, isExporting } = useExportProject();
   const [action, setAction] = useState<FileAction | null>(null);
+  const view = useFileTreeView(projectId, files, activeFileId);
   const activeFolder = files.find((file) => file.id === activeFileId)?.path.split('/').slice(0, -1).join('/') ?? '';
 
   return (
@@ -85,11 +122,37 @@ export function FileTreePanel({ className }: { className?: string }) {
         >
           <Download />
         </Button>
+        <FileTreeSortMenu view={view} />
       </div>
       <ul className="min-h-0 flex-1 overflow-y-auto py-1 text-sm">
         {isPending && <li className="px-3 py-2 text-muted-foreground">Carregando...</li>}
-        {toRows(files).map((row) => {
-          const Icon = row.file ? (ICONS[row.file.kind] ?? FileText) : Folder;
+        {view.rows.map((row) => {
+          const indent = { paddingLeft: `${0.5 + row.depth * 1}rem` };
+          if (row.folderPath !== null) {
+            const folderPath = row.folderPath;
+            const FolderIcon = row.expanded ? FolderOpen : Folder;
+            return (
+              <li key={row.key} className="flex min-w-0 items-center">
+                <button
+                  type="button"
+                  aria-expanded={row.expanded}
+                  title={folderPath}
+                  onClick={() => view.toggleFolder(folderPath)}
+                  style={indent}
+                  className="flex min-w-0 flex-1 items-center gap-1.5 py-1.5 pr-3 text-left text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  <ChevronRight className={cn('size-4 shrink-0 transition-transform', row.expanded && 'rotate-90')} />
+                  <FolderIcon className="size-4 shrink-0" />
+                  <span className="min-w-0 flex-1 truncate">{row.label}</span>
+                  <span className="shrink-0 text-xs tabular-nums">
+                    {row.fileCount}
+                    <span className="sr-only"> {row.fileCount === 1 ? 'arquivo' : 'arquivos'}</span>
+                  </span>
+                </button>
+              </li>
+            );
+          }
+          const Icon = (row.file && ICONS[row.file.kind]) ?? FileText;
           const isActive = row.file?.id === activeFileId;
           const canOpen = Boolean(row.file && row.file.content !== null);
           return (
@@ -98,13 +161,14 @@ export function FileTreePanel({ className }: { className?: string }) {
                 type="button"
                 disabled={!canOpen}
                 onClick={() => row.file && openFile(row.file.id)}
-                style={{ paddingLeft: `${0.75 + row.depth * 1}rem` }}
+                style={indent}
                 className={cn(
-                  'flex min-w-0 flex-1 items-center gap-2 py-1.5 pr-2 text-left transition-colors hover:bg-muted disabled:cursor-default disabled:hover:bg-transparent',
+                  'flex min-w-0 flex-1 items-center gap-1.5 py-1.5 pr-2 text-left transition-colors hover:bg-muted disabled:cursor-default disabled:hover:bg-transparent',
                   isActive && 'bg-accent font-medium text-accent-foreground hover:bg-accent',
-                  !row.file && 'text-muted-foreground',
                 )}
               >
+                {/* Espaço da seta das pastas, para os ícones do mesmo nível ficarem alinhados. */}
+                <span className="size-4 shrink-0" aria-hidden="true" />
                 <Icon className="size-4 shrink-0" />
                 <span className="truncate">{row.label}</span>
               </button>

@@ -35,12 +35,13 @@ EditorPage                               pages/editor-page.tsx (papel, convite p
         │   ├── Solicitar revisão        visível a partir de sm (só dono e editores)
         │   ├── Versões, Ver alterações  visíveis a partir de lg; abrem os diálogos pelo store (openDialog)
         │   ├── Assistente de IA         botão alternável
+        │   ├── ThemeMenu                tema claro, escuro ou do sistema (a partir de sm; no celular, dentro de "Mais")
         │   ├── NotificationBell         notificações da conta (a partir de 360px)
-        │   └── DropdownMenu "Mais"      o que a largura escondeu, Importar, Exportar (.zip) e Configurações do projeto
+        │   └── DropdownMenu "Mais"      o que a largura escondeu, Importar, Exportar (.zip), Configurações do projeto e, no celular, Tema
         ├── main
         │   ├── DesktopWorkspace         layoutMode = desktop
         │   │   └── ResizablePanelGroup  layout salvo em localStorage
-        │   │       ├── FileTreePanel    Novo arquivo, Importar e Exportar (.zip) na barra; menu por arquivo (renomear, excluir)
+        │   │       ├── FileTreePanel    Novo arquivo, Importar, Exportar (.zip) e Ordenar na barra; pastas recolhíveis; menu por arquivo (renomear, excluir)
         │   │       ├── CodeEditorPanel  Monaco (somente leitura para quem só lê); "Mostrar no PDF" (SyncTeX)
         │   │       └── PdfPane          liga o PdfPreviewPanel ao estado da compilação; duplo clique leva ao código
         │   └── MobileWorkspace          layoutMode = mobile-portrait | mobile-landscape
@@ -69,7 +70,7 @@ EditorPage                               pages/editor-page.tsx (papel, convite p
 | `EditorHeader` | Ações do projeto com regra de transbordo | nenhum | store |
 | `DesktopWorkspace` | Três colunas redimensionáveis | layout (pela biblioteca, persistido) | nenhum |
 | `MobileWorkspace` | Um painel por vez ou duas colunas curtas | nenhum | store |
-| `FileTreePanel` | Árvore indentada a partir dos caminhos, com criar, renomear e excluir | ação de arquivo aberta | `useProjectFiles`, `useFileActions` (via `FileActionsDialogs`) |
+| `FileTreePanel` | Árvore a partir dos caminhos, com criar, renomear e excluir. Pastas começam recolhidas e mostram quantos arquivos têm; o menu "Ordenar e organizar" escolhe a ordem (nome de A a Z ou de Z a A, tipo pela extensão, modificados por último, tamanho), "Pastas no topo" (ligado por padrão; desligado, pastas e arquivos entram na mesma ordenação) e abre ou recolhe todas. Ordem e pastas no topo valem para todos os projetos; as pastas abertas, por projeto (ambas no localStorage deste navegador). Abrir um arquivo dentro de uma pasta recolhida (arquivo novo, SyncTeX, "Abrir no código") abre as pastas até ele. Lógica pura em `model/file-tree.ts` | ação de arquivo aberta | `useProjectFiles`, `useFileTreeView`, `useFileActions` (via `FileActionsDialogs`) |
 | `CodeEditorPanel` | Monaco com LaTeX e tema dos tokens | modelos do Monaco (por `path`) | `useProjectFiles`, store |
 | `CompileStoreProvider` | Compilar o projeto e guardar o resultado | compilando, etapa, último PDF bom, último resultado | `useLatexCompile` |
 | `PdfPane` | Passar estado e ações da compilação ao visualizador | nenhum | `useCompileStore`, `useProjectFiles` |
@@ -101,7 +102,7 @@ O código está em `src/features/editor/components/` e as regras completas em `0
 ```
 ReviewPage                               pages/review-page.tsx: membro entra como autor, quem não é membro como revisor
 └── ReviewWorkspace                      .h-viewport, mesma casca do editor
-    ├── ReviewHeader                     "#1 título", versão, status; aprovar, pedir alterações, encerrar ou reabrir; NotificationBell
+    ├── ReviewHeader                     "#1 título", versão, status; aprovar, pedir alterações, encerrar ou reabrir; ThemeMenu; NotificationBell
     ├── PdfDocumentView                  features/pdf-viewer (pdf.js) com a camada de texto ligada, zoom e download
     │   ├── título                       seletor de documento quando a revisão concede mais de um
     │   ├── ferramentas                  Selecionar texto | Ponto | Desenhar (na barra do PDF)
@@ -145,6 +146,8 @@ Pontos de atenção:
 | --- | --- |
 | `MarkdownContent` | Único ponto com `dangerouslySetInnerHTML`; recebe Markdown, sanitiza com DOMPurify |
 | `FullPageStatus` | Tela inteira de espera, aviso ou erro (abrindo sessão, abrindo projeto, projeto não encontrado) |
+| `ThemeMenu`, `ThemeMenuItems` | Botão de tema (ícone do tema atual: sol, lua ou monitor) com Claro, Escuro e Padrão do sistema; `ThemeMenuItems` põe as mesmas opções dentro de outro menu. Está nos cabeçalhos de projetos, editor e revisão (`useThemePreference`, `src/lib/theme.ts`) |
+| `PageCornerBar` | Cabeçalho mínimo, só com o `ThemeMenu` no canto, das telas sem barra própria (login e página não encontrada) |
 
 ### Domínio (`src/features/*/components`)
 

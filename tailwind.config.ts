@@ -31,6 +31,7 @@ export default {
         card: { DEFAULT: token('card'), foreground: token('card-foreground') },
         panel: { DEFAULT: token('panel'), foreground: token('panel-foreground') },
         'pdf-canvas': token('pdf-canvas'),
+        overlay: token('overlay'),
         diff: {
           added: token('diff-added'),
           'added-bg': token('diff-added-bg'),

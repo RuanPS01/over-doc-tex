@@ -16,7 +16,8 @@ const SheetOverlay = React.forwardRef<
   <SheetPrimitive.Overlay
     ref={ref}
     className={cn(
-      'fixed inset-0 z-50 bg-foreground/40 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
+      // Mesmo fundo dos modais, no ritmo do painel que desliza (300 ms abrindo, 200 ms fechando).
+      'scrim fixed inset-0 z-50 bg-overlay/45 data-[state=closed]:[animation-duration:200ms] data-[state=open]:[animation-duration:300ms] dark:bg-overlay/70',
       className,
     )}
     {...props}

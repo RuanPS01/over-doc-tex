@@ -81,6 +81,8 @@ export function useProjectArchive(projectId: string) {
               kind: classifyFileKind(targetPath),
               content,
               blobPath: null,
+              size: entry.data.length,
+              updatedAt: Date.now(),
             };
             const index = next.findIndex((item) => item.id === id);
             if (index >= 0) next[index] = file;

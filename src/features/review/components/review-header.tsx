@@ -1,6 +1,7 @@
 import { ArrowLeft, CheckCircle2, GitCompare, MoreVertical, RotateCcw, TriangleAlert, XCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'wouter';
+import { ThemeMenu } from '@/components/common/theme-menu';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -79,6 +80,7 @@ export function ReviewHeader({ review, role, onShowChanges, onStatusChange }: Re
           {action.label}
         </Button>
       ))}
+      <ThemeMenu />
       <NotificationBell />
       {(actions.length > 0 || review.baseSnapshotId) && (
         <DropdownMenu>

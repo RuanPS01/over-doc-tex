@@ -9,6 +9,19 @@
     <meta name="description" content="Editor LaTeX com revisão por versões, diff visual em PDF e assistente de IA." />
     <link rel="icon" type="image/svg+xml" href="/icons/icon.svg" />
     <title>OverDocTeX</title>
+    <script>
+      // Tema antes do primeiro desenho, para a página não piscar no tema errado.
+      // Mesma regra e mesma chave de src/lib/theme.ts.
+      (function () {
+        var preference = 'system';
+        try {
+          preference = localStorage.getItem('overdoctex.theme') || 'system';
+        } catch (error) {}
+        var dark = preference === 'dark' || (preference !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.classList.toggle('dark', dark);
+        document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
