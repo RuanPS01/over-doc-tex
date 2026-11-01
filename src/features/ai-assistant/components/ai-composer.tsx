@@ -8,6 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { cn } from '@/lib/utils';
 import { Textarea } from '@/components/ui/textarea';
 
 export const TASK_LABELS: Record<AiTask, string> = {
@@ -21,12 +22,14 @@ export const TASK_LABELS: Record<AiTask, string> = {
 };
 
 interface AiComposerProps {
+  /** Assistente encaixado no rodapé: campo de uma linha e menos espaço. */
+  compact?: boolean;
   isStreaming: boolean;
   onSend: (input: { task: AiTask; prompt: string }) => void;
   onStop: () => void;
 }
 
-export function AiComposer({ isStreaming, onSend, onStop }: AiComposerProps) {
+export function AiComposer({ compact = false, isStreaming, onSend, onStop }: AiComposerProps) {
   const [task, setTask] = useState<AiTask>('chat');
   const [prompt, setPrompt] = useState('');
 
@@ -46,20 +49,20 @@ export function AiComposer({ isStreaming, onSend, onStop }: AiComposerProps) {
   };
 
   return (
-    <form onSubmit={submit} className="flex shrink-0 flex-col gap-2 border-t p-3">
+    <form onSubmit={submit} className={cn('flex shrink-0 flex-col border-t', compact ? 'gap-1.5 p-2' : 'gap-2 p-3')}>
       <Textarea
         value={prompt}
         onChange={(event) => setPrompt(event.target.value)}
         onKeyDown={handleKeyDown}
         placeholder="Pergunte qualquer coisa sobre o documento"
-        rows={2}
-        className="max-h-40 resize-none"
+        rows={compact ? 1 : 2}
+        className={cn('resize-none', compact ? 'max-h-28 min-h-9 py-1.5 text-sm' : 'max-h-40')}
         aria-label="Mensagem para o assistente"
       />
       <div className="flex items-center gap-2">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button type="button" variant="outline" size="sm" className="min-w-0">
+            <Button type="button" variant="outline" size="sm" className={cn('min-w-0', compact && 'h-8 text-xs')}>
               <span className="truncate">{TASK_LABELS[task]}</span>
               <ChevronDown />
             </Button>
@@ -74,11 +77,11 @@ export function AiComposer({ isStreaming, onSend, onStop }: AiComposerProps) {
         </DropdownMenu>
         <span className="flex-1" />
         {isStreaming ? (
-          <Button type="button" size="icon" variant="secondary" aria-label="Parar" onClick={onStop}>
+          <Button type="button" size="icon" variant="secondary" className={cn(compact && 'size-8')} aria-label="Parar" onClick={onStop}>
             <Square />
           </Button>
         ) : (
-          <Button type="submit" size="icon" aria-label="Enviar" disabled={!prompt.trim()}>
+          <Button type="submit" size="icon" className={cn(compact && 'size-8')} aria-label="Enviar" disabled={!prompt.trim()}>
             <ArrowUp />
           </Button>
         )}

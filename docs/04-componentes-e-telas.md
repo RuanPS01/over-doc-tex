@@ -37,7 +37,7 @@ EditorPage                               pages/editor-page.tsx (papel, convite p
         │   ├── Assistente de IA         botão alternável
         │   ├── ThemeMenu                tema claro, escuro ou do sistema (a partir de sm; no celular, dentro de "Mais")
         │   ├── NotificationBell         notificações da conta (a partir de 360px)
-        │   └── DropdownMenu "Mais"      o que a largura escondeu, Importar, Exportar (.zip), Configurações do projeto e, no celular, Tema
+        │   └── DropdownMenu "Mais"      o que a largura escondeu, Importar, Exportar (.zip), Configurações do projeto, Configurações de IA e, no celular, Tema
         ├── main
         │   ├── DesktopWorkspace         layoutMode = desktop
         │   │   └── ResizablePanelGroup  layout salvo em localStorage
@@ -50,7 +50,7 @@ EditorPage                               pages/editor-page.tsx (papel, convite p
         │       └── PdfPane              montado sempre, oculto com `hidden`; compilar com sucesso mostra o PDF
         ├── FileTreeSheet                Sheet lateral (fora do desktop)
         ├── ImportDialog                 .zip, arquivos ou pasta; destino e política de conflito
-        └── AiAssistantPanel             painel flutuante (desktop) ou Sheet inferior (celular)
+        └── AiAssistantPanel             janela encaixada no rodapé ou solta (desktop) ou Sheet inferior (celular)
             ├── AiChat
             │   ├── estado vazio         "Configurar a minha IA" quando não há modelo
             │   ├── AiMessage            Markdown sanitizado, fontes, modelo que respondeu, erros
@@ -75,7 +75,7 @@ EditorPage                               pages/editor-page.tsx (papel, convite p
 | `CompileStoreProvider` | Compilar o projeto e guardar o resultado | compilando, etapa, último PDF bom, último resultado | `useLatexCompile` |
 | `PdfPane` | Passar estado e ações da compilação ao visualizador | nenhum | `useCompileStore`, `useProjectFiles` |
 | `PdfPreviewPanel` | Páginas do PDF (pdf.js), zoom, download, andamento e lista de erros com arquivo e linha | zoom, lista aberta | props |
-| `AiAssistantPanel` | Conter o chat no formato certo para o layout | conversa (`useAiStream`), diálogo de configuração aberto | `useAiConfig`; `files`, `open` e `onOpenChange` vêm do `EditorShell` por props |
+| `AiAssistantPanel` | Conter o chat no formato certo para o layout. No desktop é uma janela: encaixada no rodapé à direita (padrão), à esquerda ou no meio, sempre com o mesmo tamanho (até 420 x 640) e em exibição compacta (cabeçalho de 36px, menos espaço, campo de mensagem de uma linha); ou solta, arrastada pelo título, sem sair da tela nem subir sobre o cabeçalho. O botão de encaixe do cabeçalho escolhe a posição ou "Janela solta" (também pelo teclado). Posição lembrada neste navegador (`overdoctex.ai-window`); lógica pura em `model/assistant-window.ts` | conversa (`useAiStream`), diálogo de configuração aberto, posição da janela (`useAssistantWindow`) | `useAiConfig`; `files`, `open` e `onOpenChange` vêm do `EditorShell` por props |
 | `AiSettingsDialog` | Editar e validar a fila de modelos | rascunho da fila, erros por item | `useAiConfig` |
 | `ImportDialog` | Ler a origem, montar e aplicar o plano de importação | origem lida, destino, política de conflito | `useProjectFiles`, `useProjectArchive` |
 
@@ -92,7 +92,7 @@ Regras que esta divisão garante:
 | --- | --- | --- | --- |
 | Árvore de arquivos | Coluna redimensionável e recolhível | Sheet lateral | Sheet lateral |
 | Editor e PDF | Colunas lado a lado redimensionáveis | Duas colunas curtas fixas | Um por vez, abas Código e PDF |
-| Assistente de IA | Painel flutuante 420px no canto inferior direito | Sheet inferior 85dvh | Sheet inferior 85dvh |
+| Assistente de IA | Janela de 420px encaixada no rodapé (direita, esquerda ou meio) ou solta e arrastável | Sheet inferior 85dvh | Sheet inferior 85dvh |
 | Ações do cabeçalho | Todas visíveis | Parte no menu "Mais" | Quase todas no menu "Mais" |
 
 O código está em `src/features/editor/components/` e as regras completas em `08-responsividade.md`.

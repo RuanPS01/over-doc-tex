@@ -8,7 +8,8 @@ export type EditorDialog =
   | { kind: 'history' }
   | { kind: 'changes'; /** Versão usada como base; nulo escolhe a mais recente. */ baseSnapshotId: string | null }
   | { kind: 'request-review' }
-  | { kind: 'settings' };
+  | { kind: 'settings' }
+  | { kind: 'ai-settings' };
 
 /** Pedido para o editor de código mostrar uma linha (vem da lista de erros da compilação). */
 export interface RevealRequest {

@@ -71,7 +71,7 @@ Escala: `text-xs` (metadados, barras de painel), `text-sm` (padrão da interface
 - Raio base `--radius: 0.75rem`; `rounded-lg` (9px), `rounded-md` (6px) e `rounded-sm` (3px) derivam dele (`--radius` menos 3, 6 e 9px).
 - Altura do cabeçalho do editor: token `--header-height` (`h-header`, 3rem).
 - Barras de painel (nome do arquivo, zoom do PDF): `h-9`.
-- Elevação: `shadow-sm` em botões, `shadow-md` em páginas de PDF e menus, `shadow-2xl` só no painel flutuante de IA.
+- Elevação: `shadow-sm` em botões, `shadow-md` em páginas de PDF e menus, `shadow-2xl` só na janela do assistente de IA (encaixada no rodapé com os cantos de baixo retos, ou solta com todos os cantos redondos).
 - Modais abrem e fecham como **TV antiga** (`.tv-screen` e `.scrim` em `globals.css`): ao abrir, um ponto luminoso vira linha horizontal e a linha se abre na vertical enquanto o brilho se apaga (520 ms); ao fechar, a imagem achata numa linha, a linha vira ponto e some (420 ms). O fundo ganha opacidade junto e perde ao fechar. A animação usa a propriedade `scale`, que não interfere no `translate` que centraliza o diálogo. Com "reduzir movimento" no sistema, vira um esmaecimento de 150 ms. Menus laterais (`Sheet`) continuam deslizando, com o mesmo fundo.
 
 ## 5. Ícones

@@ -3,6 +3,7 @@ import { Link, useParams } from 'wouter';
 import { FullPageStatus } from '@/components/common/full-page-status';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AiSettingsDialog } from '@/features/ai-assistant/components/ai-settings-dialog';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { ChangesDialog } from '@/features/diff/components/changes-dialog';
 import { EditorShell } from '@/features/editor/components/editor-shell';
@@ -39,10 +40,15 @@ function EditorDialogs({ project, currentUid }: { project: ProjectInfo; currentU
     if (fileId) revealLine(fileId, issue.line ?? 1);
   };
 
+  // A IA usa a chave de quem está usando (na conta ou neste navegador): funciona até no modo demonstração.
+  const aiSettings = <AiSettingsDialog open={dialog?.kind === 'ai-settings'} onOpenChange={setOpen} />;
+
   // Modo demonstração: nada é salvo, então versões, revisões e membros não existem.
   if (status === 'demo') {
     return (
-      <Dialog open={dialog !== null} onOpenChange={setOpen}>
+      <>
+      {aiSettings}
+      <Dialog open={dialog !== null && dialog.kind !== 'ai-settings'} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Disponível com o Firebase configurado</DialogTitle>
@@ -53,12 +59,14 @@ function EditorDialogs({ project, currentUid }: { project: ProjectInfo; currentU
           </DialogHeader>
         </DialogContent>
       </Dialog>
+      </>
     );
   }
 
   const isHistoryOpen = dialog?.kind === 'history';
   return (
     <>
+      {aiSettings}
       <VersionHistorySheet
         open={isHistoryOpen}
         onOpenChange={setOpen}

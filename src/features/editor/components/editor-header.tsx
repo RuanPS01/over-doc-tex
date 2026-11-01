@@ -146,6 +146,10 @@ export function EditorHeader({ projectName, layoutMode }: EditorHeaderProps) {
             <Settings />
             Configurações do projeto
           </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => openDialog({ kind: 'ai-settings' })}>
+            <Sparkles />
+            Configurações de IA
+          </DropdownMenuItem>
           {/* No celular o botão de tema não cabe na barra: as opções vêm aqui. */}
           <DropdownMenuSeparator className="sm:hidden" />
           <ThemeMenuItems className="sm:hidden" />
