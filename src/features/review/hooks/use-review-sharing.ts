@@ -5,6 +5,7 @@ import { firestorePaths } from '@shared/firestore/paths';
 import type { ReviewAccess } from '@shared/firestore/types';
 import { emailLinkUrl } from '@/lib/email';
 import { getFirebase } from '@/lib/firebase/app';
+import { t } from '@/lib/i18n';
 import { newLinkToken, reviewPath, type ReviewSummary } from '../model/review';
 
 /**
@@ -29,7 +30,7 @@ export function useReviewSharing(review: ReviewSummary, enabled: boolean) {
 
   const uid = () => {
     const current = getFirebase().auth.currentUser;
-    if (!current) throw new Error('Entre na sua conta para mudar o envio da revisão.');
+    if (!current) throw new Error(t('Entre na sua conta para mudar o envio da revisão.'));
     return current.uid;
   };
 

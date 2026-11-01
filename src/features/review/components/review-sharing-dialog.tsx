@@ -3,6 +3,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { useT } from '@/hooks/use-t';
 import type { ReviewAccess } from '@shared/firestore/types';
 import { useReviewSharing } from '../hooks/use-review-sharing';
 import { parseEmails, reviewLinkUrl, type ReviewSummary } from '../model/review';
@@ -20,6 +21,7 @@ interface ReviewSharingDialogProps {
  * com "Copiar" e "Gerar novo link", e mais e-mails convidados.
  */
 export function ReviewSharingDialog({ open, onOpenChange, review }: ReviewSharingDialogProps) {
+  const { t } = useT();
   const sharing = useReviewSharing(review, open);
   const [busy, setBusy] = useState<'access' | 'link' | 'emails' | null>(null);
   const [emails, setEmails] = useState('');
@@ -43,7 +45,7 @@ export function ReviewSharingDialog({ open, onOpenChange, review }: ReviewSharin
     try {
       setMessage(await action());
     } catch (caught) {
-      setError(caught instanceof Error && caught.message ? caught.message : 'Não foi possível salvar. Confira a conexão e tente de novo.');
+      setError(caught instanceof Error && caught.message ? caught.message : t('Não foi possível salvar. Confira a conexão e tente de novo.'));
     } finally {
       setBusy(null);
     }
@@ -53,7 +55,9 @@ export function ReviewSharingDialog({ open, onOpenChange, review }: ReviewSharin
     if (access === review.access) return;
     void run('access', async () => {
       await sharing.setAccess(access);
-      return access === 'link' ? 'Pronto: qualquer pessoa com o link pode revisar sem conta.' : 'Pronto: só os e-mails convidados abrem a revisão. Quem entrou pelo link perdeu o acesso.';
+      return access === 'link'
+        ? t('Pronto: qualquer pessoa com o link pode revisar sem conta.')
+        : t('Pronto: só os e-mails convidados abrem a revisão. Quem entrou pelo link perdeu o acesso.');
     });
   };
 
@@ -63,23 +67,26 @@ export function ReviewSharingDialog({ open, onOpenChange, review }: ReviewSharin
     setCopied(false);
     void run('link', async () => {
       await sharing.regenerateLink();
-      return 'Link novo gerado. O anterior parou de funcionar.';
+      return t('Link novo gerado. O anterior parou de funcionar.');
     });
   };
 
   const invite = (event: FormEvent) => {
     event.preventDefault();
     const { valid, invalid } = parseEmails(emails);
-    if (invalid.length > 0) return setError(`E-mail inválido: ${invalid.join(', ')}.`);
-    if (valid.length === 0) return setError('Informe pelo menos um e-mail.');
+    if (invalid.length > 0) return setError(t('E-mail inválido: {emails}.', { emails: invalid.join(', ') }));
+    if (valid.length === 0) return setError(t('Informe pelo menos um e-mail.'));
     void run('emails', async () => {
       const { added, emailed } = await sharing.addEmails(valid);
       setEmails('');
-      if (added === 0) return 'Esses e-mails já estavam convidados.';
-      const who = added === 1 ? '1 e-mail convidado' : `${added} e-mails convidados`;
+      if (added === 0) return t('Esses e-mails já estavam convidados.');
+      const who = added === 1 ? t('1 e-mail convidado') : t('{count} e-mails convidados', { count: added });
       return emailed === added
-        ? `${who}; o link de acesso foi enviado por e-mail.`
-        : `${who}. O envio automático falhou para ${added - emailed} (ative "Link de e-mail" no Firebase Authentication) e o convite pode ser mandado pelo link da revisão.`;
+        ? t('{who}; o link de acesso foi enviado por e-mail.', { who })
+        : t(
+            '{who}. O envio automático falhou para {failed} (ative "Link de e-mail" no Firebase Authentication) e o convite pode ser mandado pelo link da revisão.',
+            { who, failed: added - emailed },
+          );
     });
   };
 
@@ -89,8 +96,8 @@ export function ReviewSharingDialog({ open, onOpenChange, review }: ReviewSharin
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[calc(100dvh-1rem)] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Envio da revisão #{review.number}</DialogTitle>
-          <DialogDescription>Quem pode abrir esta revisão e quem foi convidado. As mudanças valem na hora.</DialogDescription>
+          <DialogTitle>{t('Envio da revisão #{number}', { number: review.number })}</DialogTitle>
+          <DialogDescription>{t('Quem pode abrir esta revisão e quem foi convidado. As mudanças valem na hora.')}</DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-4 text-sm">
@@ -98,21 +105,21 @@ export function ReviewSharingDialog({ open, onOpenChange, review }: ReviewSharin
 
           {review.access === 'link' && (
             <section className="flex flex-col gap-2">
-              <h3 className="font-medium">Link de acesso sem conta</h3>
+              <h3 className="font-medium">{t('Link de acesso sem conta')}</h3>
               {sharing.isLoadingLinks || busy === 'access' ? (
                 <p className="flex items-center gap-2 text-muted-foreground">
                   <Loader2 className="size-4 animate-spin" />
-                  Preparando o link
+                  {t('Preparando o link')}
                 </p>
               ) : link ? (
                 <>
                   <div className="flex min-w-0 gap-2">
-                    <Input readOnly value={link} aria-label="Link da revisão sem conta" className="min-w-0 flex-1 font-mono text-xs" />
+                    <Input readOnly value={link} aria-label={t('Link da revisão sem conta')} className="min-w-0 flex-1 font-mono text-xs" />
                     <Button
                       type="button"
                       variant="outline"
                       size="icon"
-                      aria-label="Copiar link"
+                      aria-label={t('Copiar link')}
                       onClick={() => void navigator.clipboard.writeText(link).then(() => setCopied(true))}
                     >
                       {copied ? <Check /> : <Copy />}
@@ -120,20 +127,20 @@ export function ReviewSharingDialog({ open, onOpenChange, review }: ReviewSharin
                   </div>
                   <Button type="button" variant="ghost" size="sm" className="self-start" disabled={busy !== null} onClick={regenerate}>
                     {busy === 'link' ? <Loader2 className="animate-spin" /> : <RefreshCw />}
-                    {confirmRegenerate ? 'Clique de novo: o link atual vai parar de funcionar' : 'Gerar novo link'}
+                    {confirmRegenerate ? t('Clique de novo: o link atual vai parar de funcionar') : t('Gerar novo link')}
                   </Button>
                 </>
               ) : (
                 <Button type="button" variant="outline" size="sm" className="self-start" disabled={busy !== null} onClick={regenerate}>
                   <RefreshCw />
-                  Gerar o link
+                  {t('Gerar o link')}
                 </Button>
               )}
             </section>
           )}
 
           <section className="flex flex-col gap-2">
-            <h3 className="font-medium">E-mails convidados</h3>
+            <h3 className="font-medium">{t('E-mails convidados')}</h3>
             {review.reviewerEmails.length > 0 ? (
               <ul className="flex flex-wrap gap-1.5">
                 {review.reviewerEmails.map((email) => (
@@ -143,25 +150,26 @@ export function ReviewSharingDialog({ open, onOpenChange, review }: ReviewSharin
                 ))}
               </ul>
             ) : (
-              <p className="text-muted-foreground">Ninguém foi convidado por e-mail ainda.</p>
+              <p className="text-muted-foreground">{t('Ninguém foi convidado por e-mail ainda.')}</p>
             )}
             <form onSubmit={invite} className="flex min-w-0 flex-col gap-2 sm:flex-row">
               <Input
                 value={emails}
                 disabled={busy !== null}
-                aria-label="E-mails para convidar"
-                placeholder="revisora@universidade.br, outro@empresa.com"
+                aria-label={t('E-mails para convidar')}
+                placeholder={t('revisora@universidade.br, outro@empresa.com')}
                 onChange={(event) => setEmails(event.target.value)}
                 className="min-w-0 flex-1"
               />
               <Button type="submit" disabled={busy !== null || !emails.trim()}>
                 {busy === 'emails' ? <Loader2 className="animate-spin" /> : <UserPlus />}
-                Convidar
+                {t('Convidar')}
               </Button>
             </form>
             <p className="text-xs text-muted-foreground">
-              Cada e-mail recebe o link de acesso e vê os mesmos documentos desta revisão. Com acesso pelo link, os convidados por e-mail também
-              podem entrar com a conta deles.
+              {t(
+                'Cada e-mail recebe o link de acesso e vê os mesmos documentos desta revisão. Com acesso pelo link, os convidados por e-mail também podem entrar com a conta deles.',
+              )}
             </p>
           </section>
 

@@ -1,11 +1,13 @@
 import type { AnnotationColor, CommentDoc, NormalizedPoint, ReviewAccess, ReviewDoc, ReviewStatus, Stroke, TextAnchor, ThreadDoc } from '@shared/firestore/types';
+import { msg, t } from '@/lib/i18n';
 
+/** Rótulos são chaves de tradução (msg): quem mostra chama t(). */
 export const REVIEW_STATUS_LABELS: Record<ReviewStatus, string> = {
-  invited: 'Aguardando o revisor',
-  in_review: 'Em revisão',
-  changes_requested: 'Alterações pedidas',
-  approved: 'Aprovada',
-  closed: 'Encerrada',
+  invited: msg('Aguardando o revisor'),
+  in_review: msg('Em revisão'),
+  changes_requested: msg('Alterações pedidas'),
+  approved: msg('Aprovada'),
+  closed: msg('Encerrada'),
 };
 
 export const MAX_COMMENT_LENGTH = 10_000;
@@ -39,7 +41,7 @@ export function toReviewSummary(projectId: string, id: string, data: ReviewDoc):
 export function reviewerLabel(review: Pick<ReviewSummary, 'reviewerName' | 'reviewerEmails' | 'access'>): string {
   if (review.reviewerName) return review.reviewerName;
   if (review.reviewerEmails.length > 0) return review.reviewerEmails.length === 1 ? review.reviewerEmails[0]! : `${review.reviewerEmails[0]} +${review.reviewerEmails.length - 1}`;
-  return review.access === 'link' ? 'Revisão pelo link' : '';
+  return review.access === 'link' ? t('Revisão pelo link') : '';
 }
 
 /**
@@ -125,10 +127,10 @@ export type PendingAnnotation =
 export const ANNOTATION_COLORS: AnnotationColor[] = ['annotation-2', 'annotation-3', 'annotation-4', 'annotation-1'];
 
 export const ANNOTATION_COLOR_LABELS: Record<AnnotationColor, string> = {
-  'annotation-1': 'Amarelo',
-  'annotation-2': 'Vermelho',
-  'annotation-3': 'Azul',
-  'annotation-4': 'Verde',
+  'annotation-1': msg('Amarelo'),
+  'annotation-2': msg('Vermelho'),
+  'annotation-3': msg('Azul'),
+  'annotation-4': msg('Verde'),
 };
 
 /** Página e ponto de referência de qualquer âncora (para ordenar e rolar até ela). */

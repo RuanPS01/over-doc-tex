@@ -41,7 +41,7 @@ export function DiffPdfViewer({ diff, loadingLabel, error, fileName }: DiffPdfVi
     return (
       <p className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
         {loadingLabel ? <Loader2 className="size-4 animate-spin" /> : null}
-        {loadingLabel ?? t('A comparação em PDF não compilou; veja a aba Texto.')}
+        {loadingLabel ?? t('A comparação em PDF não compilou; veja as alterações na outra aba.')}
       </p>
     );
   }

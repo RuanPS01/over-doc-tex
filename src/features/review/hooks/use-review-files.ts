@@ -6,6 +6,7 @@ import { diffKeyOf, readCachedDiff, useVisualDiff, type VisualDiff } from '@/fea
 import { useSnapshotFiles } from '@/features/snapshots/hooks/use-snapshot-files';
 import { diffText, normalizePdfText, type DiffSegment } from '@/lib/diff/word-diff';
 import { getFirebase } from '@/lib/firebase/app';
+import { t } from '@/lib/i18n';
 import type { SyncData } from '@/lib/latex/synctex';
 import type { ReviewSummary } from '../model/review';
 
@@ -38,7 +39,7 @@ function useSnapshotValue<T>(load: (() => Promise<T>) | null, deps: readonly unk
 /** Documentos que o revisor pode abrir nesta revisão (títulos lidos do snapshot). */
 export function useReviewDocuments(review: ReviewSummary): ReviewDocument[] {
   const [documents, setDocuments] = useState<ReviewDocument[]>(() =>
-    review.grantedDocumentIds.map((id) => ({ id, title: id === 'main' ? 'Documento principal' : id, hasSynctex: false })),
+    review.grantedDocumentIds.map((id) => ({ id, title: id === 'main' ? t('Documento principal') : id, hasSynctex: false })),
   );
   useEffect(() => {
     let cancelled = false;
@@ -64,7 +65,7 @@ export function useReviewDocuments(review: ReviewSummary): ReviewDocument[] {
 /** PDF de um documento da versão em revisão (membros e o revisor com o documento no grant). */
 export function useReviewPdf(review: ReviewSummary, documentId: string) {
   const { readPdf } = useSnapshotFiles(review.projectId);
-  const { value, error } = useSnapshotValue(() => readPdf(review.snapshotId, documentId), [readPdf, review.snapshotId, documentId], 'Não foi possível abrir o PDF desta versão.');
+  const { value, error } = useSnapshotValue(() => readPdf(review.snapshotId, documentId), [readPdf, review.snapshotId, documentId], t('Não foi possível abrir o PDF desta versão.'));
   return { pdf: value, error };
 }
 
@@ -95,7 +96,7 @@ export function usePageTextDiff(review: ReviewSummary, documentId: string, enabl
         }
       : null,
     [enabled, base, review.snapshotId, documentId, readPageTexts],
-    'Não foi possível ler a versão anterior. Ela pode não ter sido liberada para você.',
+    t('Não foi possível ler a versão anterior. Ela pode não ter sido liberada para você.'),
   );
   return { segments: value, error };
 }
@@ -115,7 +116,7 @@ export function useReviewVisualDiff(review: ReviewSummary, documentId: string, e
             : ((await readCachedDiff(review.projectId, diffKeyOf(base, review.snapshotId, documentId))) ?? 'missing')
       : null,
     [enabled, base, review.snapshotId, documentId, role, betweenVersions],
-    'Não foi possível abrir a comparação em PDF.',
+    t('Não foi possível abrir a comparação em PDF.'),
   );
   return { diff: value === 'missing' ? null : value, missing: value === 'missing', error };
 }

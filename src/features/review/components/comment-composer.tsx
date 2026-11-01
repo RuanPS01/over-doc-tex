@@ -2,6 +2,7 @@ import { Loader2, Send } from 'lucide-react';
 import { useState, type FormEvent, type KeyboardEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { useT } from '@/hooks/use-t';
 import { MAX_COMMENT_LENGTH } from '../model/review';
 
 interface CommentComposerProps {
@@ -14,6 +15,7 @@ interface CommentComposerProps {
 
 /** Caixa de comentário: Enter envia, Shift+Enter quebra a linha. */
 export function CommentComposer({ placeholder, submitLabel, autoFocus, onSubmit, onCancel }: CommentComposerProps) {
+  const { t } = useT();
   const [body, setBody] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,7 +30,7 @@ export function CommentComposer({ placeholder, submitLabel, autoFocus, onSubmit,
       await onSubmit(text);
       setBody('');
     } catch {
-      setError('Não foi possível enviar. Confira a conexão e tente de novo.');
+      setError(t('Não foi possível enviar. Confira a conexão e tente de novo.'));
     } finally {
       setIsSending(false);
     }
@@ -58,7 +60,7 @@ export function CommentComposer({ placeholder, submitLabel, autoFocus, onSubmit,
       <div className="flex justify-end gap-2">
         {onCancel && (
           <Button type="button" variant="ghost" size="sm" disabled={isSending} onClick={onCancel}>
-            Cancelar
+            {t('Cancelar')}
           </Button>
         )}
         <Button type="submit" size="sm" disabled={!body.trim() || isSending}>

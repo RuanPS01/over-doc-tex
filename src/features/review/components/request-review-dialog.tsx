@@ -7,6 +7,8 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { FREEZE_STAGE_LABELS } from '@/features/snapshots/components/freeze-version-form';
 import { IssueList } from '@/features/snapshots/components/issue-list';
+import { useT } from '@/hooks/use-t';
+import { msg } from '@/lib/i18n';
 import type { TexIssue } from '@/lib/latex/prepare';
 import { FreezeError, useRequestReview, type RequestReviewResult, type RequestStage } from '../hooks/use-request-review';
 import type { ReviewAccess } from '@shared/firestore/types';
@@ -14,7 +16,7 @@ import { reviewLinkUrl, reviewPath } from '../model/review';
 import { normalizeEmail } from '@/lib/email';
 import { ReviewAccessChoice } from './review-access-choice';
 
-const STAGE_LABELS: Record<RequestStage, string> = { ...FREEZE_STAGE_LABELS, opening: 'Abrindo a revisão', diff: 'Gerando a comparação em PDF', carry: 'Levando os comentários abertos' };
+const STAGE_LABELS: Record<RequestStage, string> = { ...FREEZE_STAGE_LABELS, opening: msg('Abrindo a revisão'), diff: msg('Gerando a comparação em PDF'), carry: msg('Levando os comentários abertos') };
 
 interface RequestReviewDialogProps {
   open: boolean;
@@ -28,6 +30,7 @@ interface RequestReviewDialogProps {
 
 /** Congela a versão (se mudou), abre a revisão e convida o revisor por e-mail ou pelo link. */
 export function RequestReviewDialog({ open, onOpenChange, projectId, projectName, documents, onIssueSelect }: RequestReviewDialogProps) {
+  const { t } = useT();
   const requestReview = useRequestReview(projectId, projectName);
   const [access, setAccess] = useState<ReviewAccess>('email');
   const [email, setEmail] = useState('');
@@ -55,7 +58,7 @@ export function RequestReviewDialog({ open, onOpenChange, projectId, projectName
     const reviewerEmail = normalizeEmail(email);
     // Pelo link, o e-mail é opcional; por e-mail, é ele que dá o acesso.
     if (!reviewerEmail && (access === 'email' || email.trim())) {
-      setError('Informe um e-mail válido para o revisor.');
+      setError(t('Informe um e-mail válido para o revisor.'));
       return;
     }
     setError(null);
@@ -64,7 +67,7 @@ export function RequestReviewDialog({ open, onOpenChange, projectId, projectName
       const created = await requestReview({
         access,
         reviewerEmail: reviewerEmail ?? '',
-        title: title.trim() || `Revisão de ${projectName}`,
+        title: title.trim() || t('Revisão de {project}', { project: projectName }),
         description,
         documentIds: secondaryIds.filter((id) => secondaries.some((document) => document.id === id)),
         onStage: setStage,
@@ -74,7 +77,7 @@ export function RequestReviewDialog({ open, onOpenChange, projectId, projectName
       setTitle('');
       setDescription('');
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Não foi possível abrir a revisão.');
+      setError(caught instanceof Error ? caught.message : t('Não foi possível abrir a revisão.'));
       if (caught instanceof FreezeError) setIssues(caught.issues);
     } finally {
       setStage(null);
@@ -88,10 +91,18 @@ export function RequestReviewDialog({ open, onOpenChange, projectId, projectName
       ? reviewLinkUrl(window.location.origin, import.meta.env.BASE_URL, { projectId, id: result.reviewId, snapshotId: result.snapshotId }, result.linkToken)
       : new URL(`${import.meta.env.BASE_URL}${reviewPath(projectId, result.reviewId).slice(1)}`, window.location.origin).href;
   const mailto = result
-    ? `mailto:${result.email}?subject=${encodeURIComponent(`Revisão #${result.number}: ${projectName}`)}&body=${encodeURIComponent(
+    ? `mailto:${result.email}?subject=${encodeURIComponent(t('Revisão #{number}: {project}', { number: result.number, project: projectName }))}&body=${encodeURIComponent(
         result.linkToken
-          ? `Olá! Você foi convidado para revisar a versão ${result.snapshotLabel} de "${projectName}".\n\nAbra: ${link}\n\nNão precisa de conta: basta informar o seu nome.`
-          : `Olá! Você foi convidado para revisar a versão ${result.snapshotLabel} de "${projectName}".\n\nAbra: ${link}\n\nEntre com o Google ou com o link de acesso enviado para este e-mail.`,
+          ? t('Olá! Você foi convidado para revisar a versão {version} de "{project}".\n\nAbra: {link}\n\nNão precisa de conta: basta informar o seu nome.', {
+              version: result.snapshotLabel,
+              project: projectName,
+              link,
+            })
+          : t('Olá! Você foi convidado para revisar a versão {version} de "{project}".\n\nAbra: {link}\n\nEntre com o Google ou com o link de acesso enviado para este e-mail.', {
+              version: result.snapshotLabel,
+              project: projectName,
+              link,
+            }),
       )}`
     : '';
 
@@ -99,42 +110,42 @@ export function RequestReviewDialog({ open, onOpenChange, projectId, projectName
     <Dialog open={open} onOpenChange={(next) => !isBusy && onOpenChange(next)}>
       <DialogContent className="max-h-[calc(100dvh-1rem)] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{result ? `Revisão #${result.number} aberta` : 'Solicitar revisão'}</DialogTitle>
+          <DialogTitle>{result ? t('Revisão #{number} aberta', { number: result.number }) : t('Solicitar revisão')}</DialogTitle>
           <DialogDescription>
             {result
               ? result.linkToken
-                ? `Qualquer pessoa com o link pode ver o PDF da versão ${result.snapshotLabel} e comentar nele, sem conta, informando o nome.`
-                : `${result.email} pode ver o PDF da versão ${result.snapshotLabel} e comentar nele.`
-              : 'O revisor vê só o PDF da versão congelada, nunca o rascunho. Se o código mudou desde a última versão, uma nova é congelada.'}
+                ? t('Qualquer pessoa com o link pode ver o PDF da versão {version} e comentar nele, sem conta, informando o nome.', { version: result.snapshotLabel })
+                : t('{email} pode ver o PDF da versão {version} e comentar nele.', { email: result.email, version: result.snapshotLabel })
+              : t('O revisor vê só o PDF da versão congelada, nunca o rascunho. Se o código mudou desde a última versão, uma nova é congelada.')}
           </DialogDescription>
         </DialogHeader>
 
         {result ? (
           <div className="flex flex-col gap-3 text-sm">
-            {result.frozeNewVersion && <p>A versão {result.snapshotLabel} foi congelada para esta revisão.</p>}
+            {result.frozeNewVersion && <p>{t('A versão {version} foi congelada para esta revisão.', { version: result.snapshotLabel })}</p>}
             {result.carriedThreads > 0 && (
               <p>
                 {result.carriedThreads === 1
-                  ? '1 comentário ainda aberto da rodada anterior veio junto.'
-                  : `${result.carriedThreads} comentários ainda abertos da rodada anterior vieram junto.`}
+                  ? t('1 comentário ainda aberto da rodada anterior veio junto.')
+                  : t('{count} comentários ainda abertos da rodada anterior vieram junto.', { count: result.carriedThreads })}
               </p>
             )}
             {result.email ? (
               <p className={result.emailSent ? undefined : 'rounded-md border border-warning/50 bg-warning/10 p-2'}>
                 {result.emailSent
-                  ? 'O convite com o link de acesso foi enviado por e-mail.'
-                  : 'Não foi possível enviar o convite automático (ative "Link de e-mail" em Authentication no Firebase). Envie o link abaixo.'}
+                  ? t('O convite com o link de acesso foi enviado por e-mail.')
+                  : t('Não foi possível enviar o convite automático (ative "Link de e-mail" em Authentication no Firebase). Envie o link abaixo.')}
               </p>
             ) : (
-              <p>Envie o link abaixo para quem vai revisar. Quem tiver o link entra sem conta.</p>
+              <p>{t('Envie o link abaixo para quem vai revisar. Quem tiver o link entra sem conta.')}</p>
             )}
             <div className="flex min-w-0 gap-2">
-              <Input readOnly value={link} aria-label="Link da revisão" className="min-w-0 flex-1 font-mono text-xs" />
+              <Input readOnly value={link} aria-label={t('Link da revisão')} className="min-w-0 flex-1 font-mono text-xs" />
               <Button
                 type="button"
                 variant="outline"
                 size="icon"
-                aria-label="Copiar link"
+                aria-label={t('Copiar link')}
                 onClick={() => void navigator.clipboard.writeText(link).then(() => setCopied(true))}
               >
                 {copied ? <Check /> : <Copy />}
@@ -145,14 +156,14 @@ export function RequestReviewDialog({ open, onOpenChange, projectId, projectName
                 <Button variant="outline" asChild>
                   <a href={mailto}>
                     <Mail />
-                    Enviar pelo meu e-mail
+                    {t('Enviar pelo meu e-mail')}
                   </a>
                 </Button>
               )}
               <Button asChild>
                 <Link href={reviewPath(projectId, result.reviewId)}>
                   <ExternalLink />
-                  Abrir a revisão
+                  {t('Abrir a revisão')}
                 </Link>
               </Button>
             </DialogFooter>
@@ -161,38 +172,38 @@ export function RequestReviewDialog({ open, onOpenChange, projectId, projectName
           <form onSubmit={(event) => void handleSubmit(event)} className="flex flex-col gap-3">
             <ReviewAccessChoice value={access} disabled={isBusy} onChange={setAccess} />
             <label className="flex flex-col gap-1 text-sm font-medium">
-              {access === 'link' ? 'E-mail do revisor (opcional)' : 'E-mail do revisor'}
+              {access === 'link' ? t('E-mail do revisor (opcional)') : t('E-mail do revisor')}
               <Input
                 type="email"
                 required={access === 'email'}
                 autoComplete="off"
                 disabled={isBusy}
                 value={email}
-                placeholder="revisor@universidade.br"
+                placeholder={t('revisor@universidade.br')}
                 onChange={(event) => setEmail(event.target.value)}
               />
             </label>
             <label className="flex flex-col gap-1 text-sm font-medium">
-              Título
-              <Input disabled={isBusy} value={title} maxLength={200} placeholder={`Revisão de ${projectName}`} onChange={(event) => setTitle(event.target.value)} />
+              {t('Título')}
+              <Input disabled={isBusy} value={title} maxLength={200} placeholder={t('Revisão de {project}', { project: projectName })} onChange={(event) => setTitle(event.target.value)} />
             </label>
             <label className="flex flex-col gap-1 text-sm font-medium">
-              Mensagem (opcional)
+              {t('Mensagem (opcional)')}
               <Textarea
                 disabled={isBusy}
                 value={description}
                 rows={3}
                 maxLength={2000}
-                placeholder="O que o revisor deve olhar com atenção"
+                placeholder={t('O que o revisor deve olhar com atenção')}
                 onChange={(event) => setDescription(event.target.value)}
               />
             </label>
             {secondaries.length > 0 && (
               <fieldset className="flex flex-col gap-1.5 text-sm">
-                <legend className="mb-1 font-medium">Documentos que o revisor vê</legend>
+                <legend className="mb-1 font-medium">{t('Documentos que o revisor vê')}</legend>
                 <label className="flex items-center gap-2 text-muted-foreground">
                   <input type="checkbox" checked disabled className="size-4 accent-primary" />
-                  {documents.find((document) => document.role === 'main')?.title ?? 'Documento principal'} (principal)
+                  {t('{title} (principal)', { title: documents.find((document) => document.role === 'main')?.title ?? t('Documento principal') })}
                 </label>
                 {secondaries.map((document) => (
                   <label key={document.id} className="flex min-w-0 items-center gap-2">
@@ -226,11 +237,11 @@ export function RequestReviewDialog({ open, onOpenChange, projectId, projectName
             />
             <DialogFooter>
               <Button type="button" variant="outline" disabled={isBusy} onClick={() => onOpenChange(false)}>
-                Cancelar
+                {t('Cancelar')}
               </Button>
               <Button type="submit" disabled={isBusy}>
                 {isBusy ? <Loader2 className="animate-spin" /> : <Send />}
-                {stage ? STAGE_LABELS[stage] : 'Solicitar revisão'}
+                {stage ? t(STAGE_LABELS[stage]) : t('Solicitar revisão')}
               </Button>
             </DialogFooter>
           </form>

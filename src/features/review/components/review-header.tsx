@@ -12,11 +12,14 @@ import {
 } from '@/components/ui/dropdown-menu';
 import type { ParticipantRole, ReviewStatus } from '@shared/firestore/types';
 import { NotificationBell } from '@/features/notifications/components/notification-bell';
+import { useT } from '@/hooks/use-t';
+import { msg } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { REVIEW_STATUS_LABELS, reviewerLabel, type ReviewSummary } from '../model/review';
 
 interface StatusAction {
   status: ReviewStatus;
+  /** Chave de tradução (msg): mostrada com t(). */
   label: string;
   icon: ReactNode;
 }
@@ -25,13 +28,13 @@ interface StatusAction {
 function statusActions(role: ParticipantRole, status: ReviewStatus): StatusAction[] {
   if (role === 'author') {
     return status === 'closed'
-      ? [{ status: 'in_review', label: 'Reabrir', icon: <RotateCcw /> }]
-      : [{ status: 'closed', label: 'Encerrar revisão', icon: <XCircle /> }];
+      ? [{ status: 'in_review', label: msg('Reabrir'), icon: <RotateCcw /> }]
+      : [{ status: 'closed', label: msg('Encerrar revisão'), icon: <XCircle /> }];
   }
   if (status === 'closed' || status === 'invited') return [];
   const actions: StatusAction[] = [];
-  if (status !== 'changes_requested') actions.push({ status: 'changes_requested', label: 'Pedir alterações', icon: <TriangleAlert /> });
-  if (status !== 'approved') actions.push({ status: 'approved', label: 'Aprovar', icon: <CheckCircle2 /> });
+  if (status !== 'changes_requested') actions.push({ status: 'changes_requested', label: msg('Pedir alterações'), icon: <TriangleAlert /> });
+  if (status !== 'approved') actions.push({ status: 'approved', label: msg('Aprovar'), icon: <CheckCircle2 /> });
   return actions;
 }
 
@@ -49,6 +52,7 @@ interface ReviewHeaderProps {
 
 /** Cabeçalho travado da revisão: versão, status e ações do autor ou do revisor. */
 export function ReviewHeader({ review, role, onShowChanges, onStatusChange, onOpenSharing, guestName, onChangeGuestName }: ReviewHeaderProps) {
+  const { t } = useT();
   const actions = statusActions(role, review.status);
   const backHref = role === 'author' ? `/p/${review.projectId}` : '/';
   // Quem entrou pelo link não tem lista de projetos para onde voltar.
@@ -58,7 +62,7 @@ export function ReviewHeader({ review, role, onShowChanges, onStatusChange, onOp
     <header className="flex h-header shrink-0 items-center gap-1 border-b bg-background px-2 pt-safe">
       {showBack && (
         <Button variant="ghost" size="icon" asChild>
-          <Link href={backHref} aria-label={role === 'author' ? 'Voltar ao editor' : 'Voltar aos projetos'}>
+          <Link href={backHref} aria-label={role === 'author' ? t('Voltar ao editor') : t('Voltar aos projetos')}>
             <ArrowLeft />
           </Link>
         </Button>
@@ -68,14 +72,14 @@ export function ReviewHeader({ review, role, onShowChanges, onStatusChange, onOp
           #{review.number} {review.title}
         </h1>
         <p className="truncate text-xs text-muted-foreground">
-          Versão {review.snapshotLabel} · {REVIEW_STATUS_LABELS[review.status]}
+          {t('Versão {version}', { version: review.snapshotLabel })} · {t(REVIEW_STATUS_LABELS[review.status])}
           {role === 'author' ? ` · ${reviewerLabel(review)}` : ` · ${review.projectName}`}
         </p>
       </div>
       {review.baseSnapshotId && (
         <Button variant="ghost" size="sm" className="hidden md:inline-flex" onClick={onShowChanges}>
           <GitCompare />
-          Ver alterações
+          {t('Ver alterações')}
         </Button>
       )}
       {actions.map((action) => (
@@ -87,19 +91,19 @@ export function ReviewHeader({ review, role, onShowChanges, onStatusChange, onOp
           onClick={() => onStatusChange(action.status)}
         >
           {action.icon}
-          {action.label}
+          {t(action.label)}
         </Button>
       ))}
       {guestName && onChangeGuestName && (
-        <Button variant="ghost" size="sm" className="max-w-[40%] shrink" title="Trocar o nome com que você comenta" onClick={onChangeGuestName}>
+        <Button variant="ghost" size="sm" className="max-w-[40%] shrink" title={t('Trocar o nome com que você comenta')} onClick={onChangeGuestName}>
           <UserRound />
           <span className="truncate">{guestName}</span>
         </Button>
       )}
       {onOpenSharing && (
-        <Button variant="outline" size="sm" className="px-2 sm:px-3" aria-label="Envio da revisão" title="E-mails convidados e tipo de acesso" onClick={onOpenSharing}>
+        <Button variant="outline" size="sm" className="px-2 sm:px-3" aria-label={t('Envio da revisão')} title={t('E-mails convidados e tipo de acesso')} onClick={onOpenSharing}>
           <Share2 />
-          <span className="hidden sm:inline">Envio</span>
+          <span className="hidden sm:inline">{t('Envio')}</span>
         </Button>
       )}
       <LanguageMenu />
@@ -108,7 +112,7 @@ export function ReviewHeader({ review, role, onShowChanges, onStatusChange, onOp
       {(actions.length > 0 || review.baseSnapshotId) && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" aria-label="Mais ações" className={cn('lg:hidden', actions.length === 0 && 'md:hidden')}>
+            <Button variant="ghost" size="icon" aria-label={t('Mais ações')} className={cn('lg:hidden', actions.length === 0 && 'md:hidden')}>
               <MoreVertical />
             </Button>
           </DropdownMenuTrigger>
@@ -116,13 +120,13 @@ export function ReviewHeader({ review, role, onShowChanges, onStatusChange, onOp
             {review.baseSnapshotId && (
               <DropdownMenuItem className="md:hidden" onSelect={onShowChanges}>
                 <GitCompare />
-                Ver alterações
+                {t('Ver alterações')}
               </DropdownMenuItem>
             )}
             {actions.map((action) => (
               <DropdownMenuItem key={action.status} className="lg:hidden" onSelect={() => onStatusChange(action.status)}>
                 {action.icon}
-                {action.label}
+                {t(action.label)}
               </DropdownMenuItem>
             ))}
           </DropdownMenuContent>

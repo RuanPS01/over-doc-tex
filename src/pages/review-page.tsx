@@ -6,6 +6,7 @@ import { roleOf, useProject } from '@/features/projects/hooks/use-project';
 import { GuestReviewGate } from '@/features/review/components/guest-review-gate';
 import { ReviewWorkspace } from '@/features/review/components/review-workspace';
 import { useReview } from '@/features/review/hooks/use-review';
+import { useT } from '@/hooks/use-t';
 
 interface ReviewLink {
   token: string;
@@ -32,13 +33,14 @@ function GuestWorkspace({
   identity: { name: string; key: string };
   onChangeName: () => void;
 }) {
+  const { t } = useT();
   const { data: review, isPending } = useReview(projectId, reviewId);
-  if (isPending) return <FullPageStatus title="Abrindo a revisão" loading />;
+  if (isPending) return <FullPageStatus title={t('Abrindo a revisão')} loading />;
   if (!review) {
     return (
       <FullPageStatus
-        title="Não foi possível abrir a revisão"
-        description="Este link não vale mais: ele foi trocado ou a revisão passou a exigir login. Peça um link novo a quem enviou."
+        title={t('Não foi possível abrir a revisão')}
+        description={t('Este link não vale mais: ele foi trocado ou a revisão passou a exigir login. Peça um link novo a quem enviou.')}
       />
     );
   }
@@ -48,11 +50,12 @@ function GuestWorkspace({
 /** Revisão de quem tem conta: membro do projeto (autor) ou e-mail convidado (revisor). */
 function AccountReview({ projectId, reviewId, link }: { projectId: string; reviewId: string; link: ReviewLink | null }) {
   const { user, signOut } = useAuth();
+  const { t } = useT();
   const [location] = useLocation();
   const { data: review, isPending } = useReview(projectId, reviewId);
   const { data: project, isPending: isProjectPending } = useProject(projectId);
 
-  if (isPending || isProjectPending) return <FullPageStatus title="Abrindo a revisão" loading />;
+  if (isPending || isProjectPending) return <FullPageStatus title={t('Abrindo a revisão')} loading />;
 
   if (!review) {
     // Conta sem convite, mas com o link da revisão: entra como revisor pelo link, com nome.
@@ -63,19 +66,19 @@ function AccountReview({ projectId, reviewId, link }: { projectId: string; revie
     };
     return (
       <FullPageStatus
-        title="Revisão não encontrada"
+        title={t('Revisão não encontrada')}
         description={
           user?.emailVerified
-            ? `Ela não existe ou não foi pedida para ${user.email}. Entre com o e-mail que recebeu o convite.`
-            : 'Para ver a revisão, entre com o Google ou com o link de acesso enviado ao e-mail convidado (contas de e-mail e senha não confirmam o endereço).'
+            ? t('Ela não existe ou não foi pedida para {email}. Entre com o e-mail que recebeu o convite.', { email: user.email ?? '' })
+            : t('Para ver a revisão, entre com o Google ou com o link de acesso enviado ao e-mail convidado (contas de e-mail e senha não confirmam o endereço).')
         }
         action={
           <div className="flex flex-wrap justify-center gap-2">
             <Button size="sm" onClick={() => void switchAccount()}>
-              Entrar com outra conta
+              {t('Entrar com outra conta')}
             </Button>
             <Button asChild variant="outline" size="sm">
-              <Link href="/">Voltar aos projetos</Link>
+              <Link href="/">{t('Voltar aos projetos')}</Link>
             </Button>
           </div>
         }
@@ -98,6 +101,7 @@ export default function ReviewPage() {
   const search = useSearch();
   const [location] = useLocation();
   const { status } = useAuth();
+  const { t } = useT();
   const params = new URLSearchParams(search);
   const token = params.get('k');
   const snapshotId = params.get('v');
@@ -106,17 +110,17 @@ export default function ReviewPage() {
   if (status === 'demo') {
     return (
       <FullPageStatus
-        title="Revisões precisam do Firebase"
-        description="No modo demonstração não há versões nem revisões salvas."
+        title={t('Revisões precisam do Firebase')}
+        description={t('No modo demonstração não há versões nem revisões salvas.')}
         action={
           <Button asChild variant="outline" size="sm">
-            <Link href="/">Voltar aos projetos</Link>
+            <Link href="/">{t('Voltar aos projetos')}</Link>
           </Button>
         }
       />
     );
   }
-  if (status === 'loading') return <FullPageStatus title="Abrindo sua sessão" loading />;
+  if (status === 'loading') return <FullPageStatus title={t('Abrindo sua sessão')} loading />;
   if (status === 'signed-out' || status === 'guest') {
     if (link) return <GuestReview projectId={projectId} reviewId={reviewId} link={link} />;
     const next = `${location}${search ? `?${search}` : ''}`;

@@ -11,7 +11,7 @@ const messages: Record<string, string> = {
   alterado: 'modificado',
   'Abrir {path} no editor': 'Abrir {path} en el editor',
   'Arquivo binário: o conteúdo mudou.': 'Archivo binario: el contenido cambió.',
-  'A comparação em PDF não compilou; veja a aba Texto.': 'La comparación en PDF no compiló; consulta la pestaña Texto.',
+  'A comparação em PDF não compilou; veja as alterações na outra aba.': 'La comparación en PDF no compiló; consulta los cambios en la otra pestaña.',
   'Nenhuma alteração marcada': 'Ningún cambio marcado',
   '{count} alterações': '{count} cambios',
   '{current} de {total}': '{current} de {total}',

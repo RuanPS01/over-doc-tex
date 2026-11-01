@@ -16,11 +16,12 @@ import type {
 import { sendNotifications } from '@/features/notifications/hooks/use-notifications';
 import { memberProfileOf } from '@/features/projects/model/new-project';
 import { getFirebase } from '@/lib/firebase/app';
+import { t } from '@/lib/i18n';
 import { REVIEW_STATUS_LABELS, type ReviewSummary, type ThreadSummary } from '../model/review';
 
 function currentUser() {
   const user = getFirebase().auth.currentUser;
-  if (!user) throw new Error('Entre na sua conta para comentar.');
+  if (!user) throw new Error(t('Entre na sua conta para comentar.'));
   return user;
 }
 
@@ -50,7 +51,8 @@ export function useReviewActions(review: ReviewSummary | null | undefined, role:
     const db = () => getFirebase().db;
     const projectId = review?.projectId ?? '';
     const reviewId = review?.id ?? '';
-    const label = review ? `${review.projectName}, revisão #${review.number}` : '';
+    // Montado na hora do envio, no idioma de quem envia.
+    const label = () => (review ? t('{project}, revisão #{number}', { project: review.projectName, number: review.number }) : '');
     // O revisor fala com quem pediu; o autor, com o revisor.
     const otherSide = () => (role === 'reviewer' ? [review?.requestedBy] : [review?.reviewerUid]);
 
@@ -111,7 +113,7 @@ export function useReviewActions(review: ReviewSummary | null | undefined, role:
           projectId,
           reviewId,
           threadId: threadRef.id,
-          title: `Novo comentário: ${label}`,
+          title: t('Novo comentário: {review}', { review: label() }),
           body: firstLine(body),
         });
         return threadRef.id;
@@ -133,7 +135,7 @@ export function useReviewActions(review: ReviewSummary | null | undefined, role:
           projectId,
           reviewId,
           threadId: thread.id,
-          title: `Resposta: ${label}`,
+          title: t('Resposta: {review}', { review: label() }),
           body: firstLine(body),
         });
       },
@@ -154,7 +156,7 @@ export function useReviewActions(review: ReviewSummary | null | undefined, role:
           projectId,
           reviewId,
           threadId: thread.id,
-          title: `${status === 'resolved' ? 'Comentário resolvido' : 'Comentário reaberto'}: ${label}`,
+          title: status === 'resolved' ? t('Comentário resolvido: {review}', { review: label() }) : t('Comentário reaberto: {review}', { review: label() }),
           body: '',
         });
       },
@@ -173,8 +175,8 @@ export function useReviewActions(review: ReviewSummary | null | undefined, role:
           projectId,
           reviewId,
           threadId: null,
-          title: `O revisor abriu: ${label}`,
-          body: `${authorName(user)} começou a revisar a versão ${review?.snapshotLabel ?? ''}.`,
+          title: t('O revisor abriu: {review}', { review: label() }),
+          body: t('{name} começou a revisar a versão {version}.', { name: authorName(user), version: review?.snapshotLabel ?? '' }),
         });
       },
 
@@ -193,7 +195,7 @@ export function useReviewActions(review: ReviewSummary | null | undefined, role:
           projectId,
           reviewId,
           threadId: null,
-          title: `${REVIEW_STATUS_LABELS[status]}: ${label}`,
+          title: `${t(REVIEW_STATUS_LABELS[status])}: ${label()}`,
           body: '',
         });
       },

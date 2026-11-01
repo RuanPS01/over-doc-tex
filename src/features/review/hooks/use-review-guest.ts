@@ -4,6 +4,7 @@ import { firestorePaths } from '@shared/firestore/paths';
 import type { ReviewGuestDoc } from '@shared/firestore/types';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { getFirebase } from '@/lib/firebase/app';
+import { t } from '@/lib/i18n';
 import { guestKeyOf } from '../model/review';
 import type { GuestIdentity } from './use-review-actions';
 
@@ -36,10 +37,10 @@ export type GuestSession =
 const errorMessage = (error: unknown): string => {
   const code = (error as { code?: string }).code ?? '';
   if (code === 'auth/operation-not-allowed' || code === 'auth/admin-restricted-operation') {
-    return 'O acesso sem conta não está ativado neste site (Firebase Authentication, provedor "Anônimo"). Peça a quem enviou o link para entrar com o seu e-mail.';
+    return t('O acesso sem conta não está ativado neste site (Firebase Authentication, provedor "Anônimo"). Peça a quem enviou o link para entrar com o seu e-mail.');
   }
-  if (code === 'permission-denied') return 'Este link não vale mais: ele foi trocado ou a revisão passou a exigir login. Peça um link novo a quem enviou.';
-  return 'Não foi possível abrir a revisão pelo link. Confira a conexão e tente de novo.';
+  if (code === 'permission-denied') return t('Este link não vale mais: ele foi trocado ou a revisão passou a exigir login. Peça um link novo a quem enviou.');
+  return t('Não foi possível abrir a revisão pelo link. Confira a conexão e tente de novo.');
 };
 
 /**

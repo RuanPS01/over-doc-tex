@@ -1,5 +1,6 @@
 import { useRef, useState, type PointerEvent } from 'react';
 import type { AnnotationColor, Stroke } from '@shared/firestore/types';
+import { useT } from '@/hooks/use-t';
 import { svgPoints } from '@/lib/pdf/drawing';
 import { cn } from '@/lib/utils';
 import type { PendingAnnotation, ReviewTool, ThreadSummary } from '../model/review';
@@ -55,6 +56,7 @@ function Strokes({ strokes, faded = false }: { strokes: readonly Stroke[]; faded
  * para a camada de texto.
  */
 export function AnnotationLayer({ page, threads, pending, tool, selectedThreadId, onPlacePin, onStroke, onSelect }: AnnotationLayerProps) {
+  const { t } = useT();
   const [live, setLive] = useState<Array<[number, number]> | null>(null);
   const liveRef = useRef<Array<[number, number]> | null>(null);
   const pendingColor: AnnotationColor = pending?.kind === 'draw' ? pending.color : 'annotation-2';
@@ -131,7 +133,7 @@ export function AnnotationLayer({ page, threads, pending, tool, selectedThreadId
               {first && (
                 <button
                   type="button"
-                  aria-label={`Comentário ${number}`}
+                  aria-label={t('Comentário {number}', { number })}
                   style={{ left: `${first.x * 100}%`, top: `${first.y * 100}%` }}
                   className={badge}
                   onPointerDown={(event) => event.stopPropagation()}
@@ -148,7 +150,7 @@ export function AnnotationLayer({ page, threads, pending, tool, selectedThreadId
             {thread.anchor.drawing && <Strokes strokes={thread.anchor.drawing.strokes} faded={isResolved} />}
             <button
               type="button"
-              aria-label={`Comentário ${number}`}
+              aria-label={t('Comentário {number}', { number })}
               style={{ left: `${thread.anchor.point.x * 100}%`, top: `${thread.anchor.point.y * 100}%` }}
               className={badge}
               onPointerDown={(event) => event.stopPropagation()}
