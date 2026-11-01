@@ -9,8 +9,10 @@ import { FREEZE_STAGE_LABELS } from '@/features/snapshots/components/freeze-vers
 import { IssueList } from '@/features/snapshots/components/issue-list';
 import type { TexIssue } from '@/lib/latex/prepare';
 import { FreezeError, useRequestReview, type RequestReviewResult, type RequestStage } from '../hooks/use-request-review';
-import { reviewPath } from '../model/review';
+import type { ReviewAccess } from '@shared/firestore/types';
+import { reviewLinkUrl, reviewPath } from '../model/review';
 import { normalizeEmail } from '@/lib/email';
+import { ReviewAccessChoice } from './review-access-choice';
 
 const STAGE_LABELS: Record<RequestStage, string> = { ...FREEZE_STAGE_LABELS, opening: 'Abrindo a revisão', diff: 'Gerando a comparação em PDF', carry: 'Levando os comentários abertos' };
 
@@ -24,9 +26,10 @@ interface RequestReviewDialogProps {
   onIssueSelect: (issue: TexIssue) => void;
 }
 
-/** Congela a versão (se mudou), abre a revisão e convida o revisor por e-mail. */
+/** Congela a versão (se mudou), abre a revisão e convida o revisor por e-mail ou pelo link. */
 export function RequestReviewDialog({ open, onOpenChange, projectId, projectName, documents, onIssueSelect }: RequestReviewDialogProps) {
   const requestReview = useRequestReview(projectId, projectName);
+  const [access, setAccess] = useState<ReviewAccess>('email');
   const [email, setEmail] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -50,7 +53,8 @@ export function RequestReviewDialog({ open, onOpenChange, projectId, projectName
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     const reviewerEmail = normalizeEmail(email);
-    if (!reviewerEmail) {
+    // Pelo link, o e-mail é opcional; por e-mail, é ele que dá o acesso.
+    if (!reviewerEmail && (access === 'email' || email.trim())) {
       setError('Informe um e-mail válido para o revisor.');
       return;
     }
@@ -58,13 +62,14 @@ export function RequestReviewDialog({ open, onOpenChange, projectId, projectName
     setIssues([]);
     try {
       const created = await requestReview({
-        reviewerEmail,
+        access,
+        reviewerEmail: reviewerEmail ?? '',
         title: title.trim() || `Revisão de ${projectName}`,
         description,
         documentIds: secondaryIds.filter((id) => secondaries.some((document) => document.id === id)),
         onStage: setStage,
       });
-      setResult({ ...created, email: reviewerEmail });
+      setResult({ ...created, email: reviewerEmail ?? '' });
       setEmail('');
       setTitle('');
       setDescription('');
@@ -76,10 +81,17 @@ export function RequestReviewDialog({ open, onOpenChange, projectId, projectName
     }
   };
 
-  const link = result ? new URL(`${import.meta.env.BASE_URL}${reviewPath(projectId, result.reviewId).slice(1)}`, window.location.origin).href : '';
+  // Pelo link, o endereço leva o código e a versão; por e-mail, é só o caminho da revisão.
+  const link = !result
+    ? ''
+    : result.linkToken
+      ? reviewLinkUrl(window.location.origin, import.meta.env.BASE_URL, { projectId, id: result.reviewId, snapshotId: result.snapshotId }, result.linkToken)
+      : new URL(`${import.meta.env.BASE_URL}${reviewPath(projectId, result.reviewId).slice(1)}`, window.location.origin).href;
   const mailto = result
     ? `mailto:${result.email}?subject=${encodeURIComponent(`Revisão #${result.number}: ${projectName}`)}&body=${encodeURIComponent(
-        `Olá! Você foi convidado para revisar a versão ${result.snapshotLabel} de "${projectName}".\n\nAbra: ${link}\n\nEntre com o Google ou com o link de acesso enviado para este e-mail.`,
+        result.linkToken
+          ? `Olá! Você foi convidado para revisar a versão ${result.snapshotLabel} de "${projectName}".\n\nAbra: ${link}\n\nNão precisa de conta: basta informar o seu nome.`
+          : `Olá! Você foi convidado para revisar a versão ${result.snapshotLabel} de "${projectName}".\n\nAbra: ${link}\n\nEntre com o Google ou com o link de acesso enviado para este e-mail.`,
       )}`
     : '';
 
@@ -90,7 +102,9 @@ export function RequestReviewDialog({ open, onOpenChange, projectId, projectName
           <DialogTitle>{result ? `Revisão #${result.number} aberta` : 'Solicitar revisão'}</DialogTitle>
           <DialogDescription>
             {result
-              ? `${result.email} pode ver o PDF da versão ${result.snapshotLabel} e comentar nele.`
+              ? result.linkToken
+                ? `Qualquer pessoa com o link pode ver o PDF da versão ${result.snapshotLabel} e comentar nele, sem conta, informando o nome.`
+                : `${result.email} pode ver o PDF da versão ${result.snapshotLabel} e comentar nele.`
               : 'O revisor vê só o PDF da versão congelada, nunca o rascunho. Se o código mudou desde a última versão, uma nova é congelada.'}
           </DialogDescription>
         </DialogHeader>
@@ -105,11 +119,15 @@ export function RequestReviewDialog({ open, onOpenChange, projectId, projectName
                   : `${result.carriedThreads} comentários ainda abertos da rodada anterior vieram junto.`}
               </p>
             )}
-            <p className={result.emailSent ? undefined : 'rounded-md border border-warning/50 bg-warning/10 p-2'}>
-              {result.emailSent
-                ? 'O convite com o link de acesso foi enviado por e-mail.'
-                : 'Não foi possível enviar o convite automático (ative "Link de e-mail" em Authentication no Firebase). Envie o link abaixo.'}
-            </p>
+            {result.email ? (
+              <p className={result.emailSent ? undefined : 'rounded-md border border-warning/50 bg-warning/10 p-2'}>
+                {result.emailSent
+                  ? 'O convite com o link de acesso foi enviado por e-mail.'
+                  : 'Não foi possível enviar o convite automático (ative "Link de e-mail" em Authentication no Firebase). Envie o link abaixo.'}
+              </p>
+            ) : (
+              <p>Envie o link abaixo para quem vai revisar. Quem tiver o link entra sem conta.</p>
+            )}
             <div className="flex min-w-0 gap-2">
               <Input readOnly value={link} aria-label="Link da revisão" className="min-w-0 flex-1 font-mono text-xs" />
               <Button
@@ -123,12 +141,14 @@ export function RequestReviewDialog({ open, onOpenChange, projectId, projectName
               </Button>
             </div>
             <DialogFooter>
-              <Button variant="outline" asChild>
-                <a href={mailto}>
-                  <Mail />
-                  Enviar pelo meu e-mail
-                </a>
-              </Button>
+              {result.email && (
+                <Button variant="outline" asChild>
+                  <a href={mailto}>
+                    <Mail />
+                    Enviar pelo meu e-mail
+                  </a>
+                </Button>
+              )}
               <Button asChild>
                 <Link href={reviewPath(projectId, result.reviewId)}>
                   <ExternalLink />
@@ -139,11 +159,12 @@ export function RequestReviewDialog({ open, onOpenChange, projectId, projectName
           </div>
         ) : (
           <form onSubmit={(event) => void handleSubmit(event)} className="flex flex-col gap-3">
+            <ReviewAccessChoice value={access} disabled={isBusy} onChange={setAccess} />
             <label className="flex flex-col gap-1 text-sm font-medium">
-              E-mail do revisor
+              {access === 'link' ? 'E-mail do revisor (opcional)' : 'E-mail do revisor'}
               <Input
                 type="email"
-                required
+                required={access === 'email'}
                 autoComplete="off"
                 disabled={isBusy}
                 value={email}

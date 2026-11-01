@@ -13,6 +13,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   const [location] = useLocation();
 
   if (status === 'loading') return <FullPageStatus title="Abrindo sua sessão" loading />;
-  if (status === 'signed-out') return <Redirect to={`/login?next=${encodeURIComponent(location)}`} />;
+  // A sessão anônima de um link de revisão não abre as telas de trabalho.
+  if (status === 'signed-out' || status === 'guest') return <Redirect to={`/login?next=${encodeURIComponent(location)}`} />;
   return <>{children}</>;
 }

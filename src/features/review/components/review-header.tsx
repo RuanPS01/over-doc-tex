@@ -1,4 +1,4 @@
-import { ArrowLeft, CheckCircle2, GitCompare, MoreVertical, RotateCcw, TriangleAlert, XCircle } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, GitCompare, MoreVertical, RotateCcw, Share2, TriangleAlert, UserRound, XCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'wouter';
 import { ThemeMenu } from '@/components/common/theme-menu';
@@ -12,7 +12,7 @@ import {
 import type { ParticipantRole, ReviewStatus } from '@shared/firestore/types';
 import { NotificationBell } from '@/features/notifications/components/notification-bell';
 import { cn } from '@/lib/utils';
-import { REVIEW_STATUS_LABELS, type ReviewSummary } from '../model/review';
+import { REVIEW_STATUS_LABELS, reviewerLabel, type ReviewSummary } from '../model/review';
 
 interface StatusAction {
   status: ReviewStatus;
@@ -39,27 +39,36 @@ interface ReviewHeaderProps {
   role: ParticipantRole;
   onShowChanges: () => void;
   onStatusChange: (status: ReviewStatus) => void;
+  /** Dono e editores: abre o "Envio da revisão" (e-mails e tipo de acesso). */
+  onOpenSharing?: () => void;
+  /** Revisor pelo link: nome com que ele comenta, e como trocar. */
+  guestName?: string | null;
+  onChangeGuestName?: () => void;
 }
 
 /** Cabeçalho travado da revisão: versão, status e ações do autor ou do revisor. */
-export function ReviewHeader({ review, role, onShowChanges, onStatusChange }: ReviewHeaderProps) {
+export function ReviewHeader({ review, role, onShowChanges, onStatusChange, onOpenSharing, guestName, onChangeGuestName }: ReviewHeaderProps) {
   const actions = statusActions(role, review.status);
   const backHref = role === 'author' ? `/p/${review.projectId}` : '/';
+  // Quem entrou pelo link não tem lista de projetos para onde voltar.
+  const showBack = !guestName;
 
   return (
     <header className="flex h-header shrink-0 items-center gap-1 border-b bg-background px-2 pt-safe">
-      <Button variant="ghost" size="icon" asChild>
-        <Link href={backHref} aria-label={role === 'author' ? 'Voltar ao editor' : 'Voltar aos projetos'}>
-          <ArrowLeft />
-        </Link>
-      </Button>
+      {showBack && (
+        <Button variant="ghost" size="icon" asChild>
+          <Link href={backHref} aria-label={role === 'author' ? 'Voltar ao editor' : 'Voltar aos projetos'}>
+            <ArrowLeft />
+          </Link>
+        </Button>
+      )}
       <div className="min-w-0 flex-1 px-1">
         <h1 className="truncate text-sm font-semibold">
           #{review.number} {review.title}
         </h1>
         <p className="truncate text-xs text-muted-foreground">
           Versão {review.snapshotLabel} · {REVIEW_STATUS_LABELS[review.status]}
-          {role === 'author' ? ` · ${review.reviewerName ?? review.reviewerEmail}` : ` · ${review.projectName}`}
+          {role === 'author' ? ` · ${reviewerLabel(review)}` : ` · ${review.projectName}`}
         </p>
       </div>
       {review.baseSnapshotId && (
@@ -80,8 +89,20 @@ export function ReviewHeader({ review, role, onShowChanges, onStatusChange }: Re
           {action.label}
         </Button>
       ))}
+      {guestName && onChangeGuestName && (
+        <Button variant="ghost" size="sm" className="max-w-[40%] shrink" title="Trocar o nome com que você comenta" onClick={onChangeGuestName}>
+          <UserRound />
+          <span className="truncate">{guestName}</span>
+        </Button>
+      )}
+      {onOpenSharing && (
+        <Button variant="outline" size="sm" className="px-2 sm:px-3" aria-label="Envio da revisão" title="E-mails convidados e tipo de acesso" onClick={onOpenSharing}>
+          <Share2 />
+          <span className="hidden sm:inline">Envio</span>
+        </Button>
+      )}
       <ThemeMenu />
-      <NotificationBell />
+      {!guestName && <NotificationBell />}
       {(actions.length > 0 || review.baseSnapshotId) && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

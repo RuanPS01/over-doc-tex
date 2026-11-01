@@ -6,7 +6,8 @@ import type { ReviewDoc } from '@shared/firestore/types';
 import { getFirebase, isFirebaseConfigured } from '@/lib/firebase/app';
 import { toReviewSummary, type ReviewSummary } from '../model/review';
 
-const reviewKey = (projectId: string, reviewId: string) => ['project', projectId, 'reviews', reviewId] as const;
+/** Chave da revisão no cache (exportada para quem precisa descartá-la, como a entrada pelo link). */
+export const reviewKey = (projectId: string, reviewId: string) => ['project', projectId, 'reviews', reviewId] as const;
 
 /**
  * Uma revisão, em tempo real. Nulo quando não existe ou a conta não é membro

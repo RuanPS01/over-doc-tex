@@ -1,7 +1,7 @@
 import { Loader2, MessageSquare } from 'lucide-react';
 import { Link } from 'wouter';
 import { cn } from '@/lib/utils';
-import { REVIEW_STATUS_LABELS, type ReviewSummary } from '../model/review';
+import { REVIEW_STATUS_LABELS, type ReviewSummary, reviewerLabel } from '../model/review';
 
 const DATE_FORMAT = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' });
 
@@ -39,7 +39,7 @@ export function ReviewList({ reviews, isPending, showProject = false, emptyText 
               </span>
               <span className="truncate text-xs text-muted-foreground">
                 {[
-                  showProject ? review.projectName : (review.reviewerName ?? review.reviewerEmail),
+                  showProject ? review.projectName : reviewerLabel(review),
                   `versão ${review.snapshotLabel}`,
                   review.requestedAt ? DATE_FORMAT.format(review.requestedAt) : null,
                 ]

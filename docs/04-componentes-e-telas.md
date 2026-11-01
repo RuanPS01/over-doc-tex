@@ -24,7 +24,7 @@ EditorPage                               pages/editor-page.tsx (papel, convite p
     ├── EditorDialogs                    na própria página: junta snapshots, diff, review e projects
     │   ├── VersionHistorySheet          abas Versões (congelar, PDF, comparar, .zip) e Revisões (ProjectReviewQueue)
     │   ├── ChangesDialog                abas Código (diff por palavra) e PDF marcado (DiffPdfViewer)
-    │   ├── RequestReviewDialog          documentos concedidos, congela se mudou, abre a revisão, gera o diff em PDF e envia o link
+    │   ├── RequestReviewDialog          acesso (e-mails ou link), documentos concedidos, congela se mudou, abre a revisão, gera o diff em PDF e envia o link
     │   └── ProjectSettingsDialog        nome, descrição, documentos (ProjectDocumentsSection), membros e convites
     └── EditorShell                      .h-viewport flex-col overflow-hidden
       └── CompileStoreProvider           estado da compilação; Ctrl+S e Ctrl+Enter compilam
@@ -102,7 +102,7 @@ O código está em `src/features/editor/components/` e as regras completas em `0
 ```
 ReviewPage                               pages/review-page.tsx: membro entra como autor, quem não é membro como revisor
 └── ReviewWorkspace                      .h-viewport, mesma casca do editor
-    ├── ReviewHeader                     "#1 título", versão, status; aprovar, pedir alterações, encerrar ou reabrir; ThemeMenu; NotificationBell
+    ├── ReviewHeader                     "#1 título", versão, status; aprovar, pedir alterações, encerrar ou reabrir; Envio (dono e editores); nome do visitante; ThemeMenu; NotificationBell
     ├── PdfDocumentView                  features/pdf-viewer (pdf.js) com a camada de texto ligada, zoom e download
     │   ├── título                       seletor de documento quando a revisão concede mais de um
     │   ├── ferramentas                  Selecionar texto | Ponto | Desenhar (na barra do PDF)
@@ -160,7 +160,7 @@ Pontos de atenção:
 | `projects` | `ProjectList`, `DemoProjectList`, `NewProjectDialog`, `ProjectSettingsDialog`, `ProjectDocumentsSection` |
 | `notifications` | `NotificationBell` (contagem, lista, marcar como lidas, abrir a revisão) |
 | `snapshots` | `VersionHistorySheet`, `FreezeVersionForm`, `VersionCard`, `VersionPdfDialog`, `IssueList` |
-| `review` | `ReviewWorkspace`, `ReviewHeader`, `AnnotationLayer`, `SelectionPopover`, `PendingAnnotationPanel`, `ThreadList`, `ThreadCard`, `CommentComposer`, `ReviewChangesDialog`, `RequestReviewDialog`, `ReviewList`, `ProjectReviewQueue`, `MyReviewsSection` |
+| `review` | `ReviewWorkspace`, `ReviewHeader`, `ReviewSharingDialog`, `ReviewAccessChoice`, `GuestReviewGate`, `AnnotationLayer`, `SelectionPopover`, `PendingAnnotationPanel`, `ThreadList`, `ThreadCard`, `CommentComposer`, `ReviewChangesDialog`, `RequestReviewDialog`, `ReviewList`, `ProjectReviewQueue`, `MyReviewsSection` |
 | `diff` | `ChangesDialog`, `FileChangeCard`, `DiffView` (texto com `<ins>` e `<del>`, linhas sem mudança recolhidas), `DiffPdfViewer` (PDF marcado com marcas na margem e "Próxima alteração") |
 
 ### Hooks de integração

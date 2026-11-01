@@ -1,4 +1,4 @@
-import type { AnnotationColor, CommentDoc, NormalizedPoint, ReviewDoc, ReviewStatus, Stroke, TextAnchor, ThreadDoc } from '@shared/firestore/types';
+import type { AnnotationColor, CommentDoc, NormalizedPoint, ReviewAccess, ReviewDoc, ReviewStatus, Stroke, TextAnchor, ThreadDoc } from '@shared/firestore/types';
 
 export const REVIEW_STATUS_LABELS: Record<ReviewStatus, string> = {
   invited: 'Aguardando o revisor',
@@ -10,17 +10,69 @@ export const REVIEW_STATUS_LABELS: Record<ReviewStatus, string> = {
 
 export const MAX_COMMENT_LENGTH = 10_000;
 
-/** Revisão como a interface usa: datas convertidas e id junto. */
-export interface ReviewSummary extends Omit<ReviewDoc, 'requestedAt' | 'lastActivityAt' | 'closedAt'> {
+/** Revisão como a interface usa: datas convertidas, id junto e campos novos preenchidos. */
+export interface ReviewSummary extends Omit<ReviewDoc, 'requestedAt' | 'lastActivityAt' | 'closedAt' | 'access' | 'reviewerEmails'> {
   id: string;
   projectId: string;
   requestedAt: Date | null;
   lastActivityAt: Date | null;
+  access: ReviewAccess;
+  /** Todos os e-mails convidados (o da criação e os acrescentados). */
+  reviewerEmails: string[];
 }
 
 export function toReviewSummary(projectId: string, id: string, data: ReviewDoc): ReviewSummary {
-  const { requestedAt, lastActivityAt, closedAt: _closedAt, ...rest } = data;
-  return { ...rest, id, projectId, requestedAt: requestedAt?.toDate() ?? null, lastActivityAt: lastActivityAt?.toDate() ?? null };
+  const { requestedAt, lastActivityAt, closedAt: _closedAt, access, reviewerEmails, ...rest } = data;
+  const emails = [...new Set([data.reviewerEmail, ...(reviewerEmails ?? [])].filter(Boolean))];
+  return {
+    ...rest,
+    id,
+    projectId,
+    requestedAt: requestedAt?.toDate() ?? null,
+    lastActivityAt: lastActivityAt?.toDate() ?? null,
+    access: access ?? 'email',
+    reviewerEmails: emails,
+  };
+}
+
+/** Quem revisa, para listas e cabeçalhos: o nome de quem agiu, os e-mails ou "pelo link". */
+export function reviewerLabel(review: Pick<ReviewSummary, 'reviewerName' | 'reviewerEmails' | 'access'>): string {
+  if (review.reviewerName) return review.reviewerName;
+  if (review.reviewerEmails.length > 0) return review.reviewerEmails.length === 1 ? review.reviewerEmails[0]! : `${review.reviewerEmails[0]} +${review.reviewerEmails.length - 1}`;
+  return review.access === 'link' ? 'Revisão pelo link' : '';
+}
+
+/**
+ * Identidade do revisor pelo link: o nome sem acentos, em minúsculas, com os
+ * espaços normalizados. "Maria  Souza" e "maria souza" são a mesma pessoa.
+ */
+export function guestKeyOf(name: string): string {
+  return name
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .slice(0, 80);
+}
+
+/** Código secreto do link (24 bytes aleatórios, em base64url: 32 caracteres). */
+export function newLinkToken(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(24));
+  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+/** Endereço completo do link de revisão sem conta (leva o código e a versão). */
+export function reviewLinkUrl(origin: string, base: string, review: Pick<ReviewSummary, 'projectId' | 'id' | 'snapshotId'>, token: string): string {
+  const path = `${base.replace(/\/$/, '')}${reviewPath(review.projectId, review.id)}`;
+  return `${origin}${path}?k=${encodeURIComponent(token)}&v=${encodeURIComponent(review.snapshotId)}`;
+}
+
+/** E-mails de um campo livre (vírgula, ponto e vírgula, espaço ou linha), válidos e sem repetição. */
+export function parseEmails(text: string): { valid: string[]; invalid: string[] } {
+  const parts = text.split(/[\s,;]+/).map((part) => part.trim().toLowerCase()).filter(Boolean);
+  const valid = [...new Set(parts.filter((part) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(part)))];
+  return { valid, invalid: parts.filter((part) => !valid.includes(part)) };
 }
 
 export interface ThreadSummary extends Omit<ThreadDoc, 'createdAt' | 'updatedAt' | 'lastCommentAt' | 'resolution'> {

@@ -33,6 +33,22 @@ Cada cenário descreve o que o usuário vê e a mecânica interna. Não há serv
 3. As regras liberam snapshot e revisão porque o e-mail verificado dele bate com o grant e com `reviewerEmail`. Na primeira abertura, o app grava `reviewerUid`, `reviewerName` e `status: in_review`.
 4. Rodadas seguintes para o mesmo revisor repetem o lote 2 com o mesmo e-mail.
 
+### Revisão pelo link, sem conta (implementado)
+
+1. Em "Solicitar revisão", o autor escolhe "Qualquer pessoa com o link". O e-mail fica opcional; o código do link nasce no mesmo lote da revisão e o diálogo mostra o link para copiar (`?k=código&v=versão`).
+2. Quem abre o link sem estar logado entra com login anônimo (sem tela de login) e informa o nome. A ficha de visitante é gravada com o código; o nome fica no navegador e, ao voltar, a pessoa entra direto.
+3. Em outro aparelho, a pessoa informa o mesmo nome (maiúsculas, acentos e espaços não importam) e continua como o mesmo revisor: os comentários levam a identidade do nome.
+4. Quem tem conta mas não foi convidado também pode entrar pelo link, informando o nome.
+5. O cabeçalho do visitante mostra o nome dele (clique para trocar) e não tem a volta para a lista de projetos nem as notificações.
+
+### Envio da revisão (implementado)
+
+Na tela da revisão, dono e editores têm o botão "Envio" no cabeçalho (`ReviewSharingDialog`):
+
+- **Quem pode abrir:** "Só os e-mails convidados" (com login) ou "Qualquer pessoa com o link" (sem conta). Passar a "link" cria o código se não houver; voltar a "e-mails" corta o acesso de quem entrou pelo link.
+- **Link:** copiar e "Gerar novo link" (com confirmação), que derruba o anterior.
+- **E-mails convidados:** acrescentar vários de uma vez. Cada um ganha a concessão na versão com os mesmos documentos e recebe o link de acesso por e-mail; a revisão aparece em "Minhas revisões" da pessoa (consulta por `reviewerEmails`).
+
 ### Convite de coautoria (implementado)
 
 1. Em "Configurações do projeto", o dono informa o e-mail e o papel ("Edita" ou "Só lê"); o app grava `pendingMembers[email]` e mostra o link do projeto para enviar.

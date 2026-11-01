@@ -6,6 +6,7 @@ import {
   sendSignInLinkToEmail,
   signInWithEmailAndPassword,
   signInWithEmailLink,
+  signInAnonymously,
   signInWithPopup,
   signOut as firebaseSignOut,
   type User,
@@ -14,7 +15,8 @@ import { createContext, useEffect, useMemo, useState, type ReactNode } from 'rea
 import { emailLinkUrl } from '@/lib/email';
 import { getFirebase, isFirebaseConfigured } from '@/lib/firebase/app';
 
-export type AuthStatus = 'loading' | 'signed-in' | 'signed-out' | 'demo';
+/** "guest": sessão anônima de quem abriu um link de revisão sem conta (não entra nas telas de trabalho). */
+export type AuthStatus = 'loading' | 'signed-in' | 'guest' | 'signed-out' | 'demo';
 
 export interface AuthUser {
   uid: string;
@@ -23,6 +25,7 @@ export interface AuthUser {
   /** Google e o link por e-mail confirmam o endereço; e-mail e senha, não. Revisões exigem confirmado. */
   emailVerified: boolean;
   photoURL: string | null;
+  isAnonymous: boolean;
 }
 
 export interface AuthContextValue {
@@ -36,6 +39,8 @@ export interface AuthContextValue {
   /** A página atual veio de um link de acesso enviado por e-mail. */
   isEmailLink: () => boolean;
   completeEmailLink: (email: string) => Promise<void>;
+  /** Sessão anônima para revisar pelo link, sem conta (exige "Anônimo" ativo no Authentication). */
+  signInAsGuest: () => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -48,6 +53,7 @@ function toAuthUser(user: User): AuthUser {
     email: user.email,
     emailVerified: user.emailVerified,
     photoURL: user.photoURL,
+    isAnonymous: user.isAnonymous,
   };
 }
 
@@ -60,7 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!isFirebaseConfigured) return;
     return onAuthStateChanged(getFirebase().auth, (current) => {
       setUser(current ? toAuthUser(current) : null);
-      setStatus(current ? 'signed-in' : 'signed-out');
+      setStatus(current ? (current.isAnonymous ? 'guest' : 'signed-in') : 'signed-out');
     });
   }, []);
 
@@ -82,6 +88,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isEmailLink: () => isFirebaseConfigured && isSignInWithEmailLink(getFirebase().auth, window.location.href),
       completeEmailLink: async (email) => {
         await signInWithEmailLink(getFirebase().auth, email, window.location.href);
+      },
+      signInAsGuest: async () => {
+        await signInAnonymously(getFirebase().auth);
       },
       signOut: () => firebaseSignOut(getFirebase().auth),
     }),

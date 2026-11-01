@@ -20,9 +20,11 @@ projects/{projectId}                                     projeto, membros, convi
   documents/{documentId}                                 documentos compiláveis (principal e secundários)
   snapshots/{snapshotId}                                 versão congelada (IMUTÁVEL)
     grants/{email}                                       acesso de revisor por e-mail verificado
+    guests/{uid}                                         ficha de quem revisa pelo link, sem conta
     files/{name}                                         {documentId}.pdf, .synctex, .pages (antes de congelar)
       chunks/{index}
   reviews/{reviewId}                                     rodada de revisão (fila estilo PR)
+    links/{código}                                       código do link de acesso sem conta (o id é o código)
     threads/{threadId}                                   comentário ancorado em texto ou pin espacial
       comments/{commentId}                               mensagens da thread
   diffs/{diffKey}                                        cache do diff (o campo pdf descreve os pedaços)
@@ -137,8 +139,10 @@ O id é o e-mail do revisor em minúsculas. A existência do documento libera a 
 | `title`, `description`, `projectName` | string | `projectName` denormalizado para o revisor |
 | `snapshotId`, `snapshotLabel`, `baseSnapshotId`, `previousReviewId` | | |
 | `requestedBy`, `requestedAt` | | |
-| `reviewerEmail` | string | Minúsculas; chave da permissão do revisor |
-| `reviewerUid`, `reviewerName` | string ou null | Preenchidos pelo revisor ao abrir |
+| `reviewerEmail` | string | Minúsculas; e-mail convidado na criação (vazio numa revisão aberta só pelo link) |
+| `reviewerEmails` | string[] | Todos os e-mails convidados, inclusive os acrescentados pelo "Envio da revisão". Ausente em revisões antigas (vale `[reviewerEmail]`) |
+| `access` | `email` ou `link` | `email`: só os convidados, com login. `link`: também qualquer pessoa com o link, sem conta. Ausente vale `email` |
+| `reviewerUid`, `reviewerName` | string ou null | Revisor que agiu por último (ao abrir ou mudar o status); no visitante, o nome que ele informou |
 | `status` | `invited, in_review, changes_requested, approved, closed` | |
 | `grantedDocumentIds` | string[] | |
 | `lastActivityAt`, `closedAt` | | |
@@ -151,6 +155,15 @@ As contagens de threads abertas e resolvidas vêm de consultas de agregação (`
 | `in_review` | `changes_requested` ou `approved` | Revisor |
 | `changes_requested` | `in_review` | Autor ou nova rodada |
 | qualquer | `closed` | Autor |
+
+### 2.7.1 Revisão pelo link, sem conta
+
+- `reviews/{reviewId}/links/{código}` (`createdBy`, `createdAt`): o id é o código aleatório do link (24 bytes em base64url). Só quem edita lê, cria e apaga. "Gerar novo link" apaga os códigos anteriores no mesmo lote do novo.
+- `snapshots/{snapshotId}/guests/{uid}` (`reviewId`, `token`, `name`, `guestKey`, `createdAt`): a ficha do visitante, gravada por ele mesmo depois do login anônimo (ou com a conta, se ele tiver uma e não for convidado). As regras só aceitam se a revisão é da mesma versão, está com `access: link` e o código existe. A ficha vale enquanto as duas coisas continuarem verdadeiras: trocar o link ou voltar a "só e-mails convidados" corta o acesso na hora.
+- Com a ficha válida, o visitante lê a revisão, a versão, os PDFs dos documentos concedidos e o diff da versão, cria threads e comentários, muda o status da revisão e notifica quem pediu, como o revisor por e-mail.
+- `guestKey` é o nome normalizado (sem acentos, minúsculas, espaços únicos). É a identidade do revisor: o comentário do visitante leva `authorKey` igual a ela, e quem usar o mesmo nome em outro aparelho (outra sessão anônima) edita os mesmos comentários. O nome digitado fica no localStorage (`overdoctex.review-guest-name`) e é reaproveitado nos próximos links.
+- O link leva o código e a versão: `/p/{projectId}/reviews/{reviewId}?k={código}&v={snapshotId}` (a versão é necessária para gravar a ficha antes de conseguir ler a revisão).
+- Exige o provedor "Anônimo" ativo no Firebase Authentication.
 
 ### 2.8 `reviews/{reviewId}/threads/{threadId}` e `comments`
 
@@ -256,7 +269,8 @@ O cache offline do Firestore (`persistentLocalCache`) também guarda os pedaços
 | Fluxo | Documentos no mesmo lote | O que as regras conferem |
 | --- | --- | --- |
 | Congelar versão | `snapshots/{novo}` mais `projects/{id}` (`counters.snapshots`, `latestSnapshotId`) | Sequência igual ao contador anterior mais 1 e ao contador depois do lote; `latestSnapshotId` aponta para o snapshot criado |
-| Abrir revisão | `grants/{email}` mais `reviews/{nova}` mais `projects/{id}` (`counters.reviews`) | Número igual ao contador anterior mais 1; snapshot e grant existem depois do lote |
+| Abrir revisão | `grants/{email}` (por e-mail) e `links/{código}` (pelo link) mais `reviews/{nova}` mais `projects/{id}` (`counters.reviews`) | Número igual ao contador anterior mais 1; snapshot existe depois do lote; por e-mail, o grant também (pelo link, o e-mail pode vir vazio) |
+| Envio da revisão | `reviews/{id}` (só `access`, `reviewerEmails`, `lastActivityAt`), `grants/{email}` de cada e-mail novo e `links/{código}` | Quem edita o projeto |
 | Comentar | `comments/{novo}` mais a thread (`commentCount`, `participantIds`) | Contador sobe exatamente 1; só o autor entra nos participantes |
 | Aceitar convite de coautoria | `projects/{id}` (`members`, `memberIds`, `pendingMembers`, `memberProfiles`) | O usuário entra com o papel do convite do próprio e-mail verificado, o convite some e só a entrada dele entra em `memberProfiles` |
 | Remover membro | `projects/{id}` (`members`, `memberIds`, `memberProfiles`) | Só o dono; o dono continua dono; `memberProfiles` não ganha nem muda entradas e só tem chaves de membros |

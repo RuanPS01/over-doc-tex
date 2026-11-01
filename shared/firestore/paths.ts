@@ -37,7 +37,13 @@ export const firestorePaths = {
   /** O id do grant é o e-mail do revisor em minúsculas. */
   snapshotGrant: (projectId: ProjectId, snapshotId: SnapshotId, email: string) =>
     `projects/${projectId}/snapshots/${snapshotId}/grants/${email.toLowerCase()}`,
+  /** Ficha do revisor que entrou pelo link (uid da sessão anônima ou da conta). */
+  snapshotGuest: (projectId: ProjectId, snapshotId: SnapshotId, uid: UserId) =>
+    `projects/${projectId}/snapshots/${snapshotId}/guests/${uid}`,
   reviews: (projectId: ProjectId) => `projects/${projectId}/reviews`,
+  /** Códigos do link de acesso sem conta (o id é o código). */
+  reviewLinks: (projectId: ProjectId, reviewId: ReviewId) => `projects/${projectId}/reviews/${reviewId}/links`,
+  reviewLink: (projectId: ProjectId, reviewId: ReviewId, token: string) => `projects/${projectId}/reviews/${reviewId}/links/${token}`,
   review: (projectId: ProjectId, reviewId: ReviewId) => `projects/${projectId}/reviews/${reviewId}`,
   threads: (projectId: ProjectId, reviewId: ReviewId) =>
     `projects/${projectId}/reviews/${reviewId}/threads`,

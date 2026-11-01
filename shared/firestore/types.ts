@@ -302,6 +302,25 @@ export interface SnapshotGrantDoc {
 // ---------------------------------------------------------------------------
 
 // projects/{projectId}/reviews/{reviewId}
+export type ReviewAccess = 'email' | 'link';
+
+// projects/{projectId}/reviews/{reviewId}/links/{token}: o id é o código secreto do link.
+export interface ReviewLinkDoc {
+  createdBy: UserId;
+  createdAt: TimestampLike;
+}
+
+// projects/{projectId}/snapshots/{snapshotId}/guests/{uid}: ficha de quem entrou pelo link, sem conta.
+export interface ReviewGuestDoc {
+  reviewId: ReviewId;
+  token: string;
+  /** Nome como a pessoa digitou. */
+  name: string;
+  /** Nome normalizado: o mesmo nome, em qualquer aparelho, é o mesmo revisor. */
+  guestKey: string;
+  createdAt: TimestampLike;
+}
+
 export interface ReviewDoc {
   /** Número sequencial exibido como "#3", à semelhança de um PR. */
   number: number;
@@ -316,8 +335,13 @@ export interface ReviewDoc {
   previousReviewId: ReviewId | null;
   requestedBy: UserId;
   requestedAt: TimestampLike;
+  /** E-mail convidado na criação; vazio numa revisão aberta só por link. */
   reviewerEmail: string;
-  /** Preenchidos pelo próprio revisor ao abrir a revisão pela primeira vez. */
+  /** E-mails acrescentados depois pelo "Envio da revisão" (incluem o primeiro). Ausente em revisões antigas. */
+  reviewerEmails?: string[];
+  /** "email": só convidados, com login; "link": qualquer pessoa com o link, sem conta. Ausente vale "email". */
+  access?: ReviewAccess;
+  /** Preenchidos pelo revisor que agiu por último (ao abrir ou mudar o status). */
   reviewerUid: UserId | null;
   reviewerName: string | null;
   status: ReviewStatus;
@@ -423,6 +447,8 @@ export interface ThreadDoc {
 export interface CommentDoc {
   authorId: UserId;
   authorName: string;
+  /** Revisor pelo link: identidade pelo nome (ReviewGuestDoc.guestKey). Ausente nos demais. */
+  authorKey?: string | null;
   authorPhotoURL: string | null;
   authorRole: ParticipantRole;
   kind: CommentKind;

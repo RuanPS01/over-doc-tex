@@ -33,13 +33,19 @@ export type NewAnnotation =
 
 const firstLine = (body: string) => body.split('\n')[0]!.slice(0, 200);
 
+/** Revisor que entrou pelo link, sem conta: nome digitado e identidade (nome normalizado). */
+export interface GuestIdentity {
+  name: string;
+  key: string;
+}
+
 /**
  * Gravações da revisão, cada uma no formato que as regras conferem: thread
  * nova junto com o primeiro comentário; resposta junto com o contador da
  * thread (+1); status da thread; status da revisão (revisor ou autor). Depois
  * de cada uma, notifica o outro lado (melhor esforço).
  */
-export function useReviewActions(review: ReviewSummary | null | undefined, role: ParticipantRole) {
+export function useReviewActions(review: ReviewSummary | null | undefined, role: ParticipantRole, guest: GuestIdentity | null = null) {
   return useMemo(() => {
     const db = () => getFirebase().db;
     const projectId = review?.projectId ?? '';
@@ -48,11 +54,15 @@ export function useReviewActions(review: ReviewSummary | null | undefined, role:
     // O revisor fala com quem pediu; o autor, com o revisor.
     const otherSide = () => (role === 'reviewer' ? [review?.requestedBy] : [review?.reviewerUid]);
 
+    // Visitante assina com o nome que informou; os demais, com o nome da conta.
+    const authorName = (user: { displayName: string | null; email: string | null }) => guest?.name ?? memberProfileOf(user).name;
+
     const comment = (body: string): NewComment => {
       const user = currentUser();
       return {
         authorId: user.uid,
-        authorName: memberProfileOf(user).name,
+        authorName: authorName(user),
+        authorKey: guest?.key ?? null,
         authorPhotoURL: user.photoURL,
         authorRole: role,
         kind: 'comment',
@@ -154,7 +164,7 @@ export function useReviewActions(review: ReviewSummary | null | undefined, role:
         const user = currentUser();
         await updateDoc(doc(db(), firestorePaths.review(projectId, reviewId)), {
           reviewerUid: user.uid,
-          reviewerName: memberProfileOf(user).name,
+          reviewerName: authorName(user),
           status: 'in_review',
           lastActivityAt: serverTimestamp(),
         });
@@ -164,15 +174,19 @@ export function useReviewActions(review: ReviewSummary | null | undefined, role:
           reviewId,
           threadId: null,
           title: `O revisor abriu: ${label}`,
-          body: `${memberProfileOf(user).name} começou a revisar a versão ${review?.snapshotLabel ?? ''}.`,
+          body: `${authorName(user)} começou a revisar a versão ${review?.snapshotLabel ?? ''}.`,
         });
       },
 
       setReviewStatus: async (status: ReviewStatus) => {
+        const user = currentUser();
         await updateDoc(doc(db(), firestorePaths.review(projectId, reviewId)), {
           status,
           lastActivityAt: serverTimestamp(),
-          ...(role === 'author' ? { closedAt: status === 'closed' ? serverTimestamp() : null } : {}),
+          // Com vários revisores, fica registrado quem decidiu por último.
+          ...(role === 'author'
+            ? { closedAt: status === 'closed' ? serverTimestamp() : null }
+            : { reviewerUid: user.uid, reviewerName: authorName(user) }),
         });
         void sendNotifications(otherSide(), {
           type: 'review_status_changed',
@@ -184,5 +198,5 @@ export function useReviewActions(review: ReviewSummary | null | undefined, role:
         });
       },
     };
-  }, [review, role]);
+  }, [review, role, guest]);
 }

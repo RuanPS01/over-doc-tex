@@ -12,7 +12,7 @@ import { buildDrawing, flattenStroke, pinPointFor } from '@/lib/pdf/drawing';
 import { buildQuote, normalizeRects } from '@/lib/pdf/text-anchor';
 import { cn } from '@/lib/utils';
 import type { AnnotationColor, ParticipantRole, ReviewStatus, SourceLocation } from '@shared/firestore/types';
-import { useReviewActions, type NewAnnotation } from '../hooks/use-review-actions';
+import { useReviewActions, type GuestIdentity, type NewAnnotation } from '../hooks/use-review-actions';
 import { useReviewDocuments, useReviewPageTexts, useReviewPdf, useReviewSyncData } from '../hooks/use-review-files';
 import { useTextSelection } from '../hooks/use-text-selection';
 import { useThreads } from '../hooks/use-threads';
@@ -21,6 +21,7 @@ import { AnnotationLayer } from './annotation-layer';
 import { PendingAnnotationPanel } from './pending-annotation-panel';
 import { ReviewChangesDialog } from './review-changes-dialog';
 import { ReviewHeader } from './review-header';
+import { ReviewSharingDialog } from './review-sharing-dialog';
 import { SelectionPopover } from './selection-popover';
 import { ThreadList } from './thread-list';
 
@@ -33,6 +34,11 @@ const TOOLS: Array<{ id: ReviewTool; label: string; icon: ReactNode }> = [
 interface ReviewWorkspaceProps {
   review: ReviewSummary;
   role: ParticipantRole;
+  /** Revisor pelo link, sem conta: comenta com este nome. */
+  guest?: GuestIdentity | null;
+  onChangeGuestName?: () => void;
+  /** Dono e editores do projeto: mostram o "Envio da revisão" no cabeçalho. */
+  canManage?: boolean;
 }
 
 /**
@@ -40,7 +46,7 @@ interface ReviewWorkspaceProps {
  * numerados e, ao lado (no celular, num Sheet), as threads. Mesma casca do
  * editor: altura da tela e só os painéis rolam.
  */
-export function ReviewWorkspace({ review, role }: ReviewWorkspaceProps) {
+export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName, canManage = false }: ReviewWorkspaceProps) {
   const layoutMode = useLayoutMode();
   const isDesktop = layoutMode === 'desktop';
   const [, navigate] = useLocation();
@@ -49,7 +55,8 @@ export function ReviewWorkspace({ review, role }: ReviewWorkspaceProps) {
   const currentDocument = documents.find((item) => item.id === documentId);
   const { data: allThreads = [] } = useThreads(review.projectId, review.id, true);
   const threads = useMemo(() => allThreads.filter((thread) => thread.documentId === documentId), [allThreads, documentId]);
-  const actions = useReviewActions(review, role);
+  const actions = useReviewActions(review, role, guest);
+  const [sharingOpen, setSharingOpen] = useState(false);
   const { pdf, error: pdfError } = useReviewPdf(review, documentId);
   const pageTexts = useReviewPageTexts(review, documentId);
   const syncData = useReviewSyncData(review, documentId, Boolean(currentDocument?.hasSynctex));
@@ -250,7 +257,11 @@ export function ReviewWorkspace({ review, role }: ReviewWorkspaceProps) {
         role={role}
         onShowChanges={() => setChangesOpen(true)}
         onStatusChange={(status: ReviewStatus) => void run(() => actions.setReviewStatus(status))}
+        onOpenSharing={canManage ? () => setSharingOpen(true) : undefined}
+        guestName={guest?.name ?? null}
+        onChangeGuestName={onChangeGuestName}
       />
+      {canManage && <ReviewSharingDialog open={sharingOpen} onOpenChange={setSharingOpen} review={review} />}
       {actionError && (
         <p role="alert" className="shrink-0 border-b bg-destructive/10 px-3 py-1.5 text-xs text-destructive">
           {actionError}
