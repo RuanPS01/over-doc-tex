@@ -4,7 +4,9 @@
  * erros do log do TeX.
  */
 import { t } from '@/lib/i18n';
+import { stylesFromOptions } from './biblatex-config';
 import { buildBbl } from './bibliography';
+import { buildBiblatexBbl, scanBiblatex, type BiblatexBblResult } from './bibliography-biblatex';
 
 export interface ProjectTextFile {
   path: string;
@@ -147,10 +149,66 @@ export function withOutlinePass(source: string, usesHyperref: boolean): string {
   return `${source}\n% \\label{} (OverDocTeX: os marcadores do hyperref, o índice do PDF, saem na segunda passagem)\n`;
 }
 
+const PACKAGE_COMMAND = /\\(?:usepackage|RequirePackage)\s*(?:\[[^\]]*\])?\s*\{([^}]+)\}/g;
+
+/** Pacotes pedidos por \usepackage e \RequirePackage (fora de comentários). */
+function packagesIn(text: string): string[] {
+  return [...stripComments(text).matchAll(PACKAGE_COMMAND)].flatMap((match) => match[1]!.split(',').map((name) => name.trim())).filter(Boolean);
+}
+
+/**
+ * O Siglum escolhe os conjuntos de pacotes (bundles) que carrega de saída
+ * lendo só o principal. Pacotes pedidos em outros arquivos do projeto
+ * (preâmbulo num \input, .sty próprio) só aparecem quando o TeX para por falta
+ * deles, um por tentativa, e as tentativas acabam antes do fim: no modelo de
+ * TCC do INATEL, com os pacotes em configuracoes/includes.tex, a oitava falta
+ * era o xcolor. Um comentário no fim do principal, depois do \end{document} e
+ * sem efeito no documento, lista esses pacotes para o Siglum carregar os
+ * conjuntos deles de saída. Pacotes do próprio projeto (`localPackages`) ficam
+ * de fora.
+ */
+export function withProjectPackages(source: string, mainPackages: readonly string[], projectPackages: readonly string[], localPackages: ReadonlySet<string>): string {
+  const inMain = new Set(mainPackages);
+  const extra = [...new Set(projectPackages)].filter((name) => /^[\w-]+$/.test(name) && !inMain.has(name) && !localPackages.has(name));
+  if (extra.length === 0) return source;
+  return `${source}\n% \\usepackage{${extra.join(',')}} (OverDocTeX: pacotes pedidos em outros arquivos do projeto)\n`;
+}
+
 /** Caminho visto a partir da pasta do arquivo principal (o compilador roda nela). */
 export function relativeToMain(path: string, mainPath: string): string {
   const folder = mainPath.includes('/') ? mainPath.slice(0, mainPath.lastIndexOf('/') + 1) : '';
   return folder && path.startsWith(folder) ? path.slice(folder.length) : path;
+}
+
+const FILE_REFERENCE = /\\(?:includegraphics|includepdf|includesvg|input|include|subfile|lstinputlisting|verbatiminput|inputminted)\*?\s*(?:\[[^\]]*\]\s*)*(?:\{[^}]*\}\s*)?\{([^}]+)\}/g;
+const REFERENCE_EXTENSIONS = ['', '.tex', '.png', '.pdf', '.jpg', '.jpeg', '.eps', '.svg'];
+
+/**
+ * Caminhos citados no projeto (\includegraphics, \input...) que não existem
+ * como estão, mas existem sem as primeiras pastas: um zip importado sem a
+ * pasta raiz (figuras citadas como "TCC/figuras/x.png" com o projeto já sem
+ * "TCC/"), ou caminhos escritos a partir da raiz com o principal numa pasta.
+ * O arquivo vai também no caminho citado, como o TeX vai procurar.
+ */
+export function referencedAliases(files: Readonly<Record<string, string | Uint8Array>>, sources: readonly string[]): Record<string, string | Uint8Array> {
+  const aliases: Record<string, string | Uint8Array> = {};
+  const has = (path: string) => path in files || path in aliases;
+  for (const source of sources) {
+    for (const match of stripComments(source).matchAll(FILE_REFERENCE)) {
+      // \inputminted{lang}{arquivo}: o último grupo é o arquivo.
+      const wanted = match[1]!.trim().replace(/^\.\//, '');
+      if (!wanted || REFERENCE_EXTENSIONS.some((extension) => has(wanted + extension))) continue;
+      const segments = wanted.split('/');
+      for (let drop = 1; drop < segments.length; drop++) {
+        const candidate = segments.slice(drop).join('/');
+        const extension = REFERENCE_EXTENSIONS.find((ext) => candidate + ext in files);
+        if (extension === undefined) continue;
+        aliases[wanted + extension] = files[candidate + extension]!;
+        break;
+      }
+    }
+  }
+  return aliases;
 }
 
 export interface CompileInput {
@@ -158,6 +216,13 @@ export interface CompileInput {
   additionalFiles: Record<string, string | Uint8Array>;
   /** Pacotes do repositório do site cujos arquivos soltos (ex.: .ldf) vão junto com o documento. */
   texlivePackages: string[];
+  /** Arquivos soltos pedidos pelo nome (estilos do biblatex): vão junto com todos os do pacote dono. */
+  texliveFiles: string[];
+  /**
+   * .bbl do biblatex, montado depois que os estilos chegam (as opções padrão
+   * deles mudam a ordem e os rótulos). Recebe o texto de um arquivo pelo nome.
+   */
+  biblatexBbl: ((styleFile: (name: string) => string | null) => BiblatexBblResult | null) | null;
 }
 
 export function buildCompileInput(
@@ -174,22 +239,39 @@ export function buildCompileInput(
   for (const [path, data] of binaries) additionalFiles[relativeToMain(path, mainPath)] = data;
   let source = withBackrefFromAux(adaptBabel(main.content));
   // Pacotes pedidos no principal ou em outros arquivos do projeto (preâmbulo separado, .sty próprio).
-  const sources = [main.content, ...texts.filter((file) => file.path !== mainPath && /\.(tex|sty|cls)$/.test(file.path)).map((file) => file.content)];
-  const usedPackages = sources.flatMap((text) =>
-    [...stripComments(text).matchAll(/\\(?:usepackage|RequirePackage)\s*(?:\[[^\]]*\])?\s*\{([^}]+)\}/g)].flatMap((match) => match[1]!.split(',').map((name) => name.trim())),
-  );
-  // O compilador não tem bibtex: o .bbl vem pronto (o principal roda como document.tex).
-  const bibliography = buildBbl(new Map(texts.map((file) => [file.path, file.content])), mainPath);
-  if (bibliography) {
-    additionalFiles['document.bbl'] = bibliography.bbl;
-    // O Siglum decide as passagens olhando só o principal; sem \cite nele, faria uma só e as citações ficariam [?].
-    if (!/\\(cite|bibliography)/.test(main.content)) source += '\n% \\bibliography{} (OverDocTeX: citações em arquivos de \\input)\n';
+  const others = texts.filter((file) => file.path !== mainPath && /\.(tex|sty|cls)$/.test(file.path));
+  const sources = [main.content, ...others.map((file) => file.content)];
+  const mainPackages = packagesIn(main.content);
+  const otherPackages = others.flatMap((file) => packagesIn(file.content));
+  const usedPackages = [...mainPackages, ...otherPackages];
+  const localPackages = new Set(texts.filter((file) => /\.(sty|cls)$/.test(file.path)).map((file) => file.path.replace(/^.*\//, '').replace(/\.(sty|cls)$/, '')));
+  source = withProjectPackages(source, mainPackages, otherPackages, localPackages);
+  // O compilador não tem bibtex nem biber: o .bbl vem pronto (o principal roda como document.tex).
+  const textMap = new Map(texts.map((file) => [file.path, file.content]));
+  const biblatex = scanBiblatex(textMap, mainPath);
+  let texliveFiles: string[] = [];
+  let biblatexBbl: CompileInput['biblatexBbl'] = null;
+  if (biblatex) {
+    // Estilos do biblatex (.bbx, .cbx, .dbx) vêm do repositório; o .bbl é montado quando chegam.
+    const { bibstyle, citestyle, datamodels } = stylesFromOptions(biblatex.packageOptions);
+    texliveFiles = [`${bibstyle}.bbx`, `${citestyle}.cbx`, ...datamodels.map((name) => `${name}.dbx`)];
+    biblatexBbl = (styleFile) => buildBiblatexBbl(textMap, mainPath, styleFile);
+    // O Siglum decide as passagens olhando só o principal: sem citação nem bibliografia nele, faria uma só.
+    if (!/\\(?:[a-zA-Z]*cite|printbibliography|addbibresource)/.test(main.content)) source += '\n% \\printbibliography (OverDocTeX: bibliografia em arquivos de \\input)\n';
+  } else {
+    const bibliography = buildBbl(textMap, mainPath);
+    if (bibliography) {
+      additionalFiles['document.bbl'] = bibliography.bbl;
+      // O Siglum decide as passagens olhando só o principal; sem \cite nele, faria uma só e as citações ficariam [?].
+      if (!/\\(cite|bibliography)/.test(main.content)) source += '\n% \\bibliography{} (OverDocTeX: citações em arquivos de \\input)\n';
+    }
   }
   const documentClass = /\\documentclass\s*(?:\[[^\]]*\])?\s*\{([^}]+)\}/.exec(stripComments(main.content))?.[1]?.trim() ?? '';
   source = withOutlinePass(source, usedPackages.includes('hyperref') || usedPackages.includes('bookmark') || HYPERREF_CLASSES.has(documentClass));
   // Pacotes com arquivos soltos no site (ex.: .ldf): idiomas do babel e os pedidos pelo projeto.
-  const texlivePackages = [...new Set([...babelLanguagePackages(sources.join('\n')), ...usedPackages.filter(Boolean)])];
-  return { source, additionalFiles, texlivePackages };
+  Object.assign(additionalFiles, referencedAliases(additionalFiles, sources));
+  const texlivePackages = [...new Set([...babelLanguagePackages(sources.join('\n')), ...usedPackages.filter(Boolean), ...(biblatex ? ['biblatex'] : [])])];
+  return { source, additionalFiles, texlivePackages, texliveFiles, biblatexBbl };
 }
 
 /**
@@ -204,6 +286,23 @@ export function projectPathFromTex(raw: string, mainPath: string): string | null
   if (clean === 'document.tex') return mainPath;
   const folder = mainPath.includes('/') ? mainPath.slice(0, mainPath.lastIndexOf('/') + 1) : '';
   return folder + clean;
+}
+
+/**
+ * Fontes que o TeX não achou, pelo nome (sem extensão): métrica (.tfm) que
+ * não carrega, fonte virtual ou contorno Type 1 (.pfb) que o pdfTeX não abre.
+ */
+export function missingFonts(log: readonly string[]): string[] {
+  const text = log.join('\n');
+  const patterns = [
+    /! Font [^=\n]*=([^\s]+) at [^\n]*not loadable: Metric \(TFM\) file/g,
+    /! Font ([^\s=]+) at [\d.]+(?:pt)? not found/g,
+    /!pdfTeX error: [^\n]*\(file ([^)\s]+)\): (?:cannot open Type 1 font file|Font [^\n]* not found)/g,
+    /pdfTeX warning: [^\n]*(?:font file|Font) ([^\s]+\.(?:pfb|tfm|vf)) not found/gi,
+  ];
+  const names = new Set<string>();
+  for (const pattern of patterns) for (const match of text.matchAll(pattern)) names.add(match[1]!.replace(/\.(?:tfm|vf|pfb)$/, ''));
+  return [...names];
 }
 
 export interface TexIssue {
@@ -282,7 +381,8 @@ export function parseTexLog(lines: readonly string[], mainPath: string, lineOffs
       }
     }
 
-    for (const token of line.matchAll(/\((\.?\/[^\s()]*)?|\)/g)) {
+    // Nome com espaço ("secoes/04 - Resultados.tex") vai até a extensão; sem extensão conhecida, até o espaço.
+    for (const token of line.matchAll(/\((\.?\/[^()\n]*?\.(?:tex|ltx|sty|cls|bbl|def|cfg|clo|fd)(?=[\s)]|$)|\.?\/[^\s()]*)?|\)/g)) {
       if (token[0] === ')') stack.pop();
       else if (token[1]) stack.push(token[1].startsWith(TEXLIVE) ? TEXLIVE : toProjectPath(token[1]));
       else stack.push(null);

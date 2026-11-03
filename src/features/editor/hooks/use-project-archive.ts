@@ -12,14 +12,13 @@ import type { ImportPlan } from '@/lib/project-archive/import-plan';
 import { buildZip } from '@/lib/project-archive/zip';
 import { queryKeys } from '@/lib/query-keys';
 import { sha256Hex } from '@/lib/stored-files/chunks';
+import { demoBlobs } from '../model/demo-blobs';
 import type { EditorFile } from '../model/editor-file';
 
 /** Texto acima disso vira blob em pedaços: o documento do Firestore tem teto de 1 MiB. */
 const INLINE_TEXT_LIMIT = 400 * 1024;
 const BATCH_SIZE = 400;
 
-/** Binários importados no modo demonstração (sem Firebase), para a exportação devolvê-los. */
-const demoBlobs = new Map<string, Uint8Array>();
 
 /** Exportação do projeto em .zip e aplicação de um plano de importação. */
 export function useProjectArchive(projectId: string) {
