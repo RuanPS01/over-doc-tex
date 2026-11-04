@@ -7,7 +7,8 @@
  * Estilos: plain, abbrv, alpha e unsrt (rótulos numéricos ou alfabéticos);
  * com natbib (ou estilos *nat), rótulos autor-ano; com abntex2cite (ou
  * abntex2-alf/abntex2-num), o estilo ABNT do abnTeX2 (bibliography-abnt.ts).
- * Outros estilos caem em plain. biblatex precisa do Biber e não entra aqui.
+ * Outros estilos caem em plain. biblatex (que pediria o Biber) fica em
+ * bibliography-biblatex.ts.
  */
 import { flattenLatex } from '@/lib/diff/latex-diff';
 import { initials, people, type Person } from './bib-names';

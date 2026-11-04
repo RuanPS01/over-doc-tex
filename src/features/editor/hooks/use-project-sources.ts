@@ -6,6 +6,8 @@ import { readStoredFile } from '@/lib/firebase/stored-files';
 import { t } from '@/lib/i18n';
 import { pickMainFile, type ProjectTextFile, type TexIssue } from '@/lib/latex/prepare';
 import { queryKeys } from '@/lib/query-keys';
+import { sha256Hex } from '@/lib/stored-files/chunks';
+import { demoBlobs } from '../model/demo-blobs';
 import type { EditorFile } from '../model/editor-file';
 
 export interface ProjectBinary {
@@ -28,7 +30,8 @@ export interface ProjectSources {
  * Junta o projeto como ele está na tela: o texto vem dos modelos do Monaco
  * quando o arquivo está aberto (mesmo antes do salvamento automático) e do
  * cache dos arquivos nos demais; binários vêm dos arquivos em pedaços do
- * Firestore e ficam em memória durante a sessão. Usado pela compilação e
+ * Firestore e ficam em memória durante a sessão (no modo demonstração, da
+ * memória da aba, onde a importação os deixou). Usado pela compilação e
  * pelo congelamento de versões.
  */
 export function useProjectSources(projectId: string) {
@@ -51,7 +54,13 @@ export function useProjectSources(projectId: string) {
 
       const binaries = new Map<string, ProjectBinary>();
       const loadIssues: TexIssue[] = [];
-      if (isFirebaseConfigured) {
+      if (!isFirebaseConfigured) {
+        // Modo demonstração: os binários importados estão na memória da aba.
+        for (const file of files) {
+          const data = file.content === null ? demoBlobs.get(file.id) : undefined;
+          if (data) binaries.set(file.path, { data, hash: await sha256Hex(data) });
+        }
+      } else {
         await Promise.all(
           files
             .filter((file) => file.content === null && file.blobPath)

@@ -76,6 +76,34 @@ describe('entrada do compilador', () => {
     expect(Object.keys(input.additionalFiles).sort()).toEqual(['cap/um.tex', 'figuras/a.png']);
   });
 
+  it('lista no fim do principal os pacotes pedidos em outros arquivos (o Siglum carrega os conjuntos deles de saída)', () => {
+    const input = buildCompileInput(
+      'main.tex',
+      [
+        tex('main.tex', '\\documentclass{article}\\input{configuracoes/includes}\\usepackage{placeins}\\begin{document}\\end{document}'),
+        tex('configuracoes/includes.tex', '\\usepackage{inatel}\\usepackage{xcolor,etoolbox}\\usepackage{placeins}% \\usepackage{comentado}'),
+        tex('inatel.sty', '\\RequirePackage{fancyhdr}'),
+      ],
+      new Map(),
+    );
+    expect(input.source).toContain('% \\usepackage{xcolor,etoolbox,fancyhdr} (OverDocTeX');
+  });
+
+  it('acha arquivos citados com pastas a mais no começo (zip importado sem a pasta raiz)', () => {
+    const image = new Uint8Array([1]);
+    const input = buildCompileInput(
+      'main.tex',
+      [
+        tex('main.tex', '\\documentclass{article}\\begin{document}\\input{secoes/a}\\end{document}'),
+        tex('secoes/a.tex', '\\includegraphics{TCC/figuras/x.png} \\includegraphics[width=1cm]{TCC/figuras/y} \\includegraphics{figuras/x.png} % \\includegraphics{TCC/figuras/z.png}'),
+      ],
+      new Map([['figuras/x.png', image], ['figuras/y.pdf', image], ['figuras/z.png', image]]),
+    );
+    expect(input.additionalFiles['TCC/figuras/x.png']).toBe(image);
+    expect(input.additionalFiles['TCC/figuras/y.pdf']).toBe(image);
+    expect(input.additionalFiles['TCC/figuras/z.png']).toBeUndefined();
+  });
+
   it('lista os pacotes cujos arquivos soltos vão junto: idiomas e pacotes pedidos no projeto', () => {
     const input = buildCompileInput(
       'main.tex',
@@ -118,6 +146,11 @@ describe('log do TeX', () => {
   it('mostra cada problema uma vez, mesmo com várias passagens do TeX', () => {
     const pass = ['(/document.tex', '! Undefined control sequence.', 'l.4 \\x', ')'];
     expect(parseTexLog([...pass, ...pass], 'main.tex')).toHaveLength(1);
+  });
+
+  it('lê nomes de arquivo com espaço', () => {
+    const issues = parseTexLog(['(./secoes/04 - Resultados.tex', "LaTeX Warning: Reference `fig:x' on page 2 undefined on input line 9.", ')'], 'main.tex');
+    expect(issues).toEqual([expect.objectContaining({ kind: 'warning', file: 'secoes/04 - Resultados.tex' })]);
   });
 
   it('volta ao principal depois que o arquivo incluído fecha', () => {
