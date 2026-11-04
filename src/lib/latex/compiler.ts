@@ -11,7 +11,7 @@
 import siglumWorkerUrl from 'siglum-worker?url';
 import type { SiglumCompiler } from '@siglum/engine';
 import { t } from '@/lib/i18n';
-import { mainLineOffset, missingFonts, parseTexLog, projectPathFromTex, type CompileInput, type TexIssue } from './prepare';
+import { mainLineOffset, missingFonts, parseTexLog, projectPathFromTex, withCacheKey, type CompileInput, type TexIssue } from './prepare';
 import { parseSynctex, type SyncData } from './synctex';
 import { fetchLooseFiles, fontPackagesFor, installTexliveFetchGuard, texliveRevision } from './texlive-files';
 
@@ -112,6 +112,11 @@ async function loadCompiler(): Promise<SiglumCompiler> {
     },
   });
   await compiler.init();
+  // Sem formato do preâmbulo em segundo plano: o Siglum o gera só com os pacotes do cache dele, sem os
+  // arquivos do projeto nem os soltos (.ldf, .bbx), e a geração falha (ou sai quebrada) e repete até 20
+  // vezes; a compilação seguinte espera por ela e herda os erros ("Unknown option 'brazil'",
+  // "Style 'numeric' not found"). Um formato salvo quebrado estragaria as compilações seguintes.
+  (compiler as unknown as { generateFormat: () => Promise<null> }).generateFormat = async () => null;
   await refreshPackageCache(compiler);
   compilerReady = true;
   return compiler;
@@ -184,6 +189,7 @@ export function compileLatex(
           console.error('[biblatex]', error);
         }
       }
+      const source = withCacheKey(input.source, additionalFiles, await texliveRevision());
       const hints = [...new Set([...sessionFontPackages, ...input.texlivePackages.flatMap((pkg) => FONT_PACKAGE_HINTS[pkg] ?? [])])];
       if (hints.length > 0) await compiler.ctanFetcher.batchFetchPackages(hints);
       // useCache: false porque o cache do Siglum usa só o texto do principal como chave: mudar um
@@ -193,7 +199,7 @@ export function compileLatex(
         workerNotes = [];
         retryPending = false;
         onStage('compiling');
-        return compiler.compile(input.source, { engine: 'pdflatex', additionalFiles, useCache: false });
+        return compiler.compile(source, { engine: 'pdflatex', additionalFiles, useCache: false });
       };
       let result = await compileOnce();
       // Fonte que faltou (o Siglum não sabe de que pacote ela vem): acha o pacote pelo índice, busca e compila de novo.

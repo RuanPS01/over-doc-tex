@@ -6,6 +6,7 @@ import {
   buildCompileInput,
   hasDocumentClass,
   parseTexLog,
+  withCacheKey,
   pickMainFile,
   relativeToMain,
   withBackrefFromAux,
@@ -125,6 +126,27 @@ describe('entrada do compilador', () => {
     expect(compile('\\documentclass{article}\\usepackage{hyperref}\\begin{document}\\tableofcontents\\end{document}')).not.toContain(marker);
     expect(compile('\\documentclass{article}\\usepackage{hyperref}\\begin{document}\\section{A}\\label{s}\\end{document}')).not.toContain(marker);
     expect(compile('\\documentclass{article}\n% \\usepackage{hyperref}\n\\begin{document}\\end{document}')).not.toContain(marker);
+  });
+});
+
+describe('chave dos caches do Siglum', () => {
+  const main = '% cabeçalho\n\\documentclass{article}\n\\input{preambulo}\n\\begin{document}\nTexto\n\\end{document}\n';
+  const files = { 'preambulo.tex': '\\usepackage{xcolor}', 'figura.png': new Uint8Array([1, 2, 3]) };
+
+  it('marca o preâmbulo sem mudar as linhas do documento', () => {
+    const marked = withCacheKey(main, files, 'r1');
+    expect(marked.split('\n')).toHaveLength(main.split('\n').length);
+    expect(marked).toMatch(/^% cabeçalho\n\\documentclass\{article\}\n\\input\{preambulo\}\n\\iffalse OverDocTeX [0-9a-f]{32}\\fi\\begin\{document\}\n/);
+  });
+
+  it('muda quando muda um arquivo de \\input, um binário ou a revisão do repositório', () => {
+    const key = (text: string) => /OverDocTeX ([0-9a-f]+)/.exec(text)![1];
+    const base = key(withCacheKey(main, files, 'r1'));
+    expect(key(withCacheKey(main, files, 'r1'))).toBe(base);
+    expect(key(withCacheKey(main, { ...files, 'preambulo.tex': '\\usepackage{etoolbox}' }, 'r1'))).not.toBe(base);
+    expect(key(withCacheKey(main, { ...files, 'figura.png': new Uint8Array([1, 2, 4]) }, 'r1'))).not.toBe(base);
+    expect(key(withCacheKey(main, files, 'r2'))).not.toBe(base);
+    expect(withCacheKey('\\documentclass{article}', files, 'r1')).toBe('\\documentclass{article}');
   });
 });
 

@@ -7,6 +7,7 @@ import { t } from '@/lib/i18n';
 import { stylesFromOptions } from './biblatex-config';
 import { buildBbl } from './bibliography';
 import { buildBiblatexBbl, scanBiblatex, type BiblatexBblResult } from './bibliography-biblatex';
+import { md5Hex } from './md5';
 
 export interface ProjectTextFile {
   path: string;
@@ -209,6 +210,30 @@ export function referencedAliases(files: Readonly<Record<string, string | Uint8A
     }
   }
   return aliases;
+}
+
+/** Muda quando o jeito de montar a entrada do compilador muda: invalida os caches do Siglum de versões anteriores. */
+const CACHE_KEY_VERSION = 'compile-1';
+
+/**
+ * Marca no preâmbulo do principal, sem efeito no documento nem nas linhas,
+ * com o hash de tudo o que vai para o TeX. O Siglum guarda o .aux e o .bbl
+ * de uma compilação (e um formato do preâmbulo) com uma chave que é só o
+ * texto antes do \begin{document} do principal: um \input do preâmbulo
+ * alterado, um .bib novo ou um arquivo solto que faltou numa versão anterior
+ * voltariam do cache. Com a marca, o cache só vale quando nada mudou.
+ */
+export function withCacheKey(source: string, files: Readonly<Record<string, string | Uint8Array>>, revision: string | null): string {
+  const at = source.indexOf('\\begin{document}');
+  if (at < 0) return source;
+  const parts = [CACHE_KEY_VERSION, revision ?? '', source];
+  for (const path of Object.keys(files).sort()) {
+    const file = files[path]!;
+    parts.push(path, typeof file === 'string' ? file : `${file.byteLength}:${file.slice(0, 64).join(',')}:${file.slice(-64).join(',')}`);
+  }
+  const key = md5Hex(parts.join('\u0000'));
+  // O Siglum corta o preâmbulo na primeira ocorrência do texto, mesmo num comentário: a marca entra logo antes dela.
+  return `${source.slice(0, at)}\\iffalse OverDocTeX ${key}\\fi${source.slice(at)}`;
 }
 
 export interface CompileInput {
