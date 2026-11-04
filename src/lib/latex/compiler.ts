@@ -68,6 +68,22 @@ const MAX_FONT_ROUNDS = 3;
 /** Pacotes de fontes já buscados nesta aba: entram de saída nas próximas compilações. */
 const sessionFontPackages = new Set<string>();
 
+const DEBUG_KEY = 'overdoctex.debug-latex';
+
+/**
+ * Log do compilador no console do navegador: no build com
+ * VITE_SIGLUM_DEBUG=true ou, no site publicado, com
+ * localStorage.setItem('overdoctex.debug-latex', '1') e a página recarregada.
+ */
+const debugLatex = (() => {
+  if (import.meta.env.VITE_SIGLUM_DEBUG === 'true') return true;
+  try {
+    return window.localStorage.getItem(DEBUG_KEY) === '1';
+  } catch {
+    return false;
+  }
+})();
+
 async function loadCompiler(): Promise<SiglumCompiler> {
   installTexliveFetchGuard();
   const [{ SiglumCompiler: Compiler }, xzwasm] = await Promise.all([import('@siglum/engine'), import('xzwasm')]);
@@ -87,7 +103,7 @@ async function loadCompiler(): Promise<SiglumCompiler> {
     onLog: (message) => {
       const text = String(message);
       // Depuração: VITE_SIGLUM_DEBUG=true no build copia o log do compilador para o console.
-      if (import.meta.env.VITE_SIGLUM_DEBUG === 'true') console.debug('[siglum]', text);
+      if (debugLatex) console.debug('[siglum]', text);
       if (text.startsWith('[TeX] ')) {
         // O Siglum tenta de novo depois de buscar um pacote que faltava; os erros das tentativas
         // anteriores ("File `x' not found") deixam de valer quando a nova tentativa começa. Se a
@@ -171,9 +187,9 @@ export function compileLatex(
     // Só a primeira compilação da aba baixa o motor (depois ele fica em memória e em cache).
     if (!compilerReady) onStage('engine');
     try {
-      const [compiler, looseFiles] = await Promise.all([getCompiler(), fetchLooseFiles(input.texlivePackages, input.texliveFiles)]);
+      const [compiler, loose] = await Promise.all([getCompiler(), fetchLooseFiles(input.texlivePackages, input.texliveFiles)]);
       // Arquivos do projeto ganham dos soltos de mesmo nome.
-      const additionalFiles: Record<string, string | Uint8Array> = { ...looseFiles, ...input.additionalFiles };
+      const additionalFiles: Record<string, string | Uint8Array> = { ...loose.files, ...input.additionalFiles };
       if (input.biblatexBbl) {
         // biblatex: o .bbl sai das citações, dos .bib e das opções do estilo (lidas dos .bbx e .cbx que chegaram).
         const decoder = new TextDecoder();
@@ -190,6 +206,17 @@ export function compileLatex(
         }
       }
       const source = withCacheKey(input.source, additionalFiles, await texliveRevision());
+      if (debugLatex) {
+        console.debug('[overdoctex] entrada', {
+          pacotes: input.texlivePackages,
+          estilos: input.texliveFiles,
+          soltos: Object.keys(loose.files).length,
+          soltosQueFaltaram: loose.failed,
+          indice: loose.indexError ?? 'ok',
+          arquivos: Object.keys(additionalFiles).length,
+          bbl: typeof additionalFiles['document.bbl'] === 'string' ? (additionalFiles['document.bbl'] as string).length : null,
+        });
+      }
       const hints = [...new Set([...sessionFontPackages, ...input.texlivePackages.flatMap((pkg) => FONT_PACKAGE_HINTS[pkg] ?? [])])];
       if (hints.length > 0) await compiler.ctanFetcher.batchFetchPackages(hints);
       // useCache: false porque o cache do Siglum usa só o texto do principal como chave: mudar um
@@ -213,6 +240,17 @@ export function compileLatex(
       }
       const lineOffset = mainLineOffset(input.source, workerNotes);
       const issues = parseTexLog(logLines, mainPath, lineOffset);
+      // Sem os arquivos soltos (idiomas do babel, estilos do biblatex), o TeX acusa o efeito; aqui vai a causa.
+      if (loose.indexError) {
+        issues.unshift({ kind: 'warning', message: t('O índice do repositório de pacotes não carregou ({reason}): arquivos de idioma e de estilo ficaram de fora.', { reason: loose.indexError }), file: null, line: null });
+      } else if (loose.failed.length > 0) {
+        issues.unshift({
+          kind: 'warning',
+          message: t('{count} arquivos do repositório de pacotes não foram baixados: {names}', { count: String(loose.failed.length), names: loose.failed.slice(0, 3).join('; ') }),
+          file: null,
+          line: null,
+        });
+      }
       const pdf = result.success && result.pdf ? new Uint8Array(result.pdf) : null;
       const rawSynctex = (result as { syncTexData?: string | null }).syncTexData ?? null;
       const synctex =
