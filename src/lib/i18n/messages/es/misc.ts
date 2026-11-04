@@ -80,6 +80,8 @@ const messages: Record<string, string> = {
   'Expandir {title}': 'Expandir {title}',
   'Índice': 'Índice',
   'Fechar o índice': 'Cerrar el índice',
+  'O índice do repositório de pacotes não carregou ({reason}): arquivos de idioma e de estilo ficaram de fora.': 'El índice del repositorio de paquetes no se cargó ({reason}): los archivos de idioma y de estilo quedaron fuera.',
+  '{count} arquivos do repositório de pacotes não foram baixados: {names}': '{count} archivos del repositorio de paquetes no se descargaron: {names}',
 };
 
 export default messages;

@@ -5,6 +5,7 @@ import { getFirebase, isFirebaseConfigured } from '@/lib/firebase/app';
 import { readStoredFile } from '@/lib/firebase/stored-files';
 import { t } from '@/lib/i18n';
 import { pickMainFile, type ProjectTextFile, type TexIssue } from '@/lib/latex/prepare';
+import { isTextPath } from '@/lib/project-archive/archive-paths';
 import { queryKeys } from '@/lib/query-keys';
 import { sha256Hex } from '@/lib/stored-files/chunks';
 import { demoBlobs } from '../model/demo-blobs';
@@ -72,7 +73,10 @@ export function useProjectSources(projectId: string) {
                   data = (await readStoredFile(getFirebase().db, blobPath)).data;
                   binaryCache.current.set(blobPath, data);
                 }
-                binaries.set(file.path, { data, hash: blobPath.slice(blobPath.lastIndexOf('/') + 1) });
+                // Texto grande (acima do limite do documento) guardado em pedaços: volta a ser texto, para a
+                // preparação ler os pacotes, as citações e os .bib dele (como binário, só o TeX o veria).
+                if (isTextPath(file.path)) texts.push({ path: file.path, content: openTexts.get(file.path) ?? new TextDecoder().decode(data) });
+                else binaries.set(file.path, { data, hash: blobPath.slice(blobPath.lastIndexOf('/') + 1) });
               } catch {
                 loadIssues.push({ kind: 'warning', message: t('Não foi possível carregar {path}.', { path: file.path }), file: file.path, line: null });
               }
