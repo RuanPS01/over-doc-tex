@@ -31,6 +31,7 @@ Não há servidor: todo código de produto roda no navegador. O que antes seria 
 | SyncTeX (leitura e buscas direta e reversa) | `src/lib/latex/synctex.ts` |
 | Bibliografia (.bbl a partir dos .bib) | BibTeX em `src/lib/latex/bibliography.ts`; estilo ABNT do abnTeX2 em `bibliography-abnt.ts`; nomes de pessoas em `bib-names.ts`. biblatex (o Biber emulado) em `bibliography-biblatex.ts`, com as opções, modelos e mapas lidos em `biblatex-config.ts`, acentos em `latex-text.ts` e o MD5 dos hashes em `md5.ts` |
 | Arquivos soltos, índice de fontes e revisão do repositório de pacotes | `src/lib/latex/texlive-files.ts` |
+| Caches do Siglum (formato desligado, chave dos auxiliares) | `withCacheKey` em `src/lib/latex/prepare.ts` e `loadCompiler` em `src/lib/latex/compiler.ts`; mudar o jeito de montar a entrada do compilador pede um `CACHE_KEY_VERSION` novo |
 | Reancoragem de trechos entre versões | `src/lib/pdf/reanchor.ts`; geometria do texto em `src/lib/pdf/page-text.ts` |
 | Âncoras de trecho e desenho (puro) | `src/lib/pdf/text-anchor.ts`, `src/lib/pdf/drawing.ts` |
 | Índice do PDF (marcadores, seção atual) | `src/lib/pdf/outline.ts`; estado e rolagem em `src/features/pdf-viewer/hooks/use-pdf-outline.ts` |
