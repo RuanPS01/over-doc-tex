@@ -106,11 +106,39 @@ export function toThreadSummary(id: string, data: ThreadDoc): ThreadSummary {
 export interface CommentSummary extends Omit<CommentDoc, 'createdAt' | 'editedAt' | 'deletedAt'> {
   id: string;
   createdAt: Date | null;
+  /** Última edição do texto pelo autor. */
+  editedAt: Date | null;
+  /** Excluído pelo autor: o registro fica na thread, sem o texto. */
+  isDeleted: boolean;
 }
 
 export function toCommentSummary(id: string, data: CommentDoc): CommentSummary {
-  const { createdAt, editedAt: _editedAt, deletedAt: _deletedAt, ...rest } = data;
-  return { ...rest, id, createdAt: createdAt?.toDate() ?? null };
+  const { createdAt, editedAt, deletedAt, ...rest } = data;
+  return { ...rest, id, createdAt: createdAt?.toDate() ?? null, editedAt: editedAt?.toDate() ?? null, isDeleted: Boolean(deletedAt) };
+}
+
+/** Quem está vendo a revisão, para saber o que pode mudar em cada thread e comentário (as regras conferem de novo). */
+export interface ReviewViewer {
+  uid: string | null;
+  /** Revisor pelo link, sem conta: a chave do nome (a mesma em qualquer aparelho). */
+  guestKey: string | null;
+  /** Dono ou editor do projeto. */
+  canEditProject: boolean;
+}
+
+/** Quem criou a thread: a conta, ou o visitante com o mesmo nome. */
+export function isThreadAuthor(thread: Pick<ThreadSummary, 'createdBy' | 'authorKey'>, viewer: ReviewViewer): boolean {
+  return (viewer.uid !== null && thread.createdBy === viewer.uid) || (Boolean(thread.authorKey) && thread.authorKey === viewer.guestKey);
+}
+
+/** Excluir, reposicionar ou refazer a marcação: quem criou a thread ou quem edita o projeto. */
+export function canManageThread(thread: Pick<ThreadSummary, 'createdBy' | 'authorKey'>, viewer: ReviewViewer): boolean {
+  return viewer.canEditProject || isThreadAuthor(thread, viewer);
+}
+
+/** Editar ou excluir um comentário: só quem escreveu (o visitante, pelo mesmo nome). */
+export function isCommentAuthor(comment: Pick<CommentSummary, 'authorId' | 'authorKey'>, viewer: ReviewViewer): boolean {
+  return (viewer.uid !== null && comment.authorId === viewer.uid) || (Boolean(comment.authorKey) && comment.authorKey === viewer.guestKey);
 }
 
 /** Ordem de leitura: documento, página, depois de cima para baixo. */

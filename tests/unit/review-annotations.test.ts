@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { decodeSyncData, encodeSyncData, parseSynctex, pdfAt, sourceAt } from '@/lib/latex/synctex';
 import { projectPathFromTex } from '@/lib/latex/prepare';
-import { boundsOf, buildDrawing, flattenStroke, MAX_DRAWING_POINTS, pinPointFor, simplify } from '@/lib/pdf/drawing';
+import { canManageThread, isCommentAuthor, isThreadAuthor, toCommentSummary } from '@/features/review/model/review';
+import type { CommentDoc } from '@shared/firestore/types';
+import { boundsOf, buildDrawing, flattenStroke, MAX_DRAWING_POINTS, movePin, pinPointFor, simplify } from '@/lib/pdf/drawing';
 import { reanchorQuote } from '@/lib/pdf/reanchor';
 import { buildQuote, normalizeRects } from '@/lib/pdf/text-anchor';
 
@@ -138,5 +140,49 @@ describe('reancoragem entre versões', () => {
       'A revisão de documentos acadêmicos ainda depende de trocas de arquivos',
     );
     expect(reanchorQuote(['Texto completamente diferente.'], anchor)).toBeNull();
+  });
+});
+
+describe('mexer em comentários da revisão', () => {
+  const drawing = {
+    bounds: { x: 0.1, y: 0.2, width: 0.2, height: 0.1 },
+    strokes: [{ tool: 'pen' as const, color: 'annotation-2' as const, width: 0.004, points: [0.1, 0.2, 0.3, 0.3] }],
+  };
+
+  it('arrastar o pin leva o desenho junto, sem sair da página', () => {
+    const moved = movePin({ x: 0.3, y: 0.2 }, drawing, { x: 0.5, y: 0.4 });
+    expect(moved.point).toEqual({ x: 0.5, y: 0.4 });
+    expect(moved.drawing?.bounds).toEqual({ x: 0.3, y: 0.4, width: 0.2, height: 0.1 });
+    expect(moved.drawing?.strokes[0]?.points).toEqual([0.3, 0.4, 0.5, 0.5]);
+    // Arrastado para fora: o desenho para na borda e o pin acompanha o mesmo deslocamento.
+    const edge = movePin({ x: 0.3, y: 0.2 }, drawing, { x: 1.5, y: -1 });
+    expect(edge.drawing?.bounds).toEqual({ x: 0.8, y: 0, width: 0.2, height: 0.1 });
+    expect(edge.point).toEqual({ x: 1, y: 0 });
+    expect(movePin({ x: 0.3, y: 0.2 }, null, { x: 0.9, y: 0.1 })).toEqual({ point: { x: 0.9, y: 0.1 }, drawing: null });
+  });
+
+  it('quem criou a thread ou edita o projeto a gerencia; o texto só quem escreveu edita', () => {
+    const reviewer = { uid: 'rev', guestKey: null, canEditProject: false };
+    const guest = { uid: 'g2', guestKey: 'maria souza', canEditProject: false };
+    const editor = { uid: 'bia', guestKey: null, canEditProject: true };
+    const byReviewer = { createdBy: 'rev', authorKey: null };
+    const byGuest = { createdBy: 'g1', authorKey: 'maria souza' };
+    expect(isThreadAuthor(byReviewer, reviewer)).toBe(true);
+    expect(canManageThread(byReviewer, guest)).toBe(false);
+    // O mesmo nome em outro aparelho (outra sessão anônima) é o mesmo revisor.
+    expect(canManageThread(byGuest, guest)).toBe(true);
+    expect(canManageThread(byGuest, editor)).toBe(true);
+    expect(isThreadAuthor(byGuest, editor)).toBe(false);
+    expect(isCommentAuthor({ authorId: 'rev', authorKey: null }, editor)).toBe(false);
+    expect(isCommentAuthor({ authorId: 'g1', authorKey: 'maria souza' }, guest)).toBe(true);
+    expect(isCommentAuthor({ authorId: 'x', authorKey: null }, { uid: null, guestKey: null, canEditProject: false })).toBe(false);
+  });
+
+  it('comentário editado e excluído aparecem no resumo', () => {
+    const when = { toDate: () => new Date(0), toMillis: () => 0 };
+    const base = { authorId: 'rev', authorName: 'Rev', authorPhotoURL: null, authorRole: 'reviewer', kind: 'comment', statusChange: null, createdAt: when } as const;
+    const edited = toCommentSummary('c1', { ...base, body: 'novo', editedAt: when, deletedAt: null } as unknown as CommentDoc);
+    expect(edited).toMatchObject({ editedAt: new Date(0), isDeleted: false });
+    expect(toCommentSummary('c2', { ...base, body: '', editedAt: null, deletedAt: when } as unknown as CommentDoc).isDeleted).toBe(true);
   });
 });

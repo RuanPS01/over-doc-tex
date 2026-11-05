@@ -1,5 +1,5 @@
 import { Loader2, Send } from 'lucide-react';
-import { useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useT } from '@/hooks/use-t';
@@ -9,14 +9,17 @@ interface CommentComposerProps {
   placeholder: string;
   submitLabel: string;
   autoFocus?: boolean;
+  /** Texto já escrito (edição de um comentário). */
+  initialValue?: string;
+  submitIcon?: ReactNode;
   onSubmit: (body: string) => Promise<unknown>;
   onCancel?: () => void;
 }
 
-/** Caixa de comentário: Enter envia, Shift+Enter quebra a linha. */
-export function CommentComposer({ placeholder, submitLabel, autoFocus, onSubmit, onCancel }: CommentComposerProps) {
+/** Caixa de comentário: Enter envia, Shift+Enter quebra a linha, Esc cancela (quando dá para cancelar). */
+export function CommentComposer({ placeholder, submitLabel, autoFocus, initialValue = '', submitIcon, onSubmit, onCancel }: CommentComposerProps) {
   const { t } = useT();
-  const [body, setBody] = useState('');
+  const [body, setBody] = useState(initialValue);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,6 +43,9 @@ export function CommentComposer({ placeholder, submitLabel, autoFocus, onSubmit,
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       void submit();
+    } else if (event.key === 'Escape' && onCancel) {
+      event.preventDefault();
+      onCancel();
     }
   };
 
@@ -64,7 +70,7 @@ export function CommentComposer({ placeholder, submitLabel, autoFocus, onSubmit,
           </Button>
         )}
         <Button type="submit" size="sm" disabled={!body.trim() || isSending}>
-          {isSending ? <Loader2 className="animate-spin" /> : <Send />}
+          {isSending ? <Loader2 className="animate-spin" /> : (submitIcon ?? <Send />)}
           {submitLabel}
         </Button>
       </div>

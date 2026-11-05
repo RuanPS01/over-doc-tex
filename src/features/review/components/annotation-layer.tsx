@@ -1,8 +1,9 @@
 import { useRef, useState, type PointerEvent } from 'react';
-import type { AnnotationColor, Stroke } from '@shared/firestore/types';
+import type { AnnotationColor, NormalizedPoint, Stroke } from '@shared/firestore/types';
 import { useT } from '@/hooks/use-t';
-import { svgPoints } from '@/lib/pdf/drawing';
+import { movePin, svgPoints } from '@/lib/pdf/drawing';
 import { cn } from '@/lib/utils';
+import { usePinDrag } from '../hooks/use-pin-drag';
 import type { PendingAnnotation, ReviewTool, ThreadSummary } from '../model/review';
 
 /** Classes inteiras (o Tailwind só gera o que aparece escrito no código). */
@@ -24,6 +25,12 @@ interface AnnotationLayerProps {
   /** Traço terminado (pontos normalizados [x, y]). */
   onStroke: (page: number, points: Array<[number, number]>) => void;
   onSelect: (threadId: string) => void;
+  /** Pins (com ou sem desenho) que a pessoa pode arrastar: quem criou a thread ou edita o projeto. */
+  canMove: (thread: ThreadSummary) => boolean;
+  /** Pin solto em outro lugar da página (o desenho vai junto). */
+  onMovePin: (thread: ThreadSummary, point: NormalizedPoint) => Promise<unknown>;
+  /** Thread esperando a marcação nova: a atual aparece esmaecida. */
+  relocatingThreadId: string | null;
 }
 
 const clamp = (value: number) => Math.min(1, Math.max(0, value));
@@ -55,8 +62,25 @@ function Strokes({ strokes, faded = false }: { strokes: readonly Stroke[]; faded
  * fora do modo de desenho). Em "Selecionar", a camada deixa o clique passar
  * para a camada de texto.
  */
-export function AnnotationLayer({ page, threads, pending, tool, selectedThreadId, onPlacePin, onStroke, onSelect }: AnnotationLayerProps) {
+export function AnnotationLayer({
+  page,
+  threads,
+  pending,
+  tool,
+  selectedThreadId,
+  onPlacePin,
+  onStroke,
+  onSelect,
+  canMove,
+  onMovePin,
+  relocatingThreadId,
+}: AnnotationLayerProps) {
   const { t } = useT();
+  const rootRef = useRef<HTMLDivElement>(null);
+  const pinDrag = usePinDrag(rootRef, (threadId, point) => {
+    const thread = threads.find((item) => item.thread.id === threadId)?.thread;
+    return thread ? onMovePin(thread, point) : Promise.resolve();
+  });
   const [live, setLive] = useState<Array<[number, number]> | null>(null);
   const liveRef = useRef<Array<[number, number]> | null>(null);
   const pendingColor: AnnotationColor = pending?.kind === 'draw' ? pending.color : 'annotation-2';
@@ -93,6 +117,7 @@ export function AnnotationLayer({ page, threads, pending, tool, selectedThreadId
 
   return (
     <div
+      ref={rootRef}
       className={cn(
         'absolute inset-0 z-10',
         tool === 'select' && 'pointer-events-none',
@@ -117,12 +142,15 @@ export function AnnotationLayer({ page, threads, pending, tool, selectedThreadId
         );
         const select = (event: { stopPropagation: () => void }) => {
           event.stopPropagation();
+          // Soltar o pin depois de arrastar não conta como clique.
+          if (pinDrag.consumeClick()) return;
           onSelect(thread.id);
         };
+        const fade = thread.id === relocatingThreadId && 'opacity-30';
         if (thread.anchor.type === 'text') {
           const first = thread.anchor.rects[0];
           return (
-            <div key={thread.id}>
+            <div key={thread.id} className={cn(fade)}>
               {thread.anchor.rects.map((rect, index) => (
                 <span
                   key={index}
@@ -146,15 +174,20 @@ export function AnnotationLayer({ page, threads, pending, tool, selectedThreadId
             </div>
           );
         }
+        // Pin arrastável: o ponto e o desenho seguem o ponteiro enquanto ele é arrastado.
+        const movable = canMove(thread);
+        const isDragging = pinDrag.drag?.threadId === thread.id;
+        const shown = isDragging ? movePin(thread.anchor.point, thread.anchor.drawing, pinDrag.drag!.point) : thread.anchor;
         return (
-          <div key={thread.id}>
-            {thread.anchor.drawing && <Strokes strokes={thread.anchor.drawing.strokes} faded={isResolved} />}
+          <div key={thread.id} className={cn(fade)}>
+            {shown.drawing && <Strokes strokes={shown.drawing.strokes} faded={isResolved} />}
             <button
               type="button"
               aria-label={t('Comentário {number}', { number })}
-              style={{ left: `${thread.anchor.point.x * 100}%`, top: `${thread.anchor.point.y * 100}%` }}
-              className={badge}
-              onPointerDown={(event) => event.stopPropagation()}
+              title={movable ? t('Clique para abrir; arraste para mudar de lugar') : undefined}
+              style={{ left: `${shown.point.x * 100}%`, top: `${shown.point.y * 100}%` }}
+              className={cn(badge, movable && 'cursor-grab touch-none active:cursor-grabbing', isDragging && 'scale-110 cursor-grabbing opacity-100 shadow-md')}
+              {...(movable ? pinDrag.bind(thread.id, thread.anchor.point) : { onPointerDown: (event: PointerEvent<HTMLButtonElement>) => event.stopPropagation() })}
               onClick={select}
             >
               {number}

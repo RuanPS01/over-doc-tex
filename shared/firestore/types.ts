@@ -434,6 +434,11 @@ export interface ThreadDoc {
   /** Thread herdada de uma rodada anterior ainda aberta. */
   carriedFromThreadId: ThreadId | null;
   createdBy: UserId;
+  /**
+   * Revisor pelo link, sem conta: identidade pelo nome (ReviewGuestDoc.guestKey), como nos
+   * comentários. Com ela, o mesmo nome em outro aparelho reposiciona e exclui a thread. Ausente nos demais.
+   */
+  authorKey?: string | null;
   createdByRole: ParticipantRole;
   /** Mantidos pelo app no mesmo lote do comentário; as regras só aceitam +1. */
   commentCount: number;

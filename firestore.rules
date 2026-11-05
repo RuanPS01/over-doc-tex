@@ -480,17 +480,33 @@ service cloud.firestore {
             return d.get('authorKey', null) == null || (isGuest(pid, rid) && d.authorKey == guestKey(pid, rid));
           }
 
+          // Quem criou a thread: a conta, ou, para o visitante pelo link, o mesmo nome em qualquer aparelho.
+          function threadAuthor(t) {
+            return t.createdBy == uid()
+              || (t.get('authorKey', null) != null && isGuest(pid, rid) && t.authorKey == guestKey(pid, rid));
+          }
+
+          // Excluir, reposicionar ou refazer a marcação: quem criou a thread ou quem edita o projeto.
+          function canManageThread(t) {
+            return canEdit(pid) || threadAuthor(t);
+          }
+
+          function validAnchor(d) {
+            return d.kind in ['text', 'pin']
+              && d.anchor.type == d.kind
+              && d.anchor.page is int && d.anchor.page >= 1;
+          }
+
           function validNewThread() {
             let d = request.resource.data;
             let review = reviewData(pid, rid);
             return d.createdBy == uid()
+              && validAuthorKey(d)
               && d.projectId == pid
               && d.reviewId == rid
               && d.snapshotId == review.snapshotId
               && d.documentId in review.grantedDocumentIds
-              && d.kind in ['text', 'pin']
-              && d.anchor.type == d.kind
-              && d.anchor.page is int && d.anchor.page >= 1
+              && validAnchor(d)
               // Thread levada da rodada anterior pode nascer "desatualizada" (trecho não encontrado).
               && (d.status == 'open' || (d.status == 'outdated' && d.get('carriedFromThreadId', null) is string))
               && d.resolution == null
@@ -519,10 +535,21 @@ service cloud.firestore {
               && request.resource.data.resolution.diff(resource.data.resolution).affectedKeys().hasOnly(['fixedInSnapshotId']);
           }
 
+          // Marcação nova no mesmo comentário: outro ponto, desenho ou trecho (e a linha do código dele).
+          // Uma thread desatualizada volta a aberta ao ganhar marcação; os outros status não mudam aqui.
+          function movingAnchor() {
+            let d = request.resource.data;
+            return canManageThread(resource.data)
+              && onlyChanges(['kind', 'anchor', 'sourceHint', 'status', 'updatedAt'])
+              && validAnchor(d)
+              && (d.status == resource.data.status || (resource.data.status == 'outdated' && d.status == 'open'));
+          }
+
           allow read: if canParticipate();
           allow create: if canParticipate() && validNewThread();
-          allow update: if canParticipate() && (countingComment() || changingStatus() || stampingFix());
-          allow delete: if false;
+          allow update: if canParticipate() && (countingComment() || changingStatus() || stampingFix() || movingAnchor());
+          // Os comentários saem no mesmo lote (regra de exclusão abaixo).
+          allow delete: if canParticipate() && canManageThread(resource.data);
 
           match /comments/{cid} {
             allow read: if canParticipate();
@@ -537,7 +564,10 @@ service cloud.firestore {
               && (resource.data.authorId == uid()
                 || (resource.data.get('authorKey', null) != null && isGuest(pid, rid) && resource.data.authorKey == guestKey(pid, rid)))
               && onlyChanges(['body', 'editedAt', 'deletedAt']);
-            allow delete: if false;
+            // Só junto com a thread: o lote que apaga a thread leva os comentários dela.
+            allow delete: if canParticipate()
+              && !existsAfter(/databases/$(database)/documents/projects/$(pid)/reviews/$(rid)/threads/$(tid))
+              && canManageThread(get(/databases/$(database)/documents/projects/$(pid)/reviews/$(rid)/threads/$(tid)).data);
           }
         }
       }

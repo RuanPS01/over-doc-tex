@@ -14,16 +14,16 @@ import { useT } from '@/hooks/use-t';
 import { downloadBytes, slugify } from '@/lib/download';
 import { msg } from '@/lib/i18n';
 import { sourceAt } from '@/lib/latex/synctex';
-import { buildDrawing, flattenStroke, pinPointFor } from '@/lib/pdf/drawing';
+import { buildDrawing, flattenStroke, movePin, pinPointFor } from '@/lib/pdf/drawing';
 import { buildQuote, normalizeRects } from '@/lib/pdf/text-anchor';
 import { cn } from '@/lib/utils';
 import type { AnnotationColor, ParticipantRole, ReviewStatus, SourceLocation } from '@shared/firestore/types';
 import { useAnnotatedPdf } from '../hooks/use-annotated-pdf';
-import { useReviewActions, type GuestIdentity, type NewAnnotation } from '../hooks/use-review-actions';
+import { useReviewActions, useReviewViewer, type GuestIdentity, type NewAnnotation } from '../hooks/use-review-actions';
 import { useReviewDocuments, useReviewPageTexts, useReviewPdf, useReviewSyncData } from '../hooks/use-review-files';
 import { useTextSelection } from '../hooks/use-text-selection';
 import { useThreads } from '../hooks/use-threads';
-import { anchorPoint, type PendingAnnotation, type ReviewSummary, type ReviewTool, type ThreadSummary } from '../model/review';
+import { anchorPoint, canManageThread, type PendingAnnotation, type ReviewSummary, type ReviewTool, type ThreadSummary } from '../model/review';
 import { AnnotationLayer } from './annotation-layer';
 import { PendingAnnotationPanel } from './pending-annotation-panel';
 import { ReviewChangesDialog } from './review-changes-dialog';
@@ -67,6 +67,7 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
   const { data: allThreads = [] } = useThreads(review.projectId, review.id, true);
   const threads = useMemo(() => allThreads.filter((thread) => thread.documentId === documentId), [allThreads, documentId]);
   const actions = useReviewActions(review, role, guest);
+  const viewer = useReviewViewer(guest, canManage);
   const [sharingOpen, setSharingOpen] = useState(false);
   const { pdf, error: pdfError } = useReviewPdf(review, documentId);
   const pageTexts = useReviewPageTexts(review, documentId);
@@ -76,6 +77,8 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
   const [drawColor, setDrawColor] = useState<AnnotationColor>('annotation-2');
   const [pending, setPending] = useState<PendingAnnotation | null>(null);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+  // "Refazer a marcação": a thread espera a marcação nova (trecho, ponto ou desenho), feita como a de um comentário novo.
+  const [relocatingId, setRelocatingId] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [changesOpen, setChangesOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -99,6 +102,8 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
   }, [role, review.reviewerUid, review.status, markOpened]);
 
   const numbered = useMemo(() => threads.map((thread, index) => ({ thread, number: index + 1 })), [threads]);
+  // Se a thread sumir (excluída por outra pessoa), o modo de refazer a marcação acaba sozinho.
+  const relocating = numbered.find((item) => item.thread.id === relocatingId) ?? null;
 
   const startPending = (next: PendingAnnotation) => {
     setPending(next);
@@ -161,11 +166,8 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
     return found ? { path: found.path, line: found.line, column: null } : null;
   };
 
-  const submitPending = async (body: string) => {
-    if (!pending) return;
-    const submitted = pending;
-    // A ferramenta volta na hora: esperar o servidor desfaria uma ferramenta escolhida nesse meio-tempo.
-    if (submitted.kind !== 'text') setTool('select');
+  /** Marcação pronta para gravar (o desenho simplificado com o pin no canto) e a linha do código sob ela. */
+  const annotationOf = (submitted: PendingAnnotation): { annotation: NewAnnotation; sourceHint: SourceLocation | null } => {
     let annotation: NewAnnotation;
     if (submitted.kind === 'text') annotation = { kind: 'text', anchor: submitted.anchor };
     else if (submitted.kind === 'pin') annotation = { kind: 'pin', page: submitted.page, point: submitted.point, drawing: null };
@@ -182,10 +184,64 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
         : firstRect
           ? { page: annotation.anchor.page, x: firstRect.x + Math.min(0.02, firstRect.width / 2), y: firstRect.y + firstRect.height / 2 }
           : anchorPoint({ anchor: annotation.anchor });
-    const threadId = await actions.createThread(documentId, annotation, body, sourceHintAt(reference.page, reference.x, reference.y));
+    return { annotation, sourceHint: sourceHintAt(reference.page, reference.x, reference.y) };
+  };
+
+  const submitPending = async (body: string) => {
+    if (!pending) return;
+    const submitted = pending;
+    // A ferramenta volta na hora: esperar o servidor desfaria uma ferramenta escolhida nesse meio-tempo.
+    if (submitted.kind !== 'text') setTool('select');
+    const { annotation, sourceHint } = annotationOf(submitted);
+    const threadId = await actions.createThread(documentId, annotation, body, sourceHint);
     // Só limpa se a pessoa não começou outra marcação enquanto gravava.
     setPending((current) => (current === submitted ? null : current));
     if (threadId) setSelectedThreadId((current) => current ?? threadId);
+  };
+
+  /** "Refazer a marcação": a thread fica com a marcação nova; a conversa não muda. */
+  const startRelocate = (thread: ThreadSummary) => {
+    setShowMarkings(true);
+    setPending(null);
+    clearSelection();
+    setTool('select');
+    setSelectedThreadId(null);
+    setRelocatingId(thread.id);
+    // No celular o Sheet fecha para liberar o PDF; ele volta quando houver o que salvar.
+    if (isDesktop) comments.expand();
+    else setSheetOpen(false);
+  };
+
+  const cancelPending = () => {
+    setPending(null);
+    setRelocatingId(null);
+  };
+
+  const saveRelocation = async () => {
+    if (!pending || !relocating) return;
+    const submitted = pending;
+    const { thread } = relocating;
+    setTool('select');
+    const { annotation, sourceHint } = annotationOf(submitted);
+    await actions.moveThread(thread, annotation, sourceHint);
+    setPending((current) => (current === submitted ? null : current));
+    setRelocatingId(null);
+    setSelectedThreadId(thread.id);
+  };
+
+  /** Pin arrastado: o ponto e o desenho vão para o lugar novo, com a linha do código de lá. */
+  const movePinTo = (thread: ThreadSummary, target: { x: number; y: number }) =>
+    run(async () => {
+      if (thread.anchor.type !== 'pin') return;
+      const moved = movePin(thread.anchor.point, thread.anchor.drawing, target);
+      const page = thread.anchor.page;
+      await actions.moveThread(thread, { kind: 'pin', page, point: moved.point, drawing: moved.drawing }, sourceHintAt(page, moved.point.x, moved.point.y));
+    });
+
+  const deleteThread = async (thread: ThreadSummary) => {
+    await actions.deleteThread(thread);
+    setSelectedThreadId((current) => (current === thread.id ? null : current));
+    setRelocatingId((current) => (current === thread.id ? null : current));
   };
 
   const openSource = (thread: ThreadSummary) => {
@@ -202,16 +258,18 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
     }
   };
 
-  const pendingPanel = pending ? (
+  const pendingPanel = pending || relocating ? (
     <PendingAnnotationPanel
       pending={pending}
+      relocateNumber={relocating?.number}
       onColor={(color) => {
         setDrawColor(color);
         setPending((current) => (current?.kind === 'draw' ? { ...current, color, strokes: current.strokes.map((stroke) => ({ ...stroke, color })) } : current));
       }}
       onUndoStroke={() => setPending((current) => (current?.kind === 'draw' ? { ...current, strokes: current.strokes.slice(0, -1) } : current))}
       onSubmit={submitPending}
-      onCancel={() => setPending(null)}
+      onSave={saveRelocation}
+      onCancel={cancelPending}
     />
   ) : null;
 
@@ -225,11 +283,17 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
       selectedThreadId={selectedThreadId}
       canWrite={canWrite}
       canOpenSource={role === 'author'}
+      viewer={viewer}
+      relocatingThreadId={relocating?.thread.id ?? null}
       onSelect={selectThread}
       onClearSelection={() => setSelectedThreadId(null)}
       onOpenSource={openSource}
       onReply={actions.reply}
       onStatusChange={actions.setThreadStatus}
+      onEditComment={actions.editComment}
+      onDeleteComment={actions.deleteComment}
+      onRelocate={startRelocate}
+      onDelete={deleteThread}
     />
   );
 
@@ -240,6 +304,7 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
         onValueChange={(next) => {
           setDocumentId(next);
           setPending(null);
+          setRelocatingId(null);
           setSelectedThreadId(null);
           setPageSizes([]);
         }}
@@ -265,6 +330,7 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
     // Sem marcações não há onde marcar: a ferramenta volta a "Selecionar texto" e a marcação pendente sai.
     setTool('select');
     setPending(null);
+    setRelocatingId(null);
     clearSelection();
   };
 
@@ -309,7 +375,13 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
   // título (sem faixa nova acima do PDF). No celular a barra não tem espaço: a dica flutua sobre o PDF
   // e a mensagem vai para o topo do painel de comentários.
   const toolHint =
-    tool === 'pin' ? t('Clique no ponto do PDF que quer comentar.') : tool === 'draw' ? t('Desenhe sobre a página; depois escreva o comentário ao lado.') : null;
+    tool === 'pin'
+      ? t('Clique no ponto do PDF que quer comentar.')
+      : tool === 'draw'
+        ? t('Desenhe sobre a página; depois escreva o comentário ao lado.')
+        : relocating && !pending
+          ? t('Marque de novo o comentário {number}: selecione um trecho, ou use Ponto ou Desenhar.', { number: relocating.number })
+          : null;
   const authorMessage = review.description ? (
     <>
       <span className="font-medium text-foreground">{t('Mensagem:')}</span> {review.description}
@@ -408,6 +480,9 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
                 }}
                 onStroke={handleStroke}
                 onSelect={selectThread}
+                canMove={(thread) => canAnnotate && thread.anchor.type === 'pin' && thread.id !== relocatingId && canManageThread(thread, viewer)}
+                onMovePin={movePinTo}
+                relocatingThreadId={relocating?.thread.id ?? null}
               />
             )
           : undefined
@@ -477,12 +552,16 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
             <div className="min-w-0 flex-1">{pdfView}</div>
             <Button className="absolute bottom-4 right-4 z-20 shadow-lg" onClick={() => setSheetOpen(true)}>
               <MessageSquare />
-              {pending ? t('Escrever comentário') : t('Comentários ({count})', { count: threads.length })}
+              {relocating && pending
+                ? t('Salvar a marcação nova')
+                : pending
+                  ? t('Escrever comentário')
+                  : t('Comentários ({count})', { count: threads.length })}
             </Button>
           </>
         )}
       </main>
-      {selection && <SelectionPopover selection={selection} onComment={commentSelection} />}
+      {selection && <SelectionPopover selection={selection} relocating={Boolean(relocating)} onComment={commentSelection} />}
       {!isDesktop && (
         <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
           <SheetContent side="bottom" className="h-[75dvh] gap-0 p-0">
