@@ -60,8 +60,10 @@ jobs:
         run: npm run build
 
       - name: Instalar Playwright
+        # Versão exata: com "playwright@1", o npm pega a última publicada, e a 1.65.0 saiu sem o
+        # playwright-core correspondente (ETARGET). Atualize de propósito, depois de conferir a versão nova.
         run: |
-          npm install --no-save playwright@1
+          npm install --no-save playwright@1.64.1
           npx playwright install --with-deps chromium
 
       - name: Contrato de responsividade (360px)

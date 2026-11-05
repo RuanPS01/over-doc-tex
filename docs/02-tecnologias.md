@@ -59,7 +59,7 @@ Não há Cloud Functions, Cloud Run, Cloud Storage nem extensões: nada de servi
 | --- | --- | --- |
 | Vitest | 5 | Testes unitários em `tests/unit/` (motor de IA com API simulada, importação e exportação, arquivos em pedaços) |
 | @firebase/rules-unit-testing + firebase-tools | Firebase 12, CLI 15 | Regras nos emuladores, em pacote isolado (`tests/rules/`) porque exige o SDK 12 |
-| Playwright | pré-instalado no ambiente de CI | Contrato de responsividade (`scripts/check-responsive.mjs`) |
+| Playwright | 1.64.1 (exata, instalada pelo workflow) | Contrato de responsividade (`scripts/check-responsive.mjs`). O CI instala uma versão fixa com `npm install --no-save` e o Chromium dela; a faixa `playwright@1` quebrou o CI quando a 1.65.0 foi publicada sem o `playwright-core` correspondente |
 
 ## 4. Variáveis de ambiente
 
