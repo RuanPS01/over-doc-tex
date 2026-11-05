@@ -109,10 +109,11 @@ export function AnnotationLayer({ page, threads, pending, tool, selectedThreadId
         if (thread.status === 'outdated') return null;
         const isResolved = thread.status === 'resolved';
         const isSelected = thread.id === selectedThreadId;
+        // Semitransparente para não tampar o texto embaixo; fica opaco no hover, no foco e quando selecionado.
         const badge = cn(
-          'pointer-events-auto absolute flex size-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full text-xs font-semibold shadow-md transition-transform',
-          isResolved ? 'border bg-muted text-foreground' : 'bg-annotation-3 text-background',
-          isSelected && 'scale-125 ring-2 ring-ring ring-offset-2',
+          'pointer-events-auto absolute flex size-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full text-xs font-semibold shadow-sm transition-[transform,opacity] hover:opacity-100 focus-visible:opacity-100',
+          isResolved ? 'border bg-muted text-foreground opacity-45' : 'bg-annotation-3 text-background opacity-60',
+          isSelected && 'scale-125 opacity-100 ring-2 ring-ring ring-offset-2',
         );
         const select = (event: { stopPropagation: () => void }) => {
           event.stopPropagation();

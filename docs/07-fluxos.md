@@ -7,9 +7,9 @@ Cada cenário descreve o que o usuário vê e a mecânica interna. Não há serv
 ### O que o usuário vê
 
 1. O autor escreve no Monaco e vê o PDF ao lado (no celular, alterna entre Código e PDF).
-2. Em "Versões", congela uma versão quando quiser (com descrição opcional; ajuste 1.1 ou principal 2.0), abre o PDF guardado, compara com o rascunho e baixa o código daquela versão em .zip.
-3. Clica em "Solicitar revisão", informa o e-mail do revisor, um título, uma mensagem e marca os documentos secundários que ele vê (o principal sempre vai). Documentos secundários são cadastrados em "Configurações do projeto" (outro .tex com \documentclass, como um apêndice).
-4. Vê o progresso ("Compilando a versão", "Guardando o código e o PDF", "Congelando", "Abrindo a revisão" e, numa rodada seguinte, "Gerando a comparação em PDF") e, ao final, a revisão #1 com o link para copiar, "Enviar pelo meu e-mail" e "Abrir a revisão". Se o código não mudou desde a última versão e ela tem os documentos pedidos, a revisão usa essa versão. Pode continuar editando: o que muda daqui em diante pertence à próxima versão.
+2. Em "Revisões e versões" (aba Revisões aberta por padrão, com a fila do projeto), na aba Versões, congela uma versão quando quiser (com descrição opcional; ajuste 1.1 ou principal 2.0), abre o PDF guardado, compara com o rascunho e baixa o código daquela versão em .zip.
+3. Clica em "Solicitar revisão". O diálogo avisa, no topo, que a versão será congelada para a revisão e mostra o número dela ("A versão 1.3 será congelada"), com a escolha entre ajuste (1.3) e principal (2.0); a primeira é sempre 1.0. Informa os e-mails dos revisores (vários, separados por vírgula; ponto e vírgula, espaço e quebra de linha também valem; repetidos saem e tudo vira minúsculas; até 50), um título, uma mensagem e marca os documentos secundários que eles veem (o principal sempre vai). Documentos secundários são cadastrados em "Configurações do projeto" (outro .tex com \documentclass, como um apêndice).
+4. Vê o progresso ("Compilando a versão", "Guardando o código e o PDF", "Congelando", "Abrindo a revisão" e, numa rodada seguinte, "Gerando a comparação em PDF") e, ao final, a revisão #1 com a versão congelada, quantos convites saíram, o link para copiar, "Enviar pelo meu e-mail" (um `mailto:` com todos os e-mails) e "Abrir a revisão". **Cada revisão nova congela uma versão**, mesmo que o código não tenha mudado desde a última: a revisão e a versão andam juntas. Pode continuar editando: o que muda daqui em diante pertence à próxima versão.
 
 **Como o app grava:** cada documento (principal e secundários) é compilado e guarda `{documentId}.pdf`, `.pages` (texto por página) e `.synctex` (formato compacto, abaixo). Falha de compilação mostra os erros do TeX com arquivo e linha (o clique leva à linha) e nada é gravado. O cache de PDF do próprio Siglum fica desligado: ele usa só o texto do principal como chave e devolveria um PDF antigo quando só um arquivo de `\input` mudou.
 
@@ -22,16 +22,16 @@ Cada cenário descreve o que o usuário vê e a mecânica interna. Não há serv
 | 3 | Compila cada documento no Web Worker com o motor WebAssembly (com SyncTeX) e extrai o texto por página |
 | 4 | Grava PDF, SyncTeX e texto por página em `snapshots/{sid}/files/{documentId}.pdf`, `.synctex` e `.pages`, em pedaços (`writeStoredFile`). As regras só aceitam esses arquivos **antes** de o documento do snapshot existir |
 | 5 | Lote 1, congelamento: cria `snapshots/{sid}` (com `sequence = counters.snapshots + 1`) e atualiza o projeto (`counters.snapshots`, `latestSnapshotId`). Carimba `resolution.fixedInSnapshotId` nas threads resolvidas desde a versão anterior |
-| 6 | Lote 2, revisão: cria `snapshots/{sid}/grants/{email}`, `reviews/{rid}` (número `counters.reviews + 1`) e avança `counters.reviews` |
-| 7 | Envia o convite ao revisor (ver abaixo) |
+| 6 | Lote 2, revisão: cria um `snapshots/{sid}/grants/{email}` para cada e-mail convidado, `reviews/{rid}` (número `counters.reviews + 1`, `reviewerEmail` igual ao primeiro e-mail e `reviewerEmails` com todos) e avança `counters.reviews` |
+| 7 | Envia o convite a cada revisor (ver abaixo) |
 | 8 | Em falha de compilação, mostra o log e nada é gravado no Firestore; os arquivos do passo 4 podem ser reenviados na próxima tentativa |
 
 ### Convite do revisor (implementado)
 
-1. O app do autor chama `sendSignInLinkToEmail` do Firebase Auth para o e-mail do revisor; o link volta para `/login?next=/p/{projectId}/reviews/{reviewId}&email=...`, onde o revisor confirma o e-mail e entra. O próprio Firebase envia o e-mail (é preciso ativar "Link de e-mail" no provedor E-mail/senha e autorizar o domínio do site em Authentication). Se o envio falhar, a tela avisa e oferece o link para copiar e um `mailto:` com o mesmo endereço.
+1. O app do autor chama `sendSignInLinkToEmail` do Firebase Auth para cada e-mail convidado; o link volta para `/login?next=/p/{projectId}/reviews/{reviewId}&email=...`, onde o revisor confirma o e-mail e entra. O próprio Firebase envia o e-mail (é preciso ativar "Link de e-mail" no provedor E-mail/senha e autorizar o domínio do site em Authentication). Se o envio falhar para algum, a tela diz para quantos e oferece o link para copiar e um `mailto:` com os mesmos endereços.
 2. O revisor abre o link e entra (o link já confirma o e-mail; Google também serve, se for o mesmo endereço).
-3. As regras liberam snapshot e revisão porque o e-mail verificado dele bate com o grant e com `reviewerEmail`. Na primeira abertura, o app grava `reviewerUid`, `reviewerName` e `status: in_review`.
-4. Rodadas seguintes para o mesmo revisor repetem o lote 2 com o mesmo e-mail.
+3. As regras liberam snapshot e revisão porque o e-mail verificado dele bate com o grant e com `reviewerEmail` ou `reviewerEmails`. Na primeira abertura, o app grava `reviewerUid`, `reviewerName` e `status: in_review`.
+4. Rodadas seguintes repetem o lote 2. A rodada anterior (base de "Ver alterações" e origem das threads levadas adiante) é a revisão mais recente do projeto com algum dos mesmos e-mails.
 
 ### Revisão pelo link, com ou sem conta (implementado)
 
@@ -66,8 +66,21 @@ Na tela da revisão, dono e editores têm o botão "Envio" no cabeçalho (`Revie
 - **Linha do código:** na criação, o SyncTeX da versão dá `sourceHint` (arquivo e linha); o autor usa "Abrir no código".
 - **Notificações:** cada ação grava `users/{uid}/notifications` para o outro lado (comentário novo, resposta, resolvido ou reaberto, revisor abriu, aprovou ou pediu alterações, revisão encerrada). O sino (lista, contagem, marcar como lidas) abre a revisão.
 - Respostas sobem o contador da thread no mesmo lote; autor e revisor resolvem (o autor com `fixed_next_version`, o revisor com `answered`) ou reabrem; ao congelar a versão seguinte, quem congela carimba `fixedInSnapshotId` e a thread aparece como "Corrigida".
+- **Seleção:** escolher um pin ou um cartão destaca a thread; clicar de novo nele, num lugar vazio do PDF ou no fundo do painel de comentários tira o destaque.
+- **Marcações:** o interruptor "Marcações" mostra o PDF original, sem destaques, desenhos e pins, e tira as ferramentas de marcar e comentar até ser ligado de novo.
 
 - **Rodada seguinte:** ao pedir nova revisão ao mesmo revisor, as threads ainda abertas da rodada anterior vêm junto (`carriedFromThreadId`), reancoradas na versão nova como em "Reancoragem" abaixo (trecho com os retângulos refeitos pelo pdf.js a partir do texto das páginas; pin movido pela linha do código no SyncTeX). Trecho não encontrado vira `outdated` ("Desatualizada") com a citação original. A conversa antiga aparece no cartão, em "Rodada anterior", e as respostas novas seguem abaixo.
+
+### PDF com anotações (download)
+
+O botão de download da barra do PDF abre um menu: "PDF original" (os bytes da versão, como foram congelados) ou "PDF com anotações". O segundo é gerado no navegador (`useAnnotatedPdf` e `src/lib/pdf/annotated-pdf.ts`, com o pdf-lib baixado sob demanda), para o documento aberto:
+
+1. Lê os comentários de cada thread do documento e, nas threads levadas adiante, os da rodada anterior (melhor esforço). O Markdown vira texto simples (links com o endereço entre parênteses).
+2. Carrega o PDF original da versão e, em cada página, aumenta a área visível (`MediaBox` e `CropBox`) para a direita da página como ela aparece, com uma margem de cerca de 40% da largura (180 a 300 pontos). O conteúdo original não é redesenhado: continua vetorial, com o texto selecionável, os links e o índice. Páginas giradas (`/Rotate`) usam uma matriz que leva as coordenadas de 0 a 1 da tela ao espaço do PDF, então a margem fica à direita de quem lê.
+3. Sobre a página: os trechos comentados em amarelo (35% de opacidade, multiplicando com o texto), os desenhos com a cor escolhida, e os pins numerados com 55% de opacidade, para não tampar o texto (resolvidos em cinza, desatualizados sem marca).
+4. Na margem, como os balões de comentário do Word: um cartão por thread, na altura da marcação, com o número, o tipo (trecho, ponto ou desenho), o status, a citação, a conversa da rodada anterior e os comentários (autor, data e texto), ligado ao pin por uma linha tracejada clara. Os cartões se empurram para não se sobrepor e sobem no fim da página (`layoutMarginBoxes`).
+5. Se os cartões não cabem na altura da página, o mais alto perde linhas e mostra "Continua no fim do PDF"; o que não cabe nem com o cabeçalho sai da margem com um aviso. Nesses casos, o PDF ganha no fim as páginas "Comentários completos", com todas as threads e conversas inteiras. Nada se perde.
+6. O arquivo sai como `<projeto>-v<versão>-anotado.pdf`, sem gravar nada no Firestore. As fontes são as padrão do PDF (Helvetica): letra fora da tabela WinAnsi vira a letra base, e o resto (emoji, alfabetos não latinos), `?`.
 
 ### Comentário em trecho de texto
 

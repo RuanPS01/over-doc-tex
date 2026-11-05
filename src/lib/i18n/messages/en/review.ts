@@ -62,7 +62,6 @@ const messages: Record<string, string> = {
   'Abrindo a revisão': 'Opening the review',
   'Gerando a comparação em PDF': 'Generating the PDF comparison',
   'Levando os comentários abertos': 'Carrying over open comments',
-  'Informe um e-mail válido para o revisor.': 'Enter a valid email for the reviewer.',
   'Revisão de {project}': 'Review of {project}',
   'Não foi possível abrir a revisão.': 'Could not open the review.',
   'Revisão #{number}: {project}': 'Review #{number}: {project}',
@@ -75,8 +74,6 @@ const messages: Record<string, string> = {
   'Qualquer pessoa com o link pode ver o PDF da versão {version} e comentar nele, sem conta, informando o nome.':
     'Anyone with the link can view the PDF of version {version} and comment on it without an account, by entering a name.',
   '{email} pode ver o PDF da versão {version} e comentar nele.': '{email} can view the PDF of version {version} and comment on it.',
-  'O revisor vê só o PDF da versão congelada, nunca o rascunho. Se o código mudou desde a última versão, uma nova é congelada.':
-    'The reviewer sees only the PDF of the frozen version, never the draft. If the code changed since the last version, a new one is frozen.',
   'A versão {version} foi congelada para esta revisão.': 'Version {version} was frozen for this review.',
   '1 comentário ainda aberto da rodada anterior veio junto.': '1 comment still open from the previous round was carried over.',
   '{count} comentários ainda abertos da rodada anterior vieram junto.': '{count} comments still open from the previous round were carried over.',
@@ -89,9 +86,6 @@ const messages: Record<string, string> = {
   'Copiar link': 'Copy link',
   'Enviar pelo meu e-mail': 'Send from my email',
   'Abrir a revisão': 'Open the review',
-  'E-mail do revisor (opcional)': 'Reviewer email (optional)',
-  'E-mail do revisor': 'Reviewer email',
-  'revisor@universidade.br': 'reviewer@university.edu',
   Título: 'Title',
   'Mensagem (opcional)': 'Message (optional)',
   'O que o revisor deve olhar com atenção': 'What the reviewer should look at closely',
@@ -205,6 +199,42 @@ const messages: Record<string, string> = {
   'Mostrar os comentários': 'Show comments',
   'Recolher os comentários': 'Collapse comments',
   'Mensagem:': 'Message:',
+
+  // Solicitar revisão: vários revisores e a versão congelada
+  'Informe o e-mail de pelo menos um revisor.': 'Enter the email of at least one reviewer.',
+  'Convide até {max} e-mails por revisão.': 'Invite up to {max} emails per review.',
+  'Os revisores veem só o PDF da versão congelada, nunca o rascunho.': 'Reviewers only see the PDF of the frozen version, never the draft.',
+  '{emails} podem ver o PDF da versão {version} e comentar nele.': '{emails} can view the PDF of version {version} and comment on it.',
+  'E-mails dos revisores (opcional)': 'Reviewer emails (optional)',
+  'E-mails dos revisores': 'Reviewer emails',
+  'revisora@universidade.br, orientador@universidade.br': 'reviewer@university.edu, advisor@university.edu',
+  'Separe vários e-mails por vírgula. Cada pessoa recebe o próprio link de acesso e vê os mesmos documentos.': 'Separate several emails with commas. Each person gets their own sign-in link and sees the same documents.',
+  'Os {count} convites com o link de acesso foram enviados por e-mail.': 'The {count} invitations with the sign-in link were sent by email.',
+  'O convite automático falhou para {failed} de {count} e-mails (ative "Link de e-mail" em Authentication no Firebase). Envie o link abaixo.': 'The automatic invitation failed for {failed} of {count} emails (enable "Email link" in Firebase Authentication). Send the link below.',
+  'Versão congelada para a revisão': 'Version frozen for the review',
+  'Conferindo o número da versão': 'Checking the version number',
+  'A versão {version} será congelada para esta revisão': 'Version {version} will be frozen for this review',
+  'O projeto como está agora vira uma cópia imutável, e é ela que os revisores veem. Cada revisão nova congela uma versão; a edição continua normalmente.': 'The project as it is now becomes an immutable copy, and that is what reviewers see. Each new review freezes a version; editing continues as usual.',
+
+  // Marcações e download do PDF
+  'Ver o PDF original, sem marcações': 'View the original PDF, without markings',
+  'Ver o PDF com as marcações': 'View the PDF with the markings',
+  'Marcações': 'Markings',
+  'Mostrar as marcações e os comentários no PDF': 'Show markings and comments on the PDF',
+  'Não foi possível gerar o PDF com anotações. Confira a conexão e tente de novo.': 'Could not create the annotated PDF. Check your connection and try again.',
+  'PDF com anotações': 'Annotated PDF',
+  'Destaques, desenhos e pins sobre o texto, com os comentários numa margem à direita de cada página.': 'Highlights, drawings and pins over the text, with the comments in a margin to the right of each page.',
+  'Tirar a seleção': 'Deselect',
+  'Trecho': 'Passage',
+  'Desenho': 'Drawing',
+  'Revisão #{number} · versão {version} · comentários': 'Review #{number} · version {version} · comments',
+  'Comentários completos': 'Full comments',
+  'Continua no fim do PDF, em Comentários completos.': 'Continues at the end of the PDF, under Full comments.',
+  'Mais 1 comentário no fim do PDF, em Comentários completos.': '1 more comment at the end of the PDF, under Full comments.',
+  'Mais {count} comentários no fim do PDF, em Comentários completos.': '{count} more comments at the end of the PDF, under Full comments.',
+
+  // Parte do nome do PDF anotado: sem acento nem espaço.
+  'anotado': 'annotated',
 };
 
 export default messages;

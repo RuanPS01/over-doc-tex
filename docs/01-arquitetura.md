@@ -103,9 +103,10 @@ over-doc-tex/
 │   │   ├── monaco/                    linguagem LaTeX e tema derivado dos tokens
 │   │   ├── latex/                     compilação (Siglum), preparação do projeto, leitura do log e SyncTeX
 │   │   ├── diff/                      diff por palavra (Myers), comparação de árvores e diff visual (LaTeX anotado e compilação)
-│   │   ├── pdf/                       pdf.js, texto por página, âncoras de trecho e desenho, índice (marcadores)
+│   │   ├── pdf/                       pdf.js, texto por página, âncoras de trecho e desenho, índice (marcadores), PDF com anotações (pdf-lib)
 │   │   ├── i18n/                      idioma (sistema ou escolha), t() e msg(), dicionários en e es por área
 │   │   ├── email.ts                   validação de e-mail e endereço de volta do link de acesso
+│   │   ├── color.ts                   conversão dos tokens de cor (HSL) para Monaco e pdf-lib
 │   │   ├── download.ts, query-keys.ts, utils.ts
 │   └── styles/globals.css             tokens e utilitários (.h-viewport)
 ├── tests/

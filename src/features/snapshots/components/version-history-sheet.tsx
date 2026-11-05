@@ -1,5 +1,5 @@
 import { Loader2 } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { MemberProfile } from '@shared/firestore/types';
@@ -13,8 +13,12 @@ import { FreezeVersionForm } from './freeze-version-form';
 import { VersionCard } from './version-card';
 import { VersionPdfDialog } from './version-pdf-dialog';
 
+export type HistoryTab = 'reviews' | 'versions';
+
 interface VersionHistorySheetProps {
   open: boolean;
+  /** Aba mostrada ao abrir: "Revisões" é a principal; "Abrir versões" (de Ver alterações) vai direto às versões. */
+  initialTab?: HistoryTab;
   onOpenChange: (open: boolean) => void;
   projectId: string;
   projectName: string;
@@ -27,9 +31,13 @@ interface VersionHistorySheetProps {
   reviewsTab: ReactNode;
 }
 
-/** Histórico de versões congeladas: congelar, abrir o PDF, comparar e baixar o código. */
+/**
+ * "Revisões e versões": a fila de revisões do projeto (aba principal) e as
+ * versões congeladas (congelar, abrir o PDF, comparar e baixar o código).
+ */
 export function VersionHistorySheet({
   open,
+  initialTab = 'reviews',
   onOpenChange,
   projectId,
   projectName,
@@ -46,6 +54,12 @@ export function VersionHistorySheet({
   const [pdfSnapshot, setPdfSnapshot] = useState<SnapshotSummary | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [tab, setTab] = useState<HistoryTab>(initialTab);
+
+  // Cada abertura volta à aba pedida (a principal, salvo quando vem de "Abrir versões").
+  useEffect(() => {
+    if (open) setTab(initialTab);
+  }, [open, initialTab]);
 
   const authorOf = (uid: string) => (uid === currentUid ? t('por você') : (memberProfiles[uid]?.name ?? null));
 
@@ -68,13 +82,13 @@ export function VersionHistorySheet({
       <Sheet open={open} onOpenChange={onOpenChange}>
         <SheetContent side="right" className="w-full gap-0 p-0 sm:max-w-md">
           <SheetHeader className="pb-3 pr-10">
-            <SheetTitle>{t('Versões e revisões')}</SheetTitle>
-            <SheetDescription>{t('Cópias congeladas do projeto e as revisões pedidas sobre elas.')}</SheetDescription>
+            <SheetTitle>{t('Revisões e versões')}</SheetTitle>
+            <SheetDescription>{t('As revisões pedidas e as cópias congeladas do projeto que elas revisam.')}</SheetDescription>
           </SheetHeader>
-          <Tabs defaultValue="versions" className="flex min-h-0 flex-1 flex-col">
+          <Tabs value={tab} onValueChange={(value) => setTab(value === 'versions' ? 'versions' : 'reviews')} className="flex min-h-0 flex-1 flex-col">
             <TabsList className="mx-4 grid grid-cols-2">
-              <TabsTrigger value="versions">{t('Versões')}</TabsTrigger>
               <TabsTrigger value="reviews">{t('Revisões')}</TabsTrigger>
+              <TabsTrigger value="versions">{t('Versões')}</TabsTrigger>
             </TabsList>
             <TabsContent value="reviews" className="min-h-0 flex-1 overflow-y-auto p-4">
               {reviewsTab}

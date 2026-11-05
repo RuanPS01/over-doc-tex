@@ -1,5 +1,5 @@
 import { CheckCircle2, Code2, PenLine, RotateCcw } from 'lucide-react';
-import { forwardRef, useMemo } from 'react';
+import { forwardRef, useMemo, type MouseEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { MarkdownContent } from '@/components/common/markdown-content';
 import { useT } from '@/hooks/use-t';
@@ -7,6 +7,9 @@ import { cn } from '@/lib/utils';
 import { useComments } from '../hooks/use-threads';
 import type { CommentSummary, ThreadSummary } from '../model/review';
 import { CommentComposer } from './comment-composer';
+
+/** Elementos que têm ação própria: o clique neles não muda a seleção da thread. */
+const INTERACTIVE = 'button, a, input, textarea, select, label, form, [data-keep-selection]';
 
 function CommentItems({ comments }: { comments: readonly CommentSummary[] }) {
   const { t, locale } = useT();
@@ -68,9 +71,24 @@ export const ThreadCard = forwardRef<HTMLLIElement, ThreadCardProps>(function Th
   const isResolved = thread.status === 'resolved';
   const isOutdated = thread.status === 'outdated';
 
+  // Clicar no cartão (fora de botões e campos) escolhe a thread ou, se ela já está escolhida, tira a seleção.
+  // O teclado usa o botão do topo, que faz o mesmo.
+  const handleCardClick = (event: MouseEvent<HTMLLIElement>) => {
+    if ((event.target as Element).closest(INTERACTIVE)) return;
+    // Soltar uma seleção de texto (para copiar um trecho do comentário) também gera clique.
+    if (!(window.getSelection()?.isCollapsed ?? true)) return;
+    onSelect();
+  };
+
   return (
-    <li ref={ref} className={cn('rounded-lg border bg-card text-sm', isSelected && 'ring-2 ring-ring')}>
-      <button type="button" onClick={onSelect} className="flex w-full min-w-0 items-center gap-2 px-3 py-2 text-left hover:bg-muted">
+    <li ref={ref} onClick={handleCardClick} className={cn('cursor-pointer rounded-lg border bg-card text-sm', isSelected && 'ring-2 ring-ring')}>
+      <button
+        type="button"
+        aria-expanded={isSelected}
+        title={isSelected ? t('Tirar a seleção') : undefined}
+        onClick={onSelect}
+        className="flex w-full min-w-0 items-center gap-2 px-3 py-2 text-left hover:bg-muted"
+      >
         <span
           className={cn(
             'flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold',
@@ -110,7 +128,7 @@ export const ThreadCard = forwardRef<HTMLLIElement, ThreadCardProps>(function Th
         </ol>
       )}
       {isSelected && canWrite && (
-        <div className="flex flex-col gap-2 border-t px-3 py-2">
+        <div data-keep-selection className="flex cursor-auto flex-col gap-2 border-t px-3 py-2">
           <CommentComposer placeholder={t('Responder')} submitLabel={t('Responder')} onSubmit={onReply} />
           <div className="flex flex-wrap gap-1">
             <Button variant="ghost" size="sm" onClick={() => void onStatusChange(isResolved ? 'open' : 'resolved')}>

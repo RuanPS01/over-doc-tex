@@ -60,6 +60,15 @@
     --annotation-3: 217 91% 60%;
     --annotation-4: 142 71% 45%;
 
+    /* PDF com anotações (download da revisão): papel branco, então não mudam no tema escuro.
+       Lidos em runtime e convertidos para o pdf-lib. */
+    --export-ink: 0 0% 7.1%; /* = foreground do claro */
+    --export-muted: 0 0% 45.1%; /* = muted-foreground do claro */
+    --export-rule: 0 0% 87.8%; /* = border do claro */
+    --export-panel: 0 0% 96.5%; /* faixa dos comentários, entre background e muted do claro */
+    --export-paper: 0 0% 100%; /* = card do claro */
+    --export-pin-text: 0 0% 100%;
+
     /* Editor (lidos em runtime para montar o tema do Monaco) */
     --editor-background: 0 0% 100%; /* = card */
     --editor-foreground: 0 0% 7.1%;

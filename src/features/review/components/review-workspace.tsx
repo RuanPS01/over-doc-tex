@@ -1,22 +1,24 @@
-import { MapPin, MessageSquare, PanelRightClose, PenLine, TextSelect } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState, useRef, type ReactNode } from 'react';
+import { FileCheck2, Highlighter, MapPin, MessageSquare, PanelRightClose, PenLine, TextSelect } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState, useRef, type MouseEvent, type ReactNode } from 'react';
 import { useDefaultLayout } from 'react-resizable-panels';
 import { useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup, safeLayoutStorage } from '@/components/ui/resizable';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet';
+import { Switch } from '@/components/ui/switch';
 import { PdfDocumentView } from '@/features/pdf-viewer/components/pdf-document-view';
 import { useCollapsiblePanel } from '@/hooks/use-collapsible-panel';
 import { useLayoutMode } from '@/hooks/use-layout-mode';
 import { useT } from '@/hooks/use-t';
-import { slugify } from '@/lib/download';
+import { downloadBytes, slugify } from '@/lib/download';
 import { msg } from '@/lib/i18n';
 import { sourceAt } from '@/lib/latex/synctex';
 import { buildDrawing, flattenStroke, pinPointFor } from '@/lib/pdf/drawing';
 import { buildQuote, normalizeRects } from '@/lib/pdf/text-anchor';
 import { cn } from '@/lib/utils';
 import type { AnnotationColor, ParticipantRole, ReviewStatus, SourceLocation } from '@shared/firestore/types';
+import { useAnnotatedPdf } from '../hooks/use-annotated-pdf';
 import { useReviewActions, type GuestIdentity, type NewAnnotation } from '../hooks/use-review-actions';
 import { useReviewDocuments, useReviewPageTexts, useReviewPdf, useReviewSyncData } from '../hooks/use-review-files';
 import { useTextSelection } from '../hooks/use-text-selection';
@@ -77,9 +79,15 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
   const [sheetOpen, setSheetOpen] = useState(false);
   const [changesOpen, setChangesOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const annotatedPdf = useAnnotatedPdf(review);
+  const [isExporting, setIsExporting] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const canWrite = review.status !== 'closed';
-  const [selection, clearSelection] = useTextSelection(scrollRef, canWrite && tool === 'select');
+  // Marcações desligadas: o PDF aparece como foi congelado, sem destaques, desenhos e pins, e sem as
+  // ferramentas de marcar e comentar (a lista de comentários continua ao lado).
+  const [showMarkings, setShowMarkings] = useState(true);
+  const canAnnotate = canWrite && showMarkings;
+  const [selection, clearSelection] = useTextSelection(scrollRef, canAnnotate && tool === 'select');
 
   // Primeira abertura pelo revisor: registra quem é e muda para "Em revisão".
   const markOpened = actions.markOpened;
@@ -102,14 +110,27 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
 
   const selectThread = useCallback(
     (threadId: string) => {
+      // Clicar de novo no número ou no cartão da thread escolhida tira a seleção.
+      if (threadId === selectedThreadId) {
+        setSelectedThreadId(null);
+        return;
+      }
       setSelectedThreadId(threadId);
       if (isDesktop) comments.expand();
       else setSheetOpen(true);
       const thread = threads.find((item) => item.id === threadId);
       if (thread) scrollRef.current?.querySelector(`[data-pdf-page="${thread.anchor.page}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     },
-    [threads, isDesktop, comments.expand],
+    [threads, isDesktop, comments.expand, selectedThreadId],
   );
+
+  /** Clique num lugar vazio do PDF: nenhum comentário fica destacado. */
+  const handlePdfAreaClick = (event: MouseEvent<HTMLDivElement>) => {
+    if ((event.target as Element).closest('button, a, input, textarea, select')) return;
+    // Soltar uma seleção de texto também gera clique: a seleção do comentário continua.
+    if (!(window.getSelection()?.isCollapsed ?? true)) return;
+    setSelectedThreadId(null);
+  };
 
   const commentSelection = () => {
     if (!selection) return;
@@ -205,6 +226,7 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
       canWrite={canWrite}
       canOpenSource={role === 'author'}
       onSelect={selectThread}
+      onClearSelection={() => setSelectedThreadId(null)}
       onOpenSource={openSource}
       onReply={actions.reply}
       onStatusChange={actions.setThreadStatus}
@@ -237,7 +259,27 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
       t('Versão {version}', { version: review.snapshotLabel })
     );
 
-  const tools = canWrite ? (
+  const toggleMarkings = (visible: boolean) => {
+    setShowMarkings(visible);
+    if (visible) return;
+    // Sem marcações não há onde marcar: a ferramenta volta a "Selecionar texto" e a marcação pendente sai.
+    setTool('select');
+    setPending(null);
+    clearSelection();
+  };
+
+  const markingsSwitch = (
+    <label
+      className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-1 text-xs text-muted-foreground hover:text-foreground"
+      title={showMarkings ? t('Ver o PDF original, sem marcações') : t('Ver o PDF com as marcações')}
+    >
+      <Highlighter className="hidden size-4 sm:block" aria-hidden />
+      <span className="hidden xl:inline">{t('Marcações')}</span>
+      <Switch checked={showMarkings} onCheckedChange={toggleMarkings} aria-label={t('Mostrar as marcações e os comentários no PDF')} />
+    </label>
+  );
+
+  const tools = canAnnotate ? (
     <div role="radiogroup" aria-label={t('Ferramenta')} className="flex shrink-0 items-center gap-0.5 rounded-md bg-muted p-0.5">
       {TOOLS.map((item) => (
         <button
@@ -305,6 +347,23 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
     </Button>
   ) : null;
 
+  const pdfBaseName = `${slugify(review.projectName)}-v${review.snapshotLabel}${documentId === 'main' ? '' : `-${slugify(currentDocument?.title ?? documentId)}`}`;
+
+  /** "PDF com anotações": marcações e comentários deste documento desenhados sobre o PDF da versão. */
+  const downloadAnnotated = async () => {
+    if (!pdf || isExporting) return;
+    setIsExporting(true);
+    setActionError(null);
+    try {
+      const bytes = await annotatedPdf(pdf, numbered);
+      downloadBytes(bytes, `${pdfBaseName}-${t('anotado')}.pdf`, 'application/pdf');
+    } catch {
+      setActionError(t('Não foi possível gerar o PDF com anotações. Confira a conexão e tente de novo.'));
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const pdfView = (
     <PdfDocumentView
       pdf={pdf}
@@ -313,6 +372,7 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
       title={toolbarTitle}
       actions={
         <>
+          {markingsSwitch}
           {tools}
           {commentsToggle}
         </>
@@ -321,22 +381,37 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
       onPageSizes={setPageSizes}
       outlineKey="review"
       outlineDefaultOpen
-      fileName={`${slugify(review.projectName)}-v${review.snapshotLabel}${documentId === 'main' ? '' : `-${slugify(currentDocument?.title ?? documentId)}`}.pdf`}
-      renderOverlay={(page) => (
-        <AnnotationLayer
-          page={page}
-          threads={numbered.filter(({ thread }) => thread.anchor.page === page)}
-          pending={pending}
-          tool={canWrite ? tool : 'select'}
-          selectedThreadId={selectedThreadId}
-          onPlacePin={(pinPage, point) => {
-            startPending({ kind: 'pin', page: pinPage, point });
-            setTool('select');
-          }}
-          onStroke={handleStroke}
-          onSelect={selectThread}
-        />
-      )}
+      onAreaClick={handlePdfAreaClick}
+      fileName={`${pdfBaseName}.pdf`}
+      downloadOptions={[
+        {
+          id: 'annotated',
+          label: t('PDF com anotações'),
+          description: t('Destaques, desenhos e pins sobre o texto, com os comentários numa margem à direita de cada página.'),
+          icon: <FileCheck2 />,
+          onSelect: () => void downloadAnnotated(),
+        },
+      ]}
+      isPreparingDownload={isExporting}
+      renderOverlay={
+        showMarkings
+          ? (page) => (
+              <AnnotationLayer
+                page={page}
+                threads={numbered.filter(({ thread }) => thread.anchor.page === page)}
+                pending={pending}
+                tool={canAnnotate ? tool : 'select'}
+                selectedThreadId={selectedThreadId}
+                onPlacePin={(pinPage, point) => {
+                  startPending({ kind: 'pin', page: pinPage, point });
+                  setTool('select');
+                }}
+                onStroke={handleStroke}
+                onSelect={selectThread}
+              />
+            )
+          : undefined
+      }
     />
   );
 

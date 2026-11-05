@@ -139,8 +139,8 @@ O id é o e-mail do revisor em minúsculas. A existência do documento libera a 
 | `title`, `description`, `projectName` | string | `projectName` denormalizado para o revisor |
 | `snapshotId`, `snapshotLabel`, `baseSnapshotId`, `previousReviewId` | | |
 | `requestedBy`, `requestedAt` | | |
-| `reviewerEmail` | string | Minúsculas; e-mail convidado na criação (vazio numa revisão aberta só pelo link) |
-| `reviewerEmails` | string[] | Todos os e-mails convidados, inclusive os acrescentados pelo "Envio da revisão". Ausente em revisões antigas (vale `[reviewerEmail]`) |
+| `reviewerEmail` | string | Minúsculas; o primeiro e-mail convidado na criação (vazio numa revisão aberta só pelo link). As regras conferem o grant dele no lote de abertura |
+| `reviewerEmails` | string[] | Todos os e-mails convidados (até 50): os da criação ("Solicitar revisão" aceita vários, separados por vírgula) e os acrescentados pelo "Envio da revisão". Ausente em revisões antigas (vale `[reviewerEmail]`) |
 | `access` | `email` ou `link` | `email`: só os convidados, com login. `link`: também qualquer pessoa com o link, sem conta. Ausente vale `email` |
 | `reviewerUid`, `reviewerName` | string ou null | Revisor que agiu por último (ao abrir ou mudar o status); no visitante, o nome que ele informou |
 | `status` | `invited, in_review, changes_requested, approved, closed` | |
@@ -270,7 +270,7 @@ O cache offline do Firestore (`persistentLocalCache`) também guarda os pedaços
 | Fluxo | Documentos no mesmo lote | O que as regras conferem |
 | --- | --- | --- |
 | Congelar versão | `snapshots/{novo}` mais `projects/{id}` (`counters.snapshots`, `latestSnapshotId`) | Sequência igual ao contador anterior mais 1 e ao contador depois do lote; `latestSnapshotId` aponta para o snapshot criado |
-| Abrir revisão | `grants/{email}` (por e-mail) e `links/{código}` (pelo link) mais `reviews/{nova}` mais `projects/{id}` (`counters.reviews`) | Número igual ao contador anterior mais 1; snapshot existe depois do lote; por e-mail, o grant também (pelo link, o e-mail pode vir vazio) |
+| Abrir revisão | um `grants/{email}` para cada e-mail convidado e `links/{código}` (pelo link) mais `reviews/{nova}` mais `projects/{id}` (`counters.reviews`) | Número igual ao contador anterior mais 1; snapshot existe depois do lote; por e-mail, o grant de `reviewerEmail` também (pelo link, o e-mail pode vir vazio); `reviewerEmails` com até 50 |
 | Envio da revisão | `reviews/{id}` (só `access`, `reviewerEmails`, `lastActivityAt`), `grants/{email}` de cada e-mail novo e `links/{código}` | Quem edita o projeto |
 | Comentar | `comments/{novo}` mais a thread (`commentCount`, `participantIds`) | Contador sobe exatamente 1; só o autor entra nos participantes |
 | Aceitar convite de coautoria | `projects/{id}` (`members`, `memberIds`, `pendingMembers`, `memberProfiles`) | O usuário entra com o papel do convite do próprio e-mail verificado, o convite some e só a entrada dele entra em `memberProfiles` |
@@ -296,7 +296,7 @@ O cache offline do Firestore (`persistentLocalCache`) também guarda os pedaços
 | `aiConversations`, `messages` | só o criador | só o criador |
 | `notifications` | só o destinatário | quem age, se participa do projeto ou da revisão |
 
-**Testes** (`npm run test:rules`): 81 de 81 cenários aprovados no emulador, 2 para threads levadas entre rodadas (só thread com `carriedFromThreadId` nasce `outdated`), 5 para comentário em trecho, documento não concedido e notificações, 7 para a lista de membros (`memberProfiles`: a própria entrada sim, a de outro não, o dono só remove) e 20 para os arquivos em pedaços (cabeçalho sem o último pedaço, hash diferente do id, tamanho incoerente, pedaço grande demais, gravação depois de finalizar, leitura do revisor por documento concedido). A suíte começa com o Firestore vazio (`createTestEnv` em `tests/rules/harness.mjs`).
+**Testes** (`npm run test:rules`): 81 de 81 cenários aprovados no emulador, mais 23 de 23 na suíte "Revisão por link" (inclui a revisão aberta com vários e-mails, um grant para cada no mesmo lote), 2 para threads levadas entre rodadas (só thread com `carriedFromThreadId` nasce `outdated`), 5 para comentário em trecho, documento não concedido e notificações, 7 para a lista de membros (`memberProfiles`: a própria entrada sim, a de outro não, o dono só remove) e 20 para os arquivos em pedaços (cabeçalho sem o último pedaço, hash diferente do id, tamanho incoerente, pedaço grande demais, gravação depois de finalizar, leitura do revisor por documento concedido). A suíte começa com o Firestore vazio (`createTestEnv` em `tests/rules/harness.mjs`).
 
 ## 6. Índices
 

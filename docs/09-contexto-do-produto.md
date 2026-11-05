@@ -29,9 +29,10 @@ A interface une os painéis clássicos de editores LaTeX online (árvore de arqu
 1. **Versões imutáveis na fila de revisão:** o revisor comenta sobre a versão 1.0 exatamente como foi enviada, enquanto a autora já trabalha na 1.1.
 2. **Comentários estilo Pull Request:** selecionar um trecho no PDF, comentar, discutir em thread e marcar como corrigido para a próxima versão.
 3. **Pins com desenho livre:** circular um erro em um gráfico e deixar um comentário espacial.
-4. **Diff visual no PDF:** um PDF recompilado com o texto removido em vermelho e o inserido em verde, com as quebras de linha refeitas.
-5. **IA contextual com a sua chave:** reescrita, paráfrase, rascunhos baseados nos capítulos, reorganização de tópicos, sumário e auditoria de referências com teste real dos links, com modelos de reserva quando um atinge o limite.
-6. **Projeto portátil:** exportar tudo em .zip e importar .zip, arquivos ou pastas inteiras do dispositivo.
+4. **PDF anotado para levar adiante:** baixar o PDF da versão com as marcações e os comentários numa margem à direita, como no Word, para arquivar, imprimir ou mandar a quem não usa a plataforma.
+5. **Diff visual no PDF:** um PDF recompilado com o texto removido em vermelho e o inserido em verde, com as quebras de linha refeitas.
+6. **IA contextual com a sua chave:** reescrita, paráfrase, rascunhos baseados nos capítulos, reorganização de tópicos, sumário e auditoria de referências com teste real dos links, com modelos de reserva quando um atinge o limite.
+7. **Projeto portátil:** exportar tudo em .zip e importar .zip, arquivos ou pastas inteiras do dispositivo.
 
 ## 5. Escopo da primeira versão
 
@@ -86,6 +87,6 @@ Fora (por enquanto):
 | --- | --- |
 | 1. Fundação (este repositório) | Arquitetura sem servidor, modelo de dados, regras, layout responsivo, IA do usuário com fila de reserva, importação e exportação, CI e deploy |
 | 2. Editor completo | Hifenização em português na compilação (já entregues: biblatex na compilação com o Biber emulado em JavaScript, repositório amplo de pacotes como o do Overleaf, BibTeX na compilação com estilo ABNT do abnTeX2, lista e criação de projetos, login obrigatório, salvamento automático, compilação no navegador com Siglum, visualizador pdf.js, navegação SyncTeX, criar, renomear e excluir arquivos, documentos secundários, membros e convites de coautoria) |
-| 3. Revisão | Refinos de uso (já entregues: threads levadas entre rodadas com reancoragem, versões congeladas, convite do revisor por link de e-mail, ReviewPage com comentário em trecho, pins com desenho livre, threads, resolução, aprovação, notificações e "Abrir no código") |
+| 3. Revisão | Refinos de uso (já entregues: vários revisores por pedido, cada revisão com a sua versão congelada, PDF com anotações e comentários na margem, marcações ligáveis no PDF, threads levadas entre rodadas com reancoragem, versões congeladas, convite do revisor por link de e-mail, ReviewPage com comentário em trecho, pins com desenho livre, threads, resolução, aprovação, notificações e "Abrir no código") |
 | 4. Diff | Refinos de uso (já entregues: diff dentro dos argumentos de comandos de texto, diff por palavra do código e do texto das páginas, diff visual em PDF recompilado com degradação, cache e "Próxima alteração") |
 | 5. Refino | Histórico das conversas de IA, ícones PNG do PWA, métricas |

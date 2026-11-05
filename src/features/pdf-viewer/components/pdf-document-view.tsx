@@ -1,7 +1,8 @@
-import { Download, Loader2, ZoomIn, ZoomOut } from 'lucide-react';
+import { Download, FileText, Loader2, ZoomIn, ZoomOut } from 'lucide-react';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { useEffect, useRef, useState, type MouseEvent, type ReactNode, type RefObject } from 'react';
 import { Button } from '@/components/ui/button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useT } from '@/hooks/use-t';
 import { downloadBytes } from '@/lib/download';
 import { cn } from '@/lib/utils';
@@ -11,6 +12,15 @@ import { PdfOutlineFrame } from './pdf-outline-frame';
 import { PdfPages } from './pdf-pages';
 
 const ZOOM_STEPS = [50, 75, 100, 125, 150, 200] as const;
+
+/** Outra forma de baixar o documento, ao lado do PDF original (ex.: com as anotações da revisão). */
+export interface PdfDownloadOption {
+  id: string;
+  label: string;
+  description?: string;
+  icon?: ReactNode;
+  onSelect: () => void;
+}
 
 interface PdfDocumentViewProps {
   /** Nulo enquanto carrega. */
@@ -32,6 +42,12 @@ interface PdfDocumentViewProps {
   outlineKey?: string;
   /** Índice aberto antes de a pessoa escolher (a revisão abre, para guiar a leitura). */
   outlineDefaultOpen?: boolean;
+  /** Clique na área do PDF (a revisão tira a seleção do comentário). */
+  onAreaClick?: (event: MouseEvent<HTMLDivElement>) => void;
+  /** Outras formas de baixar: o botão de download vira um menu com "PDF original" e elas. */
+  downloadOptions?: readonly PdfDownloadOption[];
+  /** Um desses downloads está sendo gerado (o botão gira e fica desligado). */
+  isPreparingDownload?: boolean;
 }
 
 /**
@@ -53,6 +69,9 @@ export function PdfDocumentView({
   onPageSizes,
   outlineKey = 'document',
   outlineDefaultOpen = false,
+  onAreaClick,
+  downloadOptions,
+  isPreparingDownload = false,
 }: PdfDocumentViewProps) {
   const { t } = useT();
   const [zoomIndex, setZoomIndex] = useState(2);
@@ -91,16 +110,44 @@ export function PdfDocumentView({
         {outline.available && <PdfOutlineToggle open={outline.open} className="size-8" onToggle={() => outline.setOpen(!outline.open)} />}
         <div className="min-w-0 flex-1 truncate font-medium text-foreground">{title}</div>
         {actions}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-8"
-          aria-label={t('Baixar PDF')}
-          disabled={!pdf}
-          onClick={() => pdf && downloadBytes(pdf, fileName, 'application/pdf')}
-        >
-          <Download />
-        </Button>
+        {downloadOptions && downloadOptions.length > 0 ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="size-8" aria-label={t('Baixar PDF')} title={t('Baixar PDF')} disabled={!pdf || isPreparingDownload}>
+                {isPreparingDownload ? <Loader2 className="animate-spin" /> : <Download />}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" collisionPadding={8} className="w-72 max-w-[calc(100vw-1rem)]">
+              <DropdownMenuItem className="items-start" onSelect={() => pdf && downloadBytes(pdf, fileName, 'application/pdf')}>
+                <FileText className="mt-0.5" />
+                <span className="flex min-w-0 flex-col gap-0.5">
+                  <span>{t('PDF original')}</span>
+                  <span className="text-xs text-muted-foreground">{t('Como a versão foi congelada, sem marcações nem comentários.')}</span>
+                </span>
+              </DropdownMenuItem>
+              {downloadOptions.map((option) => (
+                <DropdownMenuItem key={option.id} className="items-start" onSelect={option.onSelect}>
+                  <span className="mt-0.5 flex [&_svg]:size-4">{option.icon ?? <Download />}</span>
+                  <span className="flex min-w-0 flex-col gap-0.5">
+                    <span>{option.label}</span>
+                    {option.description && <span className="text-xs text-muted-foreground">{option.description}</span>}
+                  </span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-8"
+            aria-label={t('Baixar PDF')}
+            disabled={!pdf}
+            onClick={() => pdf && downloadBytes(pdf, fileName, 'application/pdf')}
+          >
+            <Download />
+          </Button>
+        )}
         <Button
           variant="ghost"
           size="icon"
@@ -111,7 +158,7 @@ export function PdfDocumentView({
         >
           <ZoomOut />
         </Button>
-        <span className="hidden w-10 shrink-0 text-center tabular-nums xs:inline">{zoom}%</span>
+        <span className="hidden w-10 shrink-0 text-center tabular-nums sm:inline">{zoom}%</span>
         <Button
           variant="ghost"
           size="icon"
@@ -124,7 +171,7 @@ export function PdfDocumentView({
         </Button>
       </div>
       <PdfOutlineFrame outline={outline} frameRef={frameRef} widthKey={`overdoctex.pdf-outline-width.${outlineKey}`}>
-        <div ref={areaRef} className="relative min-h-0 min-w-0 flex-1 overflow-auto p-3 sm:p-4">
+        <div ref={areaRef} className="relative min-h-0 min-w-0 flex-1 overflow-auto p-3 sm:p-4" onClick={onAreaClick}>
           {shownError ? (
             <p className="m-auto max-w-sm p-6 text-center text-sm text-destructive">{shownError}</p>
           ) : pdf ? (
