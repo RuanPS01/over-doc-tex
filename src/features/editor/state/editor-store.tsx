@@ -5,7 +5,7 @@ export type EditorPane = 'code' | 'pdf';
 
 /** Diálogos e painéis do cabeçalho; um por vez. */
 export type EditorDialog =
-  | { kind: 'history' }
+  | { kind: 'history'; /** Aba que abre; sem ela, "Revisões" (a principal). */ tab?: 'reviews' | 'versions' }
   | { kind: 'changes'; /** Versão usada como base; nulo escolhe a mais recente. */ baseSnapshotId: string | null }
   | { kind: 'request-review' }
   | { kind: 'settings' }

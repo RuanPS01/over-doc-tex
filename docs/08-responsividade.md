@@ -123,7 +123,7 @@ Sem medir nada em JavaScript: cada ação tem uma versão na barra e outra no me
 | Voltar aos projetos | `sm` | `sm` |
 | Compilar | sempre (só ícone abaixo de `sm`) | nunca |
 | Solicitar revisão | `sm` | `sm` |
-| Versões, Ver alterações | `lg` | `lg` |
+| Revisões e versões, Ver alterações | `lg` | `lg` |
 | Assistente de IA | sempre (ícone) | nunca |
 
 Em 360px a barra tem: Arquivos, título truncado, Compilar, IA e Mais.
@@ -142,7 +142,8 @@ Em 360px a barra tem: Arquivos, título truncado, Compilar, IA e Mais.
 | Áreas seguras (notch, barra de gestos) | `.pt-safe` no cabeçalho, `.pb-safe` no Sheet inferior e `viewport-fit=cover` no `index.html` |
 | Diálogos de leitura (PDF da versão, "Ver alterações") | `h-[calc(100dvh-1rem)] max-w-4xl flex flex-col gap-0 overflow-hidden p-0`; só o corpo rola; a barra do PDF reserva `pr-10` para o botão de fechar |
 | Lateral de comentários da revisão | No desktop, painel redimensionável à direita do PDF (384px por padrão, de 260px até 55%), recolhível pelo botão ou arrastando a borda até o fim, e o índice do PDF à esquerda, também redimensionável e recolhível; no celular vira Sheet inferior de `75dvh`, aberto por um botão flutuante "Comentários (N)" (vira "Escrever comentário" com um desenho pendente: abrir o Sheet a cada traço impediria desenhar) |
-| Ferramentas da revisão e seletor de documento | Na barra do PDF, só ícones abaixo de `xl` (rótulos em `title` e `aria-label`); o seletor de documento tem `max-w-[11rem]` com o texto truncado |
+| Ferramentas da revisão e seletor de documento | Na barra do PDF, só ícones abaixo de `xl` (rótulos em `title` e `aria-label`); o seletor de documento tem `max-w-[11rem]` com o texto truncado. O interruptor "Marcações" mostra o rótulo a partir de `xl` e o ícone a partir de `sm` (em 360px fica só o interruptor), e a porcentagem do zoom do `PdfDocumentView` aparece a partir de `sm`: assim a barra da revisão cabe em 360px com o título inteiro |
+| Menu de download do PDF | `DropdownMenu` alinhado à direita, `w-72` com `max-w-[calc(100vw-1rem)]` e `collisionPadding={8}`; cada opção tem título e descrição curta |
 | Botão "Comentar trecho" | `fixed`, logo abaixo da seleção, preso às bordas da janela (`min` e `max` com a largura e a altura visíveis) |
 | Ações por arquivo na árvore | botão "..." visível no hover e sempre visível em telas de toque (`[@media(hover:none)]:opacity-100`) |
 | Linha com campo e botão em formulário de diálogo | `flex-col` no celular e `sm:flex-row`; o campo usa `sm:flex-1` (com `flex-1` na coluna ele perde a altura) |

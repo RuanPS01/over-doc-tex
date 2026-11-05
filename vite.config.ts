@@ -59,6 +59,8 @@ export default defineConfig({
             { name: 'vendor-firebase', test: /node_modules[\\/](@firebase|firebase)[\\/]/ },
             { name: 'vendor-react', test: /node_modules[\\/](react|react-dom|scheduler|wouter|@tanstack)[\\/]/ },
             { name: 'vendor-ui', test: /node_modules[\\/](@radix-ui|lucide-react|react-resizable-panels)[\\/]/ },
+            // Só o "PDF com anotações" da revisão usa; continua sendo baixado sob demanda (import dinâmico).
+            { name: 'vendor-pdf-lib', test: /node_modules[\\/](pdf-lib|@pdf-lib|pako)[\\/]/ },
           ],
         },
       },

@@ -15,6 +15,8 @@ interface ThreadListProps {
   canWrite: boolean;
   canOpenSource: boolean;
   onSelect: (threadId: string) => void;
+  /** Clique no espaço vazio do painel: nenhuma thread fica selecionada. */
+  onClearSelection: () => void;
   onOpenSource: (thread: ThreadSummary) => void;
   onReply: (thread: ThreadSummary, body: string) => Promise<unknown>;
   onStatusChange: (thread: ThreadSummary, status: 'open' | 'resolved') => Promise<unknown>;
@@ -31,6 +33,7 @@ export function ThreadList({
   canWrite,
   canOpenSource,
   onSelect,
+  onClearSelection,
   onOpenSource,
   onReply,
   onStatusChange,
@@ -44,7 +47,13 @@ export function ThreadList({
   }, [selectedThreadId]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
+    <div
+      className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3"
+      onClick={(event) => {
+        // Só o fundo: cartões, o comentário novo e os botões tratam o próprio clique.
+        if (!(event.target as Element).closest('li, button, a, input, textarea, select, label, form')) onClearSelection();
+      }}
+    >
       {pendingPanel}
       <p className="text-xs text-muted-foreground">
         {threads.length === 0

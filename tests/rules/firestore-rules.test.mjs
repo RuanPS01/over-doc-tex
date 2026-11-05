@@ -504,6 +504,25 @@ await runScenarios('Revisão por link', [
     batch.update(doc(db, 'projects/p7'), { 'counters.reviews': 9, updatedAt: serverTimestamp() });
     return assertFails(batch.commit());
   }],
+  ['revisão aberta com vários e-mails: um grant para cada no mesmo lote, e todos leem', async () => {
+    const db = as('bia');
+    const batch = writeBatch(db);
+    for (const email of ['ana.rev@uni.br', 'bruno.rev@uni.br']) {
+      batch.set(doc(db, `projects/p7/snapshots/s1/grants/${email}`), {
+        documentIds: ['main'], reviewIds: ['r10'], grantedBy: 'bia', grantedAt: serverTimestamp(), expiresAt: null,
+      });
+    }
+    batch.set(doc(db, 'projects/p7/reviews/r10'), {
+      number: 9, reviewerEmail: 'ana.rev@uni.br', reviewerUid: null, snapshotId: 's1', grantedDocumentIds: ['main'], status: 'invited',
+      requestedBy: 'bia', lastActivityAt: serverTimestamp(), access: 'email', reviewerEmails: ['ana.rev@uni.br', 'bruno.rev@uni.br'],
+    });
+    batch.update(doc(db, 'projects/p7'), { 'counters.reviews': 9, updatedAt: serverTimestamp() });
+    await assertSucceeds(batch.commit());
+    // O segundo e-mail (fora de reviewerEmail) lê a revisão e o PDF pelo próprio grant.
+    const bruno = as('bruno', { email: 'bruno.rev@uni.br', email_verified: true });
+    await assertSucceeds(getDoc(doc(bruno, 'projects/p7/reviews/r10')));
+    await assertSucceeds(getDoc(doc(bruno, 'projects/p7/snapshots/s1/files/main.pdf')));
+  }],
   ['link revogado corta o acesso do visitante', async () => {
     await assertSucceeds(deleteDocs(as('bia'), ['projects/p7/reviews/r5/links/' + TOKEN]));
     await assertFails(getDoc(doc(anon('g1'), 'projects/p7/reviews/r5')));

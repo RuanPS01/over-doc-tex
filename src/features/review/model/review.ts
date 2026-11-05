@@ -82,7 +82,8 @@ export function reviewLinkUrl(origin: string, base: string, review: Pick<ReviewS
 /** E-mails de um campo livre (vírgula, ponto e vírgula, espaço ou linha), válidos e sem repetição. */
 export function parseEmails(text: string): { valid: string[]; invalid: string[] } {
   const parts = text.split(/[\s,;]+/).map((part) => part.trim().toLowerCase()).filter(Boolean);
-  const valid = [...new Set(parts.filter((part) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(part)))];
+  // Sem "/": o e-mail vira o id do grant (snapshots/{sid}/grants/{email}).
+  const valid = [...new Set(parts.filter((part) => /^[^@\s/]+@[^@\s/]+\.[^@\s/]+$/.test(part)))];
   return { valid, invalid: parts.filter((part) => !valid.includes(part)) };
 }
 

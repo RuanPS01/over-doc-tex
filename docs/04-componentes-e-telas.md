@@ -8,7 +8,7 @@
 | `/login` (link de acesso) | `LoginPage` | Quem abriu o link enviado por e-mail | Implementada: confirma o e-mail e conclui a entrada sem senha (convite de revisão, coautor ou "Receber link de acesso por e-mail") |
 | `/` | `ProjectsPage` | Usuário com sessão | Implementada: projetos de que é membro, em tempo real, "Novo projeto" e "Revisões para você" (consulta `collectionGroup('reviews')` pelo e-mail verificado). No cabeçalho: "Configurações de IA", idioma, tema, notificações e o menu da conta (`AccountMenu`: "Perfil" e "Sair da conta"). No celular, o título fica numa linha e os botões na seguinte |
 | `/p/:projectId` | `EditorPage` | Membro; convidado com e-mail verificado | Implementada: layout responsivo, salvamento automático, diálogos do cabeçalho, aceite de convite de coautoria, aviso de projeto inexistente ou sem acesso |
-| `/p/:projectId/reviews/:reviewId` | `ReviewPage` | Membro (autor) e revisor com grant | Implementada: PDF da versão, pins numerados, threads, aprovar ou pedir alterações, "Ver alterações" desde a rodada anterior |
+| `/p/:projectId/reviews/:reviewId` | `ReviewPage` | Membro (autor) e revisor com grant | Implementada: PDF da versão, pins numerados, threads, aprovar ou pedir alterações, "Ver alterações" desde a rodada anterior, marcações ligáveis e download do PDF original ou com anotações |
 
 Todas as páginas são carregadas com `React.lazy` em `src/app/router.tsx`. O Monaco só é baixado quando o editor abre.
 
@@ -22,9 +22,10 @@ Todas as páginas são carregadas com `React.lazy` em `src/app/router.tsx`. O Mo
 EditorPage                               pages/editor-page.tsx (papel, convite pendente, nome na lista de membros)
 └── EditorStoreProvider                  features/editor/state/editor-store.tsx (papel e diálogo aberto)
     ├── EditorDialogs                    na própria página: junta snapshots, diff, review e projects
-    │   ├── VersionHistorySheet          abas Versões (congelar, PDF, comparar, .zip) e Revisões (ProjectReviewQueue)
+    │   ├── VersionHistorySheet          "Revisões e versões": abas Revisões (ProjectReviewQueue, a principal e aberta por padrão) e Versões (congelar, PDF, comparar, .zip)
     │   ├── ChangesDialog                abas Código (diff por palavra) e PDF marcado (DiffPdfViewer)
-    │   ├── RequestReviewDialog          acesso (e-mails ou link), documentos concedidos, congela se mudou, abre a revisão, gera o diff em PDF e envia o link
+    │   ├── RequestReviewDialog          versão que será congelada (ReviewVersionNotice), acesso (e-mails ou link), vários e-mails separados por vírgula,
+    │   │                                documentos concedidos; congela uma versão nova, abre a revisão, gera o diff em PDF e envia o link (RequestReviewResultView)
     │   └── ProjectSettingsDialog        nome, descrição, documentos (ProjectDocumentsSection), membros e convites
     └── EditorShell                      .h-viewport flex-col overflow-hidden
       └── CompileStoreProvider           estado da compilação; Ctrl+S e Ctrl+Enter compilam
@@ -33,7 +34,7 @@ EditorPage                               pages/editor-page.tsx (papel, convite p
         │   ├── título do projeto        min-w-0 flex-1 truncate
         │   ├── Compilar                 sempre visível (só ícone abaixo de sm); vira Compilando com indicador
         │   ├── Solicitar revisão        visível a partir de sm (só dono e editores)
-        │   ├── Versões, Ver alterações  visíveis a partir de lg; abrem os diálogos pelo store (openDialog)
+        │   ├── Revisões e versões, Ver alterações  visíveis a partir de lg; abrem os diálogos pelo store (openDialog)
         │   ├── Assistente de IA         botão alternável
         │   ├── ThemeMenu                tema claro, escuro ou do sistema (a partir de sm; no celular, dentro de "Mais")
         │   ├── NotificationBell         notificações da conta (a partir de 360px)
@@ -104,9 +105,11 @@ O código está em `src/features/editor/components/` e as regras completas em `0
 ReviewPage                               pages/review-page.tsx: membro entra como autor, quem não é membro como revisor
 └── ReviewWorkspace                      .h-viewport, mesma casca do editor
     ├── ReviewHeader                     "#1 título", versão, status; aprovar, pedir alterações, encerrar ou reabrir; Envio (dono e editores); nome do visitante; ThemeMenu; NotificationBell
-    ├── PdfDocumentView                  features/pdf-viewer (pdf.js) com a camada de texto ligada, zoom, download e o índice do documento aberto por padrão
+    ├── PdfDocumentView                  features/pdf-viewer (pdf.js) com a camada de texto ligada, zoom, índice do documento aberto por padrão e
+    │   │                                download em menu: "PDF original" ou "PDF com anotações" (useAnnotatedPdf)
     │   ├── título                       seletor de documento quando a revisão concede mais de um; no espaço livre da barra, à direita,
     │   │                                junto das ferramentas, a dica da ferramenta (Ponto, Desenhar) ou a mensagem de quem pediu a revisão
+    │   ├── Marcações (Switch)           liga e desliga destaques, desenhos e pins no PDF; desligado, as ferramentas e o "Comentar trecho" somem
     │   ├── ferramentas                  Selecionar texto | Ponto | Desenhar (na barra do PDF)
     │   └── AnnotationLayer (por página) destaques dos trechos, desenhos em SVG, pins numerados e a marcação pendente
     ├── SelectionPopover                 "Comentar trecho" logo abaixo da seleção de texto
@@ -123,6 +126,10 @@ Pontos de atenção:
 - **Dica e mensagem sem faixa nova:** a dica de "Ponto" e "Desenhar" e a mensagem do pedido de revisão ficam no espaço livre da barra do PDF, alinhadas à direita, junto das ferramentas, então escolher uma ferramenta não empurra o PDF para baixo. No celular a barra não tem espaço: a dica flutua sobre o topo do PDF (sem ocupar espaço) e a mensagem fica no topo do painel de comentários.
 - **Painéis redimensionáveis (desktop):** como as colunas do editor, o índice, as páginas e os comentários ficam lado a lado e as bordas entre eles arrastam para mudar a largura. Arrastar o índice ou os comentários até a borda recolhe o painel, e puxar a borda abre de novo. O índice também abre e fecha pelo botão no começo da barra do PDF; os comentários, pelo botão com o total de comentários na mesma barra e pelo botão no topo do painel. Começar um comentário (trecho, ponto ou desenho) ou escolher uma marcação no PDF reabre os comentários. Ao reabrir, o painel volta com a última largura usada, e não com o mínimo. Comentários: 384px por padrão, de 260px até 55% da tela, grupo lembrado em `review-desktop`. Índice: 224px por padrão, de 160px até metade do visualizador.
 - **Coordenadas normalizadas:** destaques, traços e pins usam valores de 0 a 1, então zoom e tamanho de tela não exigem recalcular nada no banco. Os traços são SVG com `vector-effect: non-scaling-stroke`.
+- **Pins semitransparentes:** os números sobre a página ficam com 60% de opacidade (45% nos resolvidos) para o texto embaixo continuar legível; ficam opacos no hover, no foco e quando a thread está selecionada.
+- **Tirar a seleção:** clicar de novo no número ou no cartão da thread selecionada tira a seleção; clicar num lugar vazio do PDF (fora de pins e botões) ou do painel de comentários também. Soltar uma seleção de texto não conta como clique vazio, e o campo de resposta e os botões do cartão selecionado não mudam a seleção.
+- **Marcações:** o interruptor "Marcações" na barra do PDF (rótulo a partir de `xl`, ícone a partir de `sm`) mostra o PDF como foi congelado, sem a camada de anotação; desligado, as ferramentas de marcar e o "Comentar trecho" saem, a marcação pendente é descartada, e a lista de comentários continua ao lado. Liga de novo a cada abertura.
+- **Download:** o botão de download da barra vira um menu com "PDF original" (os bytes da versão) e "PDF com anotações", que `useAnnotatedPdf` gera no navegador com o pdf-lib (fluxo em `07-fluxos.md`, cenário B). O nome do arquivo leva `-anotado` traduzido.
 - **Camadas:** canvas, camada de texto do pdf.js (spans transparentes) e `AnnotationLayer` por cima. Em "Selecionar texto" a camada de anotação deixa o ponteiro passar (`pointer-events: none`), menos nos pins; em "Desenhar" ela captura o ponteiro com `touch-action: none` só sobre a página.
 - **Comentário em trecho:** a âncora junta os retângulos da seleção (por linha), a citação com 32 caracteres de contexto e a posição no texto da página (o mesmo `.pages` da versão).
 - **Linha do código:** ao criar a thread, o SyncTeX da versão (`.synctex`) dá `sourceHint`; o autor usa "Abrir no código", que abre o editor em `/p/{id}?arquivo=...&linha=...`.
@@ -145,6 +152,7 @@ Pontos de atenção:
 | `Input` | nativo | Chaves de API, nomes de pasta, login |
 | `Dialog` | Radix Dialog | Largura e altura limitadas à janela; título com `pr-8` para o botão de fechar; rodapé empilha no celular. `closeClassName` reposiciona o X quando o diálogo tem barra própria no topo (no PDF da versão, o X fica no meio da barra de 40px) |
 | `Select` | Radix Select | Lista em `popper` com a largura do gatilho; item marcado com fundo primário e ícone de check |
+| `Switch` | nativo (`button` com `role="switch"`) | Interruptor no visual do shadcn/ui, sem pacote do Radix; `checked` e `onCheckedChange`. Usado em "Marcações" da revisão |
 
 ### Genéricos (`src/components/common`)
 
@@ -162,13 +170,13 @@ Pontos de atenção:
 | Feature | Componentes |
 | --- | --- |
 | `editor` | `EditorShell`, `EditorHeader`, `DesktopWorkspace`, `MobileWorkspace`, `PaneSwitcher`, `FileTreePanel`, `FileTreeSheet`, `FileActionsDialogs`, `FileNameDialog`, `CodeEditorPanel`, `PdfPane`, `ImportDialog` |
-| `pdf-viewer` | `PdfPreviewPanel` (compilação, marca da busca do SyncTeX, duplo clique), `PdfDocumentView` (PDF pronto, com zoom e download), `PdfPages` (pdf.js, páginas desenhadas perto da área visível, camada de texto opcional, camada por página via `renderOverlay`, tamanhos das páginas, duplo clique e o documento aberto via `onDocument`), `PdfOutlineFrame` (índice e páginas num grupo redimensionável, com a borda arrastável e o índice recolhível; a estrutura não muda com ou sem índice, para as páginas não serem montadas de novo), `PdfOutlinePanel` e `PdfOutlineToggle` (índice do documento, como o do leitor do Chrome: hierarquia recolhível, seção atual marcada, níveis acima dela abertos sozinhos e a seção visível na lista; o clique rola até ela, que continua marcada até a rolagem chegar; ao lado das páginas a partir de 520px de largura, por cima delas abaixo disso, fechando ao escolher). Estado em `usePdfOutline`; leitura e regras puras em `src/lib/pdf/outline.ts` |
+| `pdf-viewer` | `PdfPreviewPanel` (compilação, marca da busca do SyncTeX, duplo clique), `PdfDocumentView` (PDF pronto, com zoom e download; com `downloadOptions`, o download vira menu com "PDF original" e as outras opções, e `onAreaClick` avisa cliques na área do PDF), `PdfPages` (pdf.js, páginas desenhadas perto da área visível, camada de texto opcional, camada por página via `renderOverlay`, tamanhos das páginas, duplo clique e o documento aberto via `onDocument`), `PdfOutlineFrame` (índice e páginas num grupo redimensionável, com a borda arrastável e o índice recolhível; a estrutura não muda com ou sem índice, para as páginas não serem montadas de novo), `PdfOutlinePanel` e `PdfOutlineToggle` (índice do documento, como o do leitor do Chrome: hierarquia recolhível, seção atual marcada, níveis acima dela abertos sozinhos e a seção visível na lista; o clique rola até ela, que continua marcada até a rolagem chegar; ao lado das páginas a partir de 520px de largura, por cima delas abaixo disso, fechando ao escolher). Estado em `usePdfOutline`; leitura e regras puras em `src/lib/pdf/outline.ts` |
 | `ai-assistant` | `AiAssistantPanel`, `DockedAssistant`, `DockMenu`, `AiSettingsDialog`, `ModelEntryCard`, `AiMessage`, `AiComposer`, `StructuredResultView` |
 | `auth` | `AuthProvider`, `RequireAuth` |
 | `projects` | `ProjectList`, `DemoProjectList`, `NewProjectDialog`, `ProjectSettingsDialog`, `ProjectDocumentsSection` |
 | `notifications` | `NotificationBell` (contagem, lista, marcar como lidas, abrir a revisão) |
 | `snapshots` | `VersionHistorySheet`, `FreezeVersionForm`, `VersionCard`, `VersionPdfDialog`, `IssueList` |
-| `review` | `ReviewWorkspace`, `ReviewHeader`, `ReviewSharingDialog`, `ReviewAccessChoice`, `GuestReviewGate`, `AnnotationLayer`, `SelectionPopover`, `PendingAnnotationPanel`, `ThreadList`, `ThreadCard`, `CommentComposer`, `ReviewChangesDialog`, `RequestReviewDialog`, `ReviewList`, `ProjectReviewQueue`, `MyReviewsSection` |
+| `review` | `ReviewWorkspace`, `ReviewHeader`, `ReviewSharingDialog`, `ReviewAccessChoice`, `GuestReviewGate`, `AnnotationLayer`, `SelectionPopover`, `PendingAnnotationPanel`, `ThreadList`, `ThreadCard`, `CommentComposer`, `ReviewChangesDialog`, `RequestReviewDialog`, `ReviewVersionNotice` (número da versão que será congelada, ajuste ou principal), `RequestReviewResultView` (revisão aberta, convites e link), `ReviewList`, `ProjectReviewQueue`, `MyReviewsSection` |
 | `diff` | `ChangesDialog`, `FileChangeCard`, `DiffView` (texto com `<ins>` e `<del>`, linhas sem mudança recolhidas), `DiffPdfViewer` (PDF marcado com marcas na margem e "Próxima alteração") |
 
 ### Hooks de integração
@@ -188,11 +196,11 @@ Pontos de atenção:
 | `useLatexCompile` | editor | Compila com o Siglum o que `useProjectSources` juntou (PDF, erros e SyncTeX) |
 | `useFileActions` | editor | Criar, renomear (levando o texto da tela) e excluir arquivos do rascunho |
 | `useSnapshots` | snapshots | Versões do projeto em tempo real, da mais nova para a mais antiga |
-| `useFreezeSnapshot` | snapshots | Congela a versão: blobs, compilação, PDF e texto por página em pedaços, snapshot e contador num lote |
+| `useFreezeSnapshot` | snapshots | Congela a versão: blobs, compilação, PDF e texto por página em pedaços, snapshot e contador num lote (sempre uma versão nova, inclusive para a revisão) |
 | `useSnapshotFiles` | snapshots | Lê o código (blobs, com cache por hash), o PDF e o texto por página de uma versão |
 | `useTreeChanges`, `useVersionComparison` | diff | Compara o código de duas versões, ou de uma versão com o rascunho, palavra por palavra |
 | `useVisualDiff` | diff | Diff em PDF entre versões (cache em `diffs/{diffKey}`, gerado e guardado por quem edita) ou contra o rascunho |
-| `useRequestReview` | review | Congela se o código mudou, abre a revisão (grant, revisão e contador num lote), gera o diff em PDF, leva as threads abertas e envia o link de acesso ao revisor |
+| `useRequestReview`, `useNextReviewVersion` | review | Congela uma versão nova, abre a revisão (um grant por e-mail, revisão e contador num lote), gera o diff em PDF, leva as threads abertas e envia o link de acesso a cada revisor; `useNextReviewVersion` dá o número que será congelado (ajuste e principal) |
 | `useCarryThreads` | review | Leva as threads abertas da rodada anterior para a revisão nova, reancoradas (trecho pelo `.pages` e pdf.js, pin pelo SyncTeX) |
 | `useReview`, `useReviews`, `useMyReviews` | review | Uma revisão, a fila do projeto e as revisões pedidas ao e-mail da conta |
 | `useThreads`, `useComments` | review | Threads da revisão (na ordem de leitura do PDF) e comentários de cada uma, em tempo real |
@@ -200,6 +208,7 @@ Pontos de atenção:
 | `useReviewDocuments`, `useReviewPdf`, `useReviewPageTexts`, `useReviewSyncData` | review | Documentos concedidos, PDF, texto das páginas e SyncTeX do documento aberto na revisão |
 | `usePageTextDiff`, `useReviewVisualDiff` | review | Diff do texto das páginas e o PDF marcado desde a rodada anterior (o revisor só lê o cache) |
 | `useTextSelection` | review | Seleção de texto dentro de uma página do PDF, para o comentário em trecho |
+| `useAnnotatedPdf` | review | "PDF com anotações": lê os comentários de cada thread do documento (e os da rodada anterior), as cores dos tokens e gera o PDF com `buildAnnotatedPdf` |
 | `useProjectArchive` | editor | Exporta o .zip e aplica o plano de importação (Firestore, com binários em pedaços, ou cache no modo demonstração) |
 | `useExportProject` | editor | Exportação do projeto aberto, usada pela árvore e pelo menu |
 | `useAiConfig` | ai-assistant | Configuração da IA na conta (`users/{uid}/private/ai`) ou no navegador |

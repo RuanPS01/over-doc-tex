@@ -82,6 +82,8 @@ const messages: Record<string, string> = {
   'Fechar o índice': 'Cerrar el índice',
   'O índice do repositório de pacotes não carregou ({reason}): arquivos de idioma e de estilo ficaram de fora.': 'El índice del repositorio de paquetes no se cargó ({reason}): los archivos de idioma y de estilo quedaron fuera.',
   '{count} arquivos do repositório de pacotes não foram baixados: {names}': '{count} archivos del repositorio de paquetes no se descargaron: {names}',
+  'PDF original': 'PDF original',
+  'Como a versão foi congelada, sem marcações nem comentários.': 'Tal como se congeló la versión, sin marcas ni comentarios.',
 };
 
 export default messages;

@@ -26,6 +26,8 @@ describe('revisão pelo link', () => {
 
   it('e-mails de um campo livre: válidos, em minúsculas e sem repetição', () => {
     expect(parseEmails('Ana@Uni.br, bia@uni.br; ana@uni.br\nerrado')).toEqual({ valid: ['ana@uni.br', 'bia@uni.br'], invalid: ['errado'] });
+    // O e-mail vira o id do grant: "/" quebraria o caminho do Firestore.
+    expect(parseEmails('a/b@uni.br,ok@uni.br')).toEqual({ valid: ['ok@uni.br'], invalid: ['a/b@uni.br'] });
   });
 
   it('revisão antiga vale "só e-mails", com o e-mail da criação na lista', () => {

@@ -62,7 +62,6 @@ const messages: Record<string, string> = {
   'Abrindo a revisão': 'Abriendo la revisión',
   'Gerando a comparação em PDF': 'Generando la comparación en PDF',
   'Levando os comentários abertos': 'Trasladando los comentarios abiertos',
-  'Informe um e-mail válido para o revisor.': 'Escribe un correo válido para el revisor.',
   'Revisão de {project}': 'Revisión de {project}',
   'Não foi possível abrir a revisão.': 'No se pudo abrir la revisión.',
   'Revisão #{number}: {project}': 'Revisión #{number}: {project}',
@@ -75,8 +74,6 @@ const messages: Record<string, string> = {
   'Qualquer pessoa com o link pode ver o PDF da versão {version} e comentar nele, sem conta, informando o nome.':
     'Cualquier persona con el enlace puede ver el PDF de la versión {version} y comentarlo, sin cuenta, escribiendo su nombre.',
   '{email} pode ver o PDF da versão {version} e comentar nele.': '{email} puede ver el PDF de la versión {version} y comentarlo.',
-  'O revisor vê só o PDF da versão congelada, nunca o rascunho. Se o código mudou desde a última versão, uma nova é congelada.':
-    'El revisor solo ve el PDF de la versión congelada, nunca el borrador. Si el código cambió desde la última versión, se congela una nueva.',
   'A versão {version} foi congelada para esta revisão.': 'La versión {version} se congeló para esta revisión.',
   '1 comentário ainda aberto da rodada anterior veio junto.': 'Se trasladó 1 comentario aún abierto de la ronda anterior.',
   '{count} comentários ainda abertos da rodada anterior vieram junto.': 'Se trasladaron {count} comentarios aún abiertos de la ronda anterior.',
@@ -89,9 +86,6 @@ const messages: Record<string, string> = {
   'Copiar link': 'Copiar enlace',
   'Enviar pelo meu e-mail': 'Enviar desde mi correo',
   'Abrir a revisão': 'Abrir la revisión',
-  'E-mail do revisor (opcional)': 'Correo del revisor (opcional)',
-  'E-mail do revisor': 'Correo del revisor',
-  'revisor@universidade.br': 'revisor@universidad.edu',
   Título: 'Título',
   'Mensagem (opcional)': 'Mensaje (opcional)',
   'O que o revisor deve olhar com atenção': 'Lo que el revisor debe mirar con atención',
@@ -205,6 +199,42 @@ const messages: Record<string, string> = {
   'Mostrar os comentários': 'Mostrar los comentarios',
   'Recolher os comentários': 'Contraer los comentarios',
   'Mensagem:': 'Mensaje:',
+
+  // Solicitar revisão: vários revisores e a versão congelada
+  'Informe o e-mail de pelo menos um revisor.': 'Indica el correo de al menos un revisor.',
+  'Convide até {max} e-mails por revisão.': 'Invita hasta {max} correos por revisión.',
+  'Os revisores veem só o PDF da versão congelada, nunca o rascunho.': 'Los revisores solo ven el PDF de la versión congelada, nunca el borrador.',
+  '{emails} podem ver o PDF da versão {version} e comentar nele.': '{emails} pueden ver el PDF de la versión {version} y comentar en él.',
+  'E-mails dos revisores (opcional)': 'Correos de los revisores (opcional)',
+  'E-mails dos revisores': 'Correos de los revisores',
+  'revisora@universidade.br, orientador@universidade.br': 'revisora@universidad.es, director@universidad.es',
+  'Separe vários e-mails por vírgula. Cada pessoa recebe o próprio link de acesso e vê os mesmos documentos.': 'Separa varios correos con comas. Cada persona recibe su propio enlace de acceso y ve los mismos documentos.',
+  'Os {count} convites com o link de acesso foram enviados por e-mail.': 'Las {count} invitaciones con el enlace de acceso se enviaron por correo.',
+  'O convite automático falhou para {failed} de {count} e-mails (ative "Link de e-mail" em Authentication no Firebase). Envie o link abaixo.': 'La invitación automática falló para {failed} de {count} correos (activa "Vínculo de correo electrónico" en Authentication de Firebase). Envía el enlace de abajo.',
+  'Versão congelada para a revisão': 'Versión congelada para la revisión',
+  'Conferindo o número da versão': 'Comprobando el número de la versión',
+  'A versão {version} será congelada para esta revisão': 'La versión {version} se congelará para esta revisión',
+  'O projeto como está agora vira uma cópia imutável, e é ela que os revisores veem. Cada revisão nova congela uma versão; a edição continua normalmente.': 'El proyecto tal como está ahora se convierte en una copia inmutable, y es la que ven los revisores. Cada revisión nueva congela una versión; la edición sigue con normalidad.',
+
+  // Marcações e download do PDF
+  'Ver o PDF original, sem marcações': 'Ver el PDF original, sin marcas',
+  'Ver o PDF com as marcações': 'Ver el PDF con las marcas',
+  'Marcações': 'Marcas',
+  'Mostrar as marcações e os comentários no PDF': 'Mostrar las marcas y los comentarios en el PDF',
+  'Não foi possível gerar o PDF com anotações. Confira a conexão e tente de novo.': 'No se pudo generar el PDF con anotaciones. Revisa la conexión e inténtalo de nuevo.',
+  'PDF com anotações': 'PDF con anotaciones',
+  'Destaques, desenhos e pins sobre o texto, com os comentários numa margem à direita de cada página.': 'Resaltados, dibujos y pines sobre el texto, con los comentarios en un margen a la derecha de cada página.',
+  'Tirar a seleção': 'Quitar la selección',
+  'Trecho': 'Fragmento',
+  'Desenho': 'Dibujo',
+  'Revisão #{number} · versão {version} · comentários': 'Revisión #{number} · versión {version} · comentarios',
+  'Comentários completos': 'Comentarios completos',
+  'Continua no fim do PDF, em Comentários completos.': 'Continúa al final del PDF, en Comentarios completos.',
+  'Mais 1 comentário no fim do PDF, em Comentários completos.': '1 comentario más al final del PDF, en Comentarios completos.',
+  'Mais {count} comentários no fim do PDF, em Comentários completos.': '{count} comentarios más al final del PDF, en Comentarios completos.',
+
+  // Parte do nome do PDF anotado: sem acento nem espaço.
+  'anotado': 'anotado',
 };
 
 export default messages;

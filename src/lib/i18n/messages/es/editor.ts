@@ -25,7 +25,7 @@ const messages: Record<string, string> = {
   Compilar: 'Compilar',
   'Compilar (Ctrl+S)': 'Compilar (Ctrl+S)',
   'Solicitar revisão': 'Solicitar revisión',
-  Versões: 'Versiones',
+  'Revisões e versões': 'Revisiones y versiones',
   'Ver alterações': 'Ver cambios',
   'Assistente de IA': 'Asistente de IA',
   'Mais ações': 'Más acciones',

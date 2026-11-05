@@ -76,6 +76,7 @@ function EditorDialogs({ project, currentUid }: { project: ProjectInfo; currentU
       {aiSettings}
       <VersionHistorySheet
         open={isHistoryOpen}
+        initialTab={dialog?.kind === 'history' ? (dialog.tab ?? 'reviews') : 'reviews'}
         onOpenChange={setOpen}
         projectId={projectId}
         projectName={projectName}
@@ -97,7 +98,7 @@ function EditorDialogs({ project, currentUid }: { project: ProjectInfo; currentU
           closeDialog();
           openFile(fileId);
         }}
-        onOpenHistory={() => openDialog({ kind: 'history' })}
+        onOpenHistory={() => openDialog({ kind: 'history', tab: 'versions' })}
         canEdit={canEdit}
       />
       {canEdit && (

@@ -1,20 +1,28 @@
-import { Check, Copy, ExternalLink, Loader2, Mail, Send } from 'lucide-react';
+import { Loader2, Send } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
-import { Link } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { FREEZE_STAGE_LABELS } from '@/features/snapshots/components/freeze-version-form';
 import { IssueList } from '@/features/snapshots/components/issue-list';
+import type { VersionBump } from '@/features/snapshots/model/version';
 import { useT } from '@/hooks/use-t';
 import { msg } from '@/lib/i18n';
 import type { TexIssue } from '@/lib/latex/prepare';
-import { FreezeError, useRequestReview, type RequestReviewResult, type RequestStage } from '../hooks/use-request-review';
 import type { ReviewAccess } from '@shared/firestore/types';
-import { reviewLinkUrl, reviewPath } from '../model/review';
-import { normalizeEmail } from '@/lib/email';
+import {
+  FreezeError,
+  MAX_REVIEWER_EMAILS,
+  useNextReviewVersion,
+  useRequestReview,
+  type RequestReviewResult,
+  type RequestStage,
+} from '../hooks/use-request-review';
+import { parseEmails } from '../model/review';
+import { RequestReviewResultView } from './request-review-result';
 import { ReviewAccessChoice } from './review-access-choice';
+import { ReviewVersionNotice } from './review-version-notice';
 
 const STAGE_LABELS: Record<RequestStage, string> = { ...FREEZE_STAGE_LABELS, opening: msg('Abrindo a revisão'), diff: msg('Gerando a comparação em PDF'), carry: msg('Levando os comentários abertos') };
 
@@ -28,12 +36,14 @@ interface RequestReviewDialogProps {
   onIssueSelect: (issue: TexIssue) => void;
 }
 
-/** Congela a versão (se mudou), abre a revisão e convida o revisor por e-mail ou pelo link. */
+/** Congela uma versão nova, abre a revisão e convida os revisores por e-mail ou pelo link. */
 export function RequestReviewDialog({ open, onOpenChange, projectId, projectName, documents, onIssueSelect }: RequestReviewDialogProps) {
   const { t } = useT();
   const requestReview = useRequestReview(projectId, projectName);
+  const nextVersion = useNextReviewVersion(projectId, open);
   const [access, setAccess] = useState<ReviewAccess>('email');
-  const [email, setEmail] = useState('');
+  const [emails, setEmails] = useState('');
+  const [bump, setBump] = useState<VersionBump>('minor');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [secondaryIds, setSecondaryIds] = useState<string[]>([]);
@@ -41,8 +51,7 @@ export function RequestReviewDialog({ open, onOpenChange, projectId, projectName
   const [stage, setStage] = useState<RequestStage | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [issues, setIssues] = useState<TexIssue[]>([]);
-  const [result, setResult] = useState<(RequestReviewResult & { email: string }) | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [result, setResult] = useState<RequestReviewResult | null>(null);
   const isBusy = stage !== null;
 
   useEffect(() => {
@@ -50,30 +59,31 @@ export function RequestReviewDialog({ open, onOpenChange, projectId, projectName
     setResult(null);
     setError(null);
     setIssues([]);
-    setCopied(false);
+    setBump('minor');
   }, [open]);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    const reviewerEmail = normalizeEmail(email);
+    // Vários e-mails separados por vírgula (ponto e vírgula, espaço e linha também valem).
+    const { valid, invalid } = parseEmails(emails);
+    if (invalid.length > 0) return setError(t('E-mail inválido: {emails}.', { emails: invalid.join(', ') }));
     // Pelo link, o e-mail é opcional; por e-mail, é ele que dá o acesso.
-    if (!reviewerEmail && (access === 'email' || email.trim())) {
-      setError(t('Informe um e-mail válido para o revisor.'));
-      return;
-    }
+    if (access === 'email' && valid.length === 0) return setError(t('Informe o e-mail de pelo menos um revisor.'));
+    if (valid.length > MAX_REVIEWER_EMAILS) return setError(t('Convide até {max} e-mails por revisão.', { max: MAX_REVIEWER_EMAILS }));
     setError(null);
     setIssues([]);
     try {
       const created = await requestReview({
         access,
-        reviewerEmail: reviewerEmail ?? '',
+        reviewerEmails: valid,
+        bump: nextVersion.isFirst ? 'minor' : bump,
         title: title.trim() || t('Revisão de {project}', { project: projectName }),
         description,
         documentIds: secondaryIds.filter((id) => secondaries.some((document) => document.id === id)),
         onStage: setStage,
       });
-      setResult({ ...created, email: reviewerEmail ?? '' });
-      setEmail('');
+      setResult(created);
+      setEmails('');
       setTitle('');
       setDescription('');
     } catch (caught) {
@@ -84,27 +94,7 @@ export function RequestReviewDialog({ open, onOpenChange, projectId, projectName
     }
   };
 
-  // Pelo link, o endereço leva o código e a versão; por e-mail, é só o caminho da revisão.
-  const link = !result
-    ? ''
-    : result.linkToken
-      ? reviewLinkUrl(window.location.origin, import.meta.env.BASE_URL, { projectId, id: result.reviewId, snapshotId: result.snapshotId }, result.linkToken)
-      : new URL(`${import.meta.env.BASE_URL}${reviewPath(projectId, result.reviewId).slice(1)}`, window.location.origin).href;
-  const mailto = result
-    ? `mailto:${result.email}?subject=${encodeURIComponent(t('Revisão #{number}: {project}', { number: result.number, project: projectName }))}&body=${encodeURIComponent(
-        result.linkToken
-          ? t('Olá! Você foi convidado para revisar a versão {version} de "{project}".\n\nAbra: {link}\n\nNão precisa de conta: basta informar o seu nome.', {
-              version: result.snapshotLabel,
-              project: projectName,
-              link,
-            })
-          : t('Olá! Você foi convidado para revisar a versão {version} de "{project}".\n\nAbra: {link}\n\nEntre com o Google ou com o link de acesso enviado para este e-mail.', {
-              version: result.snapshotLabel,
-              project: projectName,
-              link,
-            }),
-      )}`
-    : '';
+  const invited = result?.reviewerEmails ?? [];
 
   return (
     <Dialog open={open} onOpenChange={(next) => !isBusy && onOpenChange(next)}>
@@ -112,76 +102,45 @@ export function RequestReviewDialog({ open, onOpenChange, projectId, projectName
         <DialogHeader>
           <DialogTitle>{result ? t('Revisão #{number} aberta', { number: result.number }) : t('Solicitar revisão')}</DialogTitle>
           <DialogDescription>
-            {result
-              ? result.linkToken
+            {!result
+              ? t('Os revisores veem só o PDF da versão congelada, nunca o rascunho.')
+              : result.linkToken
                 ? t('Qualquer pessoa com o link pode ver o PDF da versão {version} e comentar nele, sem conta, informando o nome.', { version: result.snapshotLabel })
-                : t('{email} pode ver o PDF da versão {version} e comentar nele.', { email: result.email, version: result.snapshotLabel })
-              : t('O revisor vê só o PDF da versão congelada, nunca o rascunho. Se o código mudou desde a última versão, uma nova é congelada.')}
+                : invited.length === 1
+                  ? t('{email} pode ver o PDF da versão {version} e comentar nele.', { email: invited[0]!, version: result.snapshotLabel })
+                  : t('{emails} podem ver o PDF da versão {version} e comentar nele.', { emails: invited.join(', '), version: result.snapshotLabel })}
           </DialogDescription>
         </DialogHeader>
 
         {result ? (
-          <div className="flex flex-col gap-3 text-sm">
-            {result.frozeNewVersion && <p>{t('A versão {version} foi congelada para esta revisão.', { version: result.snapshotLabel })}</p>}
-            {result.carriedThreads > 0 && (
-              <p>
-                {result.carriedThreads === 1
-                  ? t('1 comentário ainda aberto da rodada anterior veio junto.')
-                  : t('{count} comentários ainda abertos da rodada anterior vieram junto.', { count: result.carriedThreads })}
-              </p>
-            )}
-            {result.email ? (
-              <p className={result.emailSent ? undefined : 'rounded-md border border-warning/50 bg-warning/10 p-2'}>
-                {result.emailSent
-                  ? t('O convite com o link de acesso foi enviado por e-mail.')
-                  : t('Não foi possível enviar o convite automático (ative "Link de e-mail" em Authentication no Firebase). Envie o link abaixo.')}
-              </p>
-            ) : (
-              <p>{t('Envie o link abaixo para quem vai revisar. Quem tiver o link entra sem conta.')}</p>
-            )}
-            <div className="flex min-w-0 gap-2">
-              <Input readOnly value={link} aria-label={t('Link da revisão')} className="min-w-0 flex-1 font-mono text-xs" />
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                aria-label={t('Copiar link')}
-                onClick={() => void navigator.clipboard.writeText(link).then(() => setCopied(true))}
-              >
-                {copied ? <Check /> : <Copy />}
-              </Button>
-            </div>
-            <DialogFooter>
-              {result.email && (
-                <Button variant="outline" asChild>
-                  <a href={mailto}>
-                    <Mail />
-                    {t('Enviar pelo meu e-mail')}
-                  </a>
-                </Button>
-              )}
-              <Button asChild>
-                <Link href={reviewPath(projectId, result.reviewId)}>
-                  <ExternalLink />
-                  {t('Abrir a revisão')}
-                </Link>
-              </Button>
-            </DialogFooter>
-          </div>
+          <RequestReviewResultView projectId={projectId} projectName={projectName} result={result} />
         ) : (
           <form onSubmit={(event) => void handleSubmit(event)} className="flex flex-col gap-3">
+            <ReviewVersionNotice
+              labels={nextVersion.labels}
+              isFirst={nextVersion.isFirst}
+              isLoading={nextVersion.isLoading}
+              bump={bump}
+              disabled={isBusy}
+              onBumpChange={setBump}
+            />
             <ReviewAccessChoice value={access} disabled={isBusy} onChange={setAccess} />
             <label className="flex flex-col gap-1 text-sm font-medium">
-              {access === 'link' ? t('E-mail do revisor (opcional)') : t('E-mail do revisor')}
+              {access === 'link' ? t('E-mails dos revisores (opcional)') : t('E-mails dos revisores')}
               <Input
-                type="email"
-                required={access === 'email'}
+                type="text"
+                inputMode="email"
                 autoComplete="off"
+                spellCheck={false}
                 disabled={isBusy}
-                value={email}
-                placeholder={t('revisor@universidade.br')}
-                onChange={(event) => setEmail(event.target.value)}
+                value={emails}
+                placeholder={t('revisora@universidade.br, orientador@universidade.br')}
+                aria-describedby="request-review-emails-hint"
+                onChange={(event) => setEmails(event.target.value)}
               />
+              <span id="request-review-emails-hint" className="text-xs font-normal text-muted-foreground">
+                {t('Separe vários e-mails por vírgula. Cada pessoa recebe o próprio link de acesso e vê os mesmos documentos.')}
+              </span>
             </label>
             <label className="flex flex-col gap-1 text-sm font-medium">
               {t('Título')}
