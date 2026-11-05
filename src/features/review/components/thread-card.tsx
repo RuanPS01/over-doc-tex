@@ -1,34 +1,16 @@
-import { CheckCircle2, Code2, PenLine, RotateCcw } from 'lucide-react';
-import { forwardRef, useMemo, type MouseEvent } from 'react';
+import { CheckCircle2, Code2, Crosshair, Loader2, MoreHorizontal, PenLine, RotateCcw, Trash2 } from 'lucide-react';
+import { forwardRef, useState, type MouseEvent } from 'react';
 import { Button } from '@/components/ui/button';
-import { MarkdownContent } from '@/components/common/markdown-content';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useT } from '@/hooks/use-t';
 import { cn } from '@/lib/utils';
 import { useComments } from '../hooks/use-threads';
-import type { CommentSummary, ThreadSummary } from '../model/review';
+import type { ReviewViewer, ThreadSummary } from '../model/review';
 import { CommentComposer } from './comment-composer';
+import { ThreadComments } from './thread-comments';
 
 /** Elementos que têm ação própria: o clique neles não muda a seleção da thread. */
-const INTERACTIVE = 'button, a, input, textarea, select, label, form, [data-keep-selection]';
-
-function CommentItems({ comments }: { comments: readonly CommentSummary[] }) {
-  const { t, locale } = useT();
-  const timeFormat = useMemo(() => new Intl.DateTimeFormat(locale, { dateStyle: 'short', timeStyle: 'short' }), [locale]);
-  return (
-    <>
-      {comments.map((comment) => (
-        <li key={comment.id} className="flex flex-col gap-0.5">
-          <p className="text-xs text-muted-foreground">
-            <span className="font-medium text-foreground">{comment.authorName}</span>
-            {comment.authorRole === 'reviewer' ? ` ${t('(revisor)')}` : ''}
-            {comment.createdAt ? ` · ${timeFormat.format(comment.createdAt)}` : ''}
-          </p>
-          <MarkdownContent markdown={comment.body} className="[&_p]:my-0.5" />
-        </li>
-      ))}
-    </>
-  );
-}
+const INTERACTIVE = 'button, a, input, textarea, select, label, form, [data-keep-selection], [role="menu"], [role="alertdialog"]';
 
 /** Conversa da rodada anterior de uma thread levada adiante (só leitura). */
 function CarriedComments({ projectId, previousReviewId, threadId }: { projectId: string; previousReviewId: string; threadId: string }) {
@@ -39,7 +21,7 @@ function CarriedComments({ projectId, previousReviewId, threadId }: { projectId:
     <div className="border-t bg-muted/40 px-3 py-2">
       <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t('Rodada anterior')}</p>
       <ol className="flex flex-col gap-3">
-        <CommentItems comments={comments} />
+        <ThreadComments comments={comments} />
       </ol>
     </div>
   );
@@ -54,22 +36,54 @@ interface ThreadCardProps {
   number: number;
   isSelected: boolean;
   canWrite: boolean;
+  viewer: ReviewViewer;
+  /** Quem criou a thread ou edita o projeto: refaz a marcação e exclui a thread. */
+  canManage: boolean;
+  /** Esta thread está esperando a marcação nova no PDF. */
+  isRelocating: boolean;
   /** Autor: abre o código na linha do comentário (SyncTeX da versão). */
   onOpenSource?: () => void;
   onSelect: () => void;
   onReply: (body: string) => Promise<unknown>;
   onStatusChange: (status: 'open' | 'resolved') => Promise<unknown>;
+  onEditComment: (commentId: string, body: string) => Promise<unknown>;
+  onDeleteComment: (commentId: string) => Promise<unknown>;
+  onRelocate: () => void;
+  onDelete: () => Promise<unknown>;
 }
 
-/** Uma thread: comentários, resposta e resolver ou reabrir. */
+/** Uma thread: comentários, resposta, resolver ou reabrir e, para quem pode, refazer a marcação ou excluir. */
 export const ThreadCard = forwardRef<HTMLLIElement, ThreadCardProps>(function ThreadCard(
-  { projectId, reviewId, thread, previousReviewId, number, isSelected, canWrite, onOpenSource, onSelect, onReply, onStatusChange },
+  {
+    projectId,
+    reviewId,
+    thread,
+    previousReviewId,
+    number,
+    isSelected,
+    canWrite,
+    viewer,
+    canManage,
+    isRelocating,
+    onOpenSource,
+    onSelect,
+    onReply,
+    onStatusChange,
+    onEditComment,
+    onDeleteComment,
+    onRelocate,
+    onDelete,
+  },
   ref,
 ) {
   const { data: comments = [] } = useComments(projectId, reviewId, thread.id);
   const { t } = useT();
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const isResolved = thread.status === 'resolved';
   const isOutdated = thread.status === 'outdated';
+  const isPin = thread.anchor.type === 'pin';
 
   // Clicar no cartão (fora de botões e campos) escolhe a thread ou, se ela já está escolhida, tira a seleção.
   // O teclado usa o botão do topo, que faz o mesmo.
@@ -80,35 +94,87 @@ export const ThreadCard = forwardRef<HTMLLIElement, ThreadCardProps>(function Th
     onSelect();
   };
 
+  const remove = async () => {
+    setIsDeleting(true);
+    setDeleteError(null);
+    try {
+      await onDelete();
+    } catch (caught) {
+      setDeleteError(caught instanceof Error && caught.message ? caught.message : t('Não foi possível excluir. Confira a conexão e tente de novo.'));
+      setIsDeleting(false);
+    }
+  };
+
   return (
-    <li ref={ref} onClick={handleCardClick} className={cn('cursor-pointer rounded-lg border bg-card text-sm', isSelected && 'ring-2 ring-ring')}>
-      <button
-        type="button"
-        aria-expanded={isSelected}
-        title={isSelected ? t('Tirar a seleção') : undefined}
-        onClick={onSelect}
-        className="flex w-full min-w-0 items-center gap-2 px-3 py-2 text-left hover:bg-muted"
-      >
-        <span
-          className={cn(
-            'flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold',
-            isResolved ? 'border bg-muted text-foreground' : 'bg-annotation-3 text-background',
-          )}
+    <li
+      ref={ref}
+      onClick={handleCardClick}
+      className={cn('cursor-pointer rounded-lg border bg-card text-sm', isSelected && 'ring-2 ring-ring', isRelocating && 'border-annotation-3')}
+    >
+      <div className="flex min-w-0 items-center pr-1 hover:bg-muted">
+        <button
+          type="button"
+          aria-expanded={isSelected}
+          title={isSelected ? t('Tirar a seleção') : undefined}
+          onClick={onSelect}
+          className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left"
         >
-          {number}
-        </span>
-        <span className="flex min-w-0 flex-1 items-center gap-1 truncate text-xs text-muted-foreground">
-          {t('Página {page}', { page: thread.anchor.page })}
-          {thread.anchor.type === 'pin' && thread.anchor.drawing && <PenLine className="size-3 shrink-0" aria-label={t('com desenho')} />}
-        </span>
-        {thread.carriedFromThreadId && <span className="shrink-0 rounded bg-muted px-1.5 text-[11px] text-muted-foreground">{t('rodada anterior')}</span>}
-        {isResolved && (
-          <span className="shrink-0 text-xs text-success">
-            {thread.resolution?.fixedInSnapshotId ? t('Corrigida') : t('Resolvida')}
+          <span
+            className={cn(
+              'flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold',
+              isResolved ? 'border bg-muted text-foreground' : 'bg-annotation-3 text-background',
+            )}
+          >
+            {number}
           </span>
+          <span className="flex min-w-0 flex-1 items-center gap-1 truncate text-xs text-muted-foreground">
+            {t('Página {page}', { page: thread.anchor.page })}
+            {thread.anchor.type === 'pin' && thread.anchor.drawing && <PenLine className="size-3 shrink-0" aria-label={t('com desenho')} />}
+          </span>
+          {thread.carriedFromThreadId && <span className="shrink-0 rounded bg-muted px-1.5 text-[11px] text-muted-foreground">{t('rodada anterior')}</span>}
+          {isResolved && (
+            <span className="shrink-0 text-xs text-success">{thread.resolution?.fixedInSnapshotId ? t('Corrigida') : t('Resolvida')}</span>
+          )}
+          {isOutdated && <span className="shrink-0 text-xs text-warning">{t('Desatualizada')}</span>}
+        </button>
+        {canWrite && canManage && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="size-8 shrink-0" aria-label={t('Ações do comentário {number}', { number })}>
+                <MoreHorizontal />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" collisionPadding={8} className="w-64 max-w-[calc(100vw-1rem)]">
+              <DropdownMenuItem onSelect={onRelocate}>
+                <Crosshair />
+                {t('Refazer a marcação no PDF')}
+              </DropdownMenuItem>
+              {isPin && <p className="px-2 pb-1.5 text-xs text-muted-foreground">{t('Para só mudar de lugar, arraste o número no PDF.')}</p>}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={() => setConfirmDelete(true)}>
+                <Trash2 />
+                {t('Excluir comentário')}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
-        {isOutdated && <span className="shrink-0 text-xs text-warning">{t('Desatualizada')}</span>}
-      </button>
+      </div>
+      {confirmDelete && (
+        <div role="alertdialog" aria-label={t('Excluir comentário')} className="mx-3 mb-2 flex flex-col gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs">
+          <p>{t('Excluir este comentário, a marcação no PDF e as respostas? Não dá para desfazer.')}</p>
+          {deleteError && <p className="text-destructive">{deleteError}</p>}
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" size="sm" className="h-7" disabled={isDeleting} onClick={() => setConfirmDelete(false)}>
+              {t('Cancelar')}
+            </Button>
+            <Button variant="destructive" size="sm" className="h-7" disabled={isDeleting} onClick={() => void remove()}>
+              {isDeleting ? <Loader2 className="animate-spin" /> : <Trash2 />}
+              {t('Excluir')}
+            </Button>
+          </div>
+        </div>
+      )}
+      {isRelocating && <p className="mx-3 mb-2 text-xs text-muted-foreground">{t('Esperando a marcação nova no PDF.')}</p>}
       {isOutdated && (
         <p className="mx-3 mb-2 text-xs text-muted-foreground">
           {t('O trecho comentado não foi encontrado na versão nova; a citação abaixo é da versão anterior.')}
@@ -124,7 +190,12 @@ export const ThreadCard = forwardRef<HTMLLIElement, ThreadCardProps>(function Th
       )}
       {comments.length > 0 && (
         <ol className="flex flex-col gap-3 border-t px-3 py-2">
-          <CommentItems comments={comments} />
+          <ThreadComments
+            comments={comments}
+            viewer={canWrite ? viewer : undefined}
+            onEdit={canWrite ? onEditComment : undefined}
+            onDelete={canWrite ? onDeleteComment : undefined}
+          />
         </ol>
       )}
       {isSelected && canWrite && (

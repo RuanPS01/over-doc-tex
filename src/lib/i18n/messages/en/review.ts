@@ -235,6 +235,30 @@ const messages: Record<string, string> = {
 
   // Parte do nome do PDF anotado: sem acento nem espaço.
   'anotado': 'annotated',
+
+  // Excluir, editar e refazer a marcação de comentários
+  'Clique para abrir; arraste para mudar de lugar': 'Click to open; drag to move',
+  'Nova marcação do comentário {number}': 'New marking for comment {number}',
+  'Selecione um trecho do PDF, ou use Ponto ou Desenhar no topo. A conversa continua a mesma.': 'Select a passage in the PDF, or use Pin or Draw at the top. The conversation stays the same.',
+  'Desenho na página {page}': 'Drawing on page {page}',
+  'Ponto na página {page}': 'Pin on page {page}',
+  'Salvar marcação': 'Save marking',
+  'Marque de novo o comentário {number}: selecione um trecho, ou use Ponto ou Desenhar.': 'Mark comment {number} again: select a passage, or use Pin or Draw.',
+  'Salvar a marcação nova': 'Save the new marking',
+  'Marcar este trecho': 'Mark this passage',
+  'Não foi possível excluir. Confira a conexão e tente de novo.': 'Could not delete. Check your connection and try again.',
+  'Ações do comentário {number}': 'Actions for comment {number}',
+  'Refazer a marcação no PDF': 'Redo the marking on the PDF',
+  'Para só mudar de lugar, arraste o número no PDF.': 'To just move it, drag the number on the PDF.',
+  'Excluir comentário': 'Delete comment',
+  'Excluir este comentário, a marcação no PDF e as respostas? Não dá para desfazer.': 'Delete this comment, its marking on the PDF and the replies? This cannot be undone.',
+  'Esperando a marcação nova no PDF.': 'Waiting for the new marking on the PDF.',
+  'editado': 'edited',
+  'Editar comentário': 'Edit comment',
+  'Excluir resposta': 'Delete reply',
+  'Comentário excluído.': 'Comment deleted.',
+  'Excluir esta resposta?': 'Delete this reply?',
+  'Esta conversa tem comentários demais para excluir de uma vez.': 'This conversation has too many comments to delete at once.',
 };
 
 export default messages;

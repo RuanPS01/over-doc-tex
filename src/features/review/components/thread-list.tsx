@@ -1,7 +1,7 @@
 import { MessageSquarePlus } from 'lucide-react';
 import { useEffect, useRef, type ReactNode } from 'react';
 import { useT } from '@/hooks/use-t';
-import type { ThreadSummary } from '../model/review';
+import { canManageThread, type ReviewViewer, type ThreadSummary } from '../model/review';
 import { ThreadCard } from './thread-card';
 
 interface ThreadListProps {
@@ -14,12 +14,19 @@ interface ThreadListProps {
   selectedThreadId: string | null;
   canWrite: boolean;
   canOpenSource: boolean;
+  viewer: ReviewViewer;
+  /** Thread esperando a marcação nova no PDF ("Refazer a marcação"). */
+  relocatingThreadId: string | null;
   onSelect: (threadId: string) => void;
   /** Clique no espaço vazio do painel: nenhuma thread fica selecionada. */
   onClearSelection: () => void;
   onOpenSource: (thread: ThreadSummary) => void;
   onReply: (thread: ThreadSummary, body: string) => Promise<unknown>;
   onStatusChange: (thread: ThreadSummary, status: 'open' | 'resolved') => Promise<unknown>;
+  onEditComment: (thread: ThreadSummary, commentId: string, body: string) => Promise<unknown>;
+  onDeleteComment: (thread: ThreadSummary, commentId: string) => Promise<unknown>;
+  onRelocate: (thread: ThreadSummary) => void;
+  onDelete: (thread: ThreadSummary) => Promise<unknown>;
 }
 
 /** Lateral (ou Sheet no celular) com o comentário novo e as threads do documento aberto. */
@@ -32,11 +39,17 @@ export function ThreadList({
   selectedThreadId,
   canWrite,
   canOpenSource,
+  viewer,
+  relocatingThreadId,
   onSelect,
   onClearSelection,
   onOpenSource,
   onReply,
   onStatusChange,
+  onEditComment,
+  onDeleteComment,
+  onRelocate,
+  onDelete,
 }: ThreadListProps) {
   const { t } = useT();
   const cardRefs = useRef(new Map<string, HTMLLIElement>());
@@ -80,10 +93,17 @@ export function ThreadList({
             number={index + 1}
             isSelected={thread.id === selectedThreadId}
             canWrite={canWrite}
+            viewer={viewer}
+            canManage={canManageThread(thread, viewer)}
+            isRelocating={thread.id === relocatingThreadId}
             onOpenSource={canOpenSource ? () => onOpenSource(thread) : undefined}
             onSelect={() => onSelect(thread.id)}
             onReply={(body) => onReply(thread, body)}
             onStatusChange={(status) => onStatusChange(thread, status)}
+            onEditComment={(commentId, body) => onEditComment(thread, commentId, body)}
+            onDeleteComment={(commentId) => onDeleteComment(thread, commentId)}
+            onRelocate={() => onRelocate(thread)}
+            onDelete={() => onDelete(thread)}
           />
         ))}
       </ol>

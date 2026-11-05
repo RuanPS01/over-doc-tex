@@ -1,13 +1,14 @@
-import { MessageSquareQuote } from 'lucide-react';
+import { Crosshair, MessageSquareQuote } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useT } from '@/hooks/use-t';
 import type { PageSelection } from '../hooks/use-text-selection';
 
 /**
  * "Comentar trecho" logo abaixo da seleção (fixo na janela, preso às bordas
- * para não sair da tela em 360px nem ficar sob a barra do celular).
+ * para não sair da tela em 360px nem ficar sob a barra do celular). Ao refazer
+ * a marcação de um comentário, vira "Marcar este trecho".
  */
-export function SelectionPopover({ selection, onComment }: { selection: PageSelection; onComment: () => void }) {
+export function SelectionPopover({ selection, relocating = false, onComment }: { selection: PageSelection; relocating?: boolean; onComment: () => void }) {
   const { t } = useT();
   const last = selection.rects.at(-1);
   if (!last) return null;
@@ -22,8 +23,8 @@ export function SelectionPopover({ selection, onComment }: { selection: PageSele
         onPointerDown={(event) => event.preventDefault()}
         onClick={onComment}
       >
-        <MessageSquareQuote />
-        {t('Comentar trecho')}
+        {relocating ? <Crosshair /> : <MessageSquareQuote />}
+        {relocating ? t('Marcar este trecho') : t('Comentar trecho')}
       </Button>
     </div>
   );

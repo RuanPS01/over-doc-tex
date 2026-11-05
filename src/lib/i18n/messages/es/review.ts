@@ -235,6 +235,30 @@ const messages: Record<string, string> = {
 
   // Parte do nome do PDF anotado: sem acento nem espaço.
   'anotado': 'anotado',
+
+  // Excluir, editar e refazer a marcação de comentários
+  'Clique para abrir; arraste para mudar de lugar': 'Haz clic para abrir; arrastra para moverlo',
+  'Nova marcação do comentário {number}': 'Nueva marca del comentario {number}',
+  'Selecione um trecho do PDF, ou use Ponto ou Desenhar no topo. A conversa continua a mesma.': 'Selecciona un fragmento del PDF, o usa Punto o Dibujar arriba. La conversación sigue igual.',
+  'Desenho na página {page}': 'Dibujo en la página {page}',
+  'Ponto na página {page}': 'Punto en la página {page}',
+  'Salvar marcação': 'Guardar marca',
+  'Marque de novo o comentário {number}: selecione um trecho, ou use Ponto ou Desenhar.': 'Marca de nuevo el comentario {number}: selecciona un fragmento, o usa Punto o Dibujar.',
+  'Salvar a marcação nova': 'Guardar la marca nueva',
+  'Marcar este trecho': 'Marcar este fragmento',
+  'Não foi possível excluir. Confira a conexão e tente de novo.': 'No se pudo eliminar. Revisa la conexión e inténtalo de nuevo.',
+  'Ações do comentário {number}': 'Acciones del comentario {number}',
+  'Refazer a marcação no PDF': 'Rehacer la marca en el PDF',
+  'Para só mudar de lugar, arraste o número no PDF.': 'Para solo moverlo, arrastra el número en el PDF.',
+  'Excluir comentário': 'Eliminar comentario',
+  'Excluir este comentário, a marcação no PDF e as respostas? Não dá para desfazer.': '¿Eliminar este comentario, la marca en el PDF y las respuestas? No se puede deshacer.',
+  'Esperando a marcação nova no PDF.': 'Esperando la marca nueva en el PDF.',
+  'editado': 'editado',
+  'Editar comentário': 'Editar comentario',
+  'Excluir resposta': 'Eliminar respuesta',
+  'Comentário excluído.': 'Comentario eliminado.',
+  'Excluir esta resposta?': '¿Eliminar esta respuesta?',
+  'Esta conversa tem comentários demais para excluir de uma vez.': 'Esta conversación tiene demasiados comentarios para eliminarla de una vez.',
 };
 
 export default messages;
