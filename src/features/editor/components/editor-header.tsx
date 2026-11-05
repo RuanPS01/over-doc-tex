@@ -82,7 +82,7 @@ export function EditorHeader({ projectName, layoutMode }: EditorHeaderProps) {
       )}
       <Button variant="ghost" size="sm" className="hidden lg:inline-flex" onClick={() => openDialog({ kind: 'history' })}>
         <History />
-        {t('Versões')}
+        {t('Revisões e versões')}
       </Button>
       <Button
         variant="ghost"
@@ -122,7 +122,7 @@ export function EditorHeader({ projectName, layoutMode }: EditorHeaderProps) {
           )}
           <DropdownMenuItem className="lg:hidden" onSelect={() => openDialog({ kind: 'history' })}>
             <History />
-            {t('Versões')}
+            {t('Revisões e versões')}
           </DropdownMenuItem>
           <DropdownMenuItem className="lg:hidden" onSelect={() => openDialog({ kind: 'changes', baseSnapshotId: null })}>
             <GitCompare />

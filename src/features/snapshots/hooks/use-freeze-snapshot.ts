@@ -31,18 +31,12 @@ export type FreezeStage = 'compiling' | 'uploading' | 'freezing';
 export interface FreezeInput {
   message: string;
   bump: VersionBump;
-  /** Devolve a última versão, sem congelar outra, se o código não mudou desde ela. */
-  reuseIfUnchanged: boolean;
-  /** Documentos que a versão reaproveitada precisa ter (um secundário criado depois dela obriga a congelar de novo). */
-  requiredDocumentIds?: readonly string[];
   onStage: (stage: FreezeStage) => void;
 }
 
 export interface FreezeResult {
   snapshotId: string;
   label: string;
-  /** A versão já existia (código igual ao da última). */
-  reused: boolean;
 }
 
 /** Falha que a interface mostra com a lista de erros do TeX. */
@@ -66,7 +60,7 @@ export function useFreezeSnapshot(projectId: string, projectName: string) {
   const collectSources = useProjectSources(projectId);
 
   return useCallback(
-    async ({ message, bump, reuseIfUnchanged, requiredDocumentIds = [], onStage }: FreezeInput): Promise<FreezeResult> => {
+    async ({ message, bump, onStage }: FreezeInput): Promise<FreezeResult> => {
       const { db, auth } = getFirebase();
       const uid = auth.currentUser?.uid;
       if (!uid) throw new FreezeError(t('Entre na sua conta para congelar versões.'));
@@ -94,10 +88,6 @@ export function useFreezeSnapshot(projectId: string, projectName: string) {
       const latest = project.latestSnapshotId
         ? ((await getDoc(doc(db, firestorePaths.snapshot(projectId, project.latestSnapshotId)))).data() as SnapshotDoc | undefined)
         : undefined;
-      const hasRequired = requiredDocumentIds.every((id) => latest?.documents?.[id]);
-      if (reuseIfUnchanged && latest && project.latestSnapshotId && latest.sourceHash === sourceHash && hasRequired) {
-        return { snapshotId: project.latestSnapshotId, label: latest.label, reused: true };
-      }
 
       // Cada documento (o principal e os secundários) gera um PDF próprio.
       const documents = withMainDocument(await readProjectDocuments(projectId), projectName);
@@ -188,7 +178,7 @@ export function useFreezeSnapshot(projectId: string, projectName: string) {
       }
 
       await stampFixedThreads(projectId, snapshotRef.id);
-      return { snapshotId: snapshotRef.id, label: snapshot.label, reused: false };
+      return { snapshotId: snapshotRef.id, label: snapshot.label };
     },
     [collectSources, projectId, projectName],
   );

@@ -29,7 +29,8 @@ Paleta monocromática (Colab Arena). Definida em `src/styles/globals.css` como c
 | `--overlay` | preto | preto | `bg-overlay/45` (claro), `dark:bg-overlay/70` | Fundo atrás de modais e menus laterais: escurece a tela nos dois temas (usar `--foreground` clareava a tela no escuro) |
 | `--crt-glow` | branco | branco | (só no CSS de `.tv-screen`) | Linha luminosa da animação de TV antiga dos modais |
 | `--diff-*` | verde e vermelho | verde e vermelho | `text-diff-added`, `bg-diff-removed-bg`... | Inserções e remoções no diff (cor de conteúdo, fora da paleta neutra) |
-| `--annotation-1` a `--annotation-4` | amarelo, vermelho, azul, verde | idem | `text-annotation-1`... | Paleta do revisor (cor de conteúdo); pins abertos da revisão usam `bg-annotation-3` com `text-background`, e os resolvidos, `bg-muted` com borda; trechos comentados, `bg-annotation-1/35`; traços do desenho, `stroke-annotation-*` (a cor escolhida, gravada como token) |
+| `--annotation-1` a `--annotation-4` | amarelo, vermelho, azul, verde | idem | `text-annotation-1`... | Paleta do revisor (cor de conteúdo); pins abertos da revisão usam `bg-annotation-3` com `text-background`, e os resolvidos, `bg-muted` com borda, ambos semitransparentes (`opacity-60` e `opacity-45`) para não tampar o texto, opacos no hover, no foco e quando selecionados; trechos comentados, `bg-annotation-1/35`; traços do desenho, `stroke-annotation-*` (a cor escolhida, gravada como token) |
+| `--export-ink`, `-muted`, `-rule`, `-panel`, `-paper`, `-pin-text` | texto, apoio, borda, faixa, papel e número do pin do tema claro | iguais (não mudam no `.dark`) | (lidos em runtime) | "PDF com anotações" da revisão: o papel é branco nos dois temas, então o PDF sempre usa as cores do claro |
 | `--editor-*` | neutros da paleta | neutros da paleta | (lidos em runtime) | Tema do Monaco; comandos, comentários e matemática mantêm cor para leitura do código |
 
 **Cor de texto com contraste garantido.** Duas cores da paleta não servem como texto: o `#9e2f2f` do escuro (2,6:1 sobre `#121212`) e o `#22c55e` do claro (2,2:1 sobre `#fafafa`). Por isso `text-destructive` e `text-success` usam tokens próprios (`--destructive-text` e `--success-text`, mapeados em `theme.extend.textColor`), enquanto `bg-*` e `border-*` continuam com a cor da paleta:
@@ -53,6 +54,7 @@ Traços e destaques guardam o **nome do token** (`'annotation-2'`), nunca a cor.
 | --- | --- | --- |
 | `theme_color` e `background_color` do manifesto, `<meta name="theme-color">` (um por tema) | O navegador exige valor literal | `hsl(...)` espelhando `--primary` e `--background`, com comentário apontando a origem |
 | Tema do Monaco | O Monaco só aceita hexadecimal | `src/lib/monaco/theme-from-tokens.ts` lê os tokens CSS e converte em runtime |
+| PDF com anotações | O pdf-lib desenha com cor em RGB | `useAnnotatedPdf` lê `--export-*` e `--annotation-*` e converte com `hslChannelsToRgb` (`src/lib/color.ts`); no PDF os pins ficam com 55% de opacidade e os destaques com 35%, em modo multiplicar |
 | Preâmbulo LaTeX do diff | Cores vivem no PDF | `xcolor` com misturas nomeadas (`green!50!black`), definidas só no worker |
 | Ícone do app (`public/icons/icon.svg`) | Arquivo de imagem | `hsl(...)` dos tokens |
 | Logo do Google no botão de login (`public/icons/google-g.svg`) | As diretrizes do "Sign in with Google" exigem o "G" nas quatro cores da marca, sem versão monocromática nem recoloração | Arquivo SVG com as cores oficiais, usado por `<img>`; logo de 18px a 10px do texto, centralizado com ele no botão |
@@ -78,7 +80,7 @@ Escala: `text-xs` (metadados, barras de painel), `text-sm` (padrão da interface
 
 - Biblioteca: `lucide-react`, tamanho padrão `size-4` (definido no `Button`).
 - Botão só com ícone exige `aria-label` em português.
-- Ícones de referência: `Play` (compilar), `Send` (solicitar revisão), `History` (versões), `GitCompare` (ver alterações), `Sparkles` (IA), `FolderTree` (arquivos).
+- Ícones de referência: `Play` (compilar), `Send` (solicitar revisão), `History` (revisões e versões), `Snowflake` (versão congelada), `GitCompare` (ver alterações), `Highlighter` (marcações no PDF), `FileCheck2` (PDF com anotações), `Sparkles` (IA), `FolderTree` (arquivos).
 
 ## 6. Texto da interface
 

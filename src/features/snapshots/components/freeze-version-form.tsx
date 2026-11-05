@@ -42,7 +42,7 @@ export function FreezeVersionForm({ projectId, projectName, latest, onFrozen, on
     setError(null);
     setIssues([]);
     try {
-      const result = await freeze({ message, bump, reuseIfUnchanged: false, onStage: setStage });
+      const result = await freeze({ message, bump, onStage: setStage });
       setMessage('');
       onFrozen(result.label);
     } catch (caught) {
