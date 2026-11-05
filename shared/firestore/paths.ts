@@ -51,6 +51,8 @@ export const firestorePaths = {
     `projects/${projectId}/reviews/${reviewId}/threads/${threadId}`,
   comments: (projectId: ProjectId, reviewId: ReviewId, threadId: ThreadId) =>
     `projects/${projectId}/reviews/${reviewId}/threads/${threadId}/comments`,
+  comment: (projectId: ProjectId, reviewId: ReviewId, threadId: ThreadId, commentId: string) =>
+    `projects/${projectId}/reviews/${reviewId}/threads/${threadId}/comments/${commentId}`,
   /** O PDF do diff fica nos pedaços deste mesmo documento (campo `pdf`). */
   diff: (projectId: ProjectId, diffKey: string) => `projects/${projectId}/diffs/${diffKey}`,
   /** Conteúdo endereçado por hash: imutável e deduplicado entre versões. */

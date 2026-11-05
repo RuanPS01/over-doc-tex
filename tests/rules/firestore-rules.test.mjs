@@ -6,6 +6,7 @@ import {
   arrayUnion,
   collection,
   collectionGroup,
+  deleteDoc,
   deleteField,
   doc,
   getDoc,
@@ -265,6 +266,70 @@ await runScenarios('Firestore', [
     assertSucceeds(updateDoc(doc(as('bia'), 'projects/p1/reviews/r1/threads/t9'), { 'resolution.fixedInSnapshotId': 's2', updatedAt: serverTimestamp() }))],
   ['viewer não carimba versão', () =>
     assertFails(updateDoc(doc(as('caio'), 'projects/p1/reviews/r1/threads/t9'), { 'resolution.fixedInSnapshotId': 's2', updatedAt: serverTimestamp() }))],
+  ['autor da thread reposiciona o próprio pin (o desenho vai junto)', () =>
+    assertSucceeds(updateDoc(doc(rev(), 'projects/p1/reviews/r1/threads/t1'), {
+      anchor: { type: 'pin', page: 2, point: { x: 0.6, y: 0.5 }, drawing: null }, updatedAt: serverTimestamp(),
+    }))],
+  ['autor da thread refaz a marcação como trecho de texto', () =>
+    assertSucceeds(updateDoc(doc(rev(), 'projects/p1/reviews/r1/threads/t1'), {
+      kind: 'text',
+      anchor: {
+        type: 'text', page: 3, rects: [{ x: 0.1, y: 0.4, width: 0.3, height: 0.02 }],
+        quote: { exact: 'outro', prefix: '', suffix: '' }, position: { start: 0, end: 5 },
+      },
+      sourceHint: { path: 'main.tex', line: 12, column: null },
+      updatedAt: serverTimestamp(),
+    }))],
+  ['marcação com tipo diferente do kind é negada', () =>
+    assertFails(updateDoc(doc(rev(), 'projects/p1/reviews/r1/threads/t1'), {
+      kind: 'pin', anchor: { type: 'text', page: 1, rects: [], quote: { exact: 'x', prefix: '', suffix: '' }, position: { start: 0, end: 1 } }, updatedAt: serverTimestamp(),
+    }))],
+  ['mover a marcação não troca o autor nem resolve a thread', async () => {
+    const anchor = { type: 'pin', page: 1, point: { x: 0.2, y: 0.2 }, drawing: null };
+    await assertFails(updateDoc(doc(rev(), 'projects/p1/reviews/r1/threads/t1'), { kind: 'pin', anchor, createdBy: 'ana', updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(doc(rev(), 'projects/p1/reviews/r1/threads/t1'), { kind: 'pin', anchor, status: 'resolved', updatedAt: serverTimestamp() }));
+  }],
+  ['leitor que não criou a thread não a move', () =>
+    assertFails(updateDoc(doc(as('caio'), 'projects/p1/reviews/r1/threads/t1'), {
+      kind: 'pin', anchor: { type: 'pin', page: 1, point: { x: 0.2, y: 0.2 }, drawing: null }, updatedAt: serverTimestamp(),
+    }))],
+  ['quem edita o projeto move a marcação de qualquer thread', () =>
+    assertSucceeds(updateDoc(doc(as('bia'), 'projects/p1/reviews/r1/threads/t1'), {
+      kind: 'pin', anchor: { type: 'pin', page: 1, point: { x: 0.3, y: 0.3 }, drawing: null }, updatedAt: serverTimestamp(),
+    }))],
+  ['thread desatualizada volta a aberta ao ganhar marcação nova', () =>
+    assertSucceeds(updateDoc(doc(as('bia'), 'projects/p1/reviews/r1/threads/t7'), {
+      kind: 'pin', anchor: { type: 'pin', page: 1, point: { x: 0.5, y: 0.5 }, drawing: null }, status: 'open', updatedAt: serverTimestamp(),
+    }))],
+  ['autor exclui a própria thread com os comentários no mesmo lote', async () => {
+    const db = rev();
+    const create = writeBatch(db);
+    create.set(doc(db, 'projects/p1/reviews/r1/threads/t10'), pinThread({ commentCount: 1 }));
+    create.set(doc(db, 'projects/p1/reviews/r1/threads/t10/comments/c1'), { authorId: 'rev', kind: 'comment', body: 'Rever' });
+    await assertSucceeds(create.commit());
+    const remove = writeBatch(db);
+    remove.delete(doc(db, 'projects/p1/reviews/r1/threads/t10/comments/c1'));
+    remove.delete(doc(db, 'projects/p1/reviews/r1/threads/t10'));
+    await assertSucceeds(remove.commit());
+  }],
+  ['comentário não sai sozinho; leitor não exclui thread alheia; editor exclui', async () => {
+    const db = rev();
+    const create = writeBatch(db);
+    create.set(doc(db, 'projects/p1/reviews/r1/threads/t11'), pinThread({ commentCount: 1 }));
+    create.set(doc(db, 'projects/p1/reviews/r1/threads/t11/comments/c1'), { authorId: 'rev', kind: 'comment', body: 'Rever' });
+    await assertSucceeds(create.commit());
+    await assertFails(deleteDoc(doc(db, 'projects/p1/reviews/r1/threads/t11/comments/c1')));
+    const viewer = as('caio');
+    const byViewer = writeBatch(viewer);
+    byViewer.delete(doc(viewer, 'projects/p1/reviews/r1/threads/t11/comments/c1'));
+    byViewer.delete(doc(viewer, 'projects/p1/reviews/r1/threads/t11'));
+    await assertFails(byViewer.commit());
+    const editor = as('bia');
+    const byEditor = writeBatch(editor);
+    byEditor.delete(doc(editor, 'projects/p1/reviews/r1/threads/t11/comments/c1'));
+    byEditor.delete(doc(editor, 'projects/p1/reviews/r1/threads/t11'));
+    await assertSucceeds(byEditor.commit());
+  }],
   ['revisor aprova a revisão', () =>
     assertSucceeds(updateDoc(doc(rev(), 'projects/p1/reviews/r1'), { status: 'approved', reviewerUid: 'rev', lastActivityAt: serverTimestamp() }))],
   ['revisor lista "minhas revisões" pelo e-mail (collectionGroup)', () =>
@@ -454,6 +519,28 @@ await runScenarios('Revisão por link', [
   ['outro nome não edita o comentário do visitante', async () => {
     await assertSucceeds(setDoc(doc(anon('g5'), 'projects/p7/snapshots/s1/guests/g5'), guest({ name: 'João', guestKey: 'joao' })));
     await assertFails(updateDoc(doc(anon('g5'), 'projects/p7/reviews/r5/threads/t1/comments/c1'), { body: 'x', editedAt: serverTimestamp() }));
+  }],
+  ['thread do visitante com a identidade de outro nome é negada', () =>
+    assertFails(setDoc(doc(anon('g1'), 'projects/p7/reviews/r5/threads/t3'), guestThread('g1', { authorKey: 'joao' })))],
+  ['mesmo nome em outro aparelho reposiciona e exclui a própria thread; outro nome não', async () => {
+    const db = anon('g1');
+    const create = writeBatch(db);
+    create.set(doc(db, 'projects/p7/reviews/r5/threads/t2'), guestThread('g1', { authorKey: 'maria souza' }));
+    create.set(doc(db, 'projects/p7/reviews/r5/threads/t2/comments/c1'), guestComment('g1'));
+    await assertSucceeds(create.commit());
+    const moved = { kind: 'pin', anchor: { type: 'pin', page: 1, point: { x: 0.7, y: 0.2 }, drawing: null }, updatedAt: serverTimestamp() };
+    await assertFails(updateDoc(doc(anon('g5'), 'projects/p7/reviews/r5/threads/t2'), moved));
+    await assertSucceeds(updateDoc(doc(anon('g4'), 'projects/p7/reviews/r5/threads/t2'), moved));
+    const other = anon('g5');
+    const byOther = writeBatch(other);
+    byOther.delete(doc(other, 'projects/p7/reviews/r5/threads/t2/comments/c1'));
+    byOther.delete(doc(other, 'projects/p7/reviews/r5/threads/t2'));
+    await assertFails(byOther.commit());
+    const same = anon('g4');
+    const bySame = writeBatch(same);
+    bySame.delete(doc(same, 'projects/p7/reviews/r5/threads/t2/comments/c1'));
+    bySame.delete(doc(same, 'projects/p7/reviews/r5/threads/t2'));
+    await assertSucceeds(bySame.commit());
   }],
   ['visitante muda o status da revisão e notifica quem pediu', async () => {
     await assertSucceeds(updateDoc(doc(anon('g1'), 'projects/p7/reviews/r5'), {

@@ -114,9 +114,11 @@ ReviewPage                               pages/review-page.tsx: membro entra com
     │   └── AnnotationLayer (por página) destaques dos trechos, desenhos em SVG, pins numerados e a marcação pendente
     ├── SelectionPopover                 "Comentar trecho" logo abaixo da seleção de texto
     ├── ThreadList                       painel de comentários redimensionável e recolhível (desktop) ou Sheet inferior (celular)
-    │   ├── PendingAnnotationPanel       comentário da marcação nova (citação do trecho; cor e desfazer traço no desenho)
-    │   └── ThreadCard                   citação, "Rodada anterior" (conversa da thread de origem), comentários, responder,
-    │                                    resolver ou reabrir, "Abrir no código" (autor), aviso de "Desatualizada"
+    │   ├── PendingAnnotationPanel       comentário da marcação nova (citação do trecho; cor e desfazer traço no desenho) ou,
+    │   │                                em "Refazer a marcação", a marcação nova de um comentário com "Salvar marcação"
+    │   └── ThreadCard                   citação, "Rodada anterior" (conversa da thread de origem), comentários (ThreadComments: editar
+    │                                    o próprio texto, excluir a própria resposta), responder, resolver ou reabrir, "Abrir no código"
+    │                                    (autor), aviso de "Desatualizada" e o menu "..." (Refazer a marcação no PDF, Excluir comentário)
     └── ReviewChangesDialog              abas "PDF marcado" (DiffPdfViewer) e "Texto" (DiffView do texto das páginas)
 ```
 
@@ -127,6 +129,7 @@ Pontos de atenção:
 - **Painéis redimensionáveis (desktop):** como as colunas do editor, o índice, as páginas e os comentários ficam lado a lado e as bordas entre eles arrastam para mudar a largura. Arrastar o índice ou os comentários até a borda recolhe o painel, e puxar a borda abre de novo. O índice também abre e fecha pelo botão no começo da barra do PDF; os comentários, pelo botão com o total de comentários na mesma barra e pelo botão no topo do painel. Começar um comentário (trecho, ponto ou desenho) ou escolher uma marcação no PDF reabre os comentários. Ao reabrir, o painel volta com a última largura usada, e não com o mínimo. Comentários: 384px por padrão, de 260px até 55% da tela, grupo lembrado em `review-desktop`. Índice: 224px por padrão, de 160px até metade do visualizador.
 - **Coordenadas normalizadas:** destaques, traços e pins usam valores de 0 a 1, então zoom e tamanho de tela não exigem recalcular nada no banco. Os traços são SVG com `vector-effect: non-scaling-stroke`.
 - **Pins semitransparentes:** os números sobre a página ficam com 60% de opacidade (45% nos resolvidos) para o texto embaixo continuar legível; ficam opacos no hover, no foco e quando a thread está selecionada.
+- **Mexer num comentário:** quem criou a thread (o visitante pelo mesmo nome, em qualquer aparelho) e quem edita o projeto veem o menu "..." no cartão: "Refazer a marcação no PDF" (a thread espera um trecho, ponto ou desenho novo, feito como num comentário novo, com a marcação antiga esmaecida e "Marcar este trecho" no lugar de "Comentar trecho"; a conversa continua a mesma, e uma thread desatualizada volta a aberta) e "Excluir comentário" (com confirmação dentro do cartão; a marcação e todas as respostas saem). Os mesmos arrastam o pin no PDF para mudar de lugar (o desenho vai junto, sem sair da página); o arraste só começa depois de 4px, então um clique continua abrindo a thread. Texto de um comentário só quem escreveu edita (lápis, salvo com "editado" ao lado da data) e só quem escreveu exclui a própria resposta (fica "Comentário excluído."). Os botões aparecem no hover e sempre em telas de toque. Nada disso aparece com a revisão encerrada.
 - **Tirar a seleção:** clicar de novo no número ou no cartão da thread selecionada tira a seleção; clicar num lugar vazio do PDF (fora de pins e botões) ou do painel de comentários também. Soltar uma seleção de texto não conta como clique vazio, e o campo de resposta e os botões do cartão selecionado não mudam a seleção.
 - **Marcações:** o interruptor "Marcações" na barra do PDF (rótulo a partir de `xl`, ícone a partir de `sm`) mostra o PDF como foi congelado, sem a camada de anotação; desligado, as ferramentas de marcar e o "Comentar trecho" saem, a marcação pendente é descartada, e a lista de comentários continua ao lado. Liga de novo a cada abertura.
 - **Download:** o botão de download da barra vira um menu com "PDF original" (os bytes da versão) e "PDF com anotações", que `useAnnotatedPdf` gera no navegador com o pdf-lib (fluxo em `07-fluxos.md`, cenário B). O nome do arquivo leva `-anotado` traduzido.
@@ -176,7 +179,7 @@ Pontos de atenção:
 | `projects` | `ProjectList`, `DemoProjectList`, `NewProjectDialog`, `ProjectSettingsDialog`, `ProjectDocumentsSection` |
 | `notifications` | `NotificationBell` (contagem, lista, marcar como lidas, abrir a revisão) |
 | `snapshots` | `VersionHistorySheet`, `FreezeVersionForm`, `VersionCard`, `VersionPdfDialog`, `IssueList` |
-| `review` | `ReviewWorkspace`, `ReviewHeader`, `ReviewSharingDialog`, `ReviewAccessChoice`, `GuestReviewGate`, `AnnotationLayer`, `SelectionPopover`, `PendingAnnotationPanel`, `ThreadList`, `ThreadCard`, `CommentComposer`, `ReviewChangesDialog`, `RequestReviewDialog`, `ReviewVersionNotice` (número da versão que será congelada, ajuste ou principal), `RequestReviewResultView` (revisão aberta, convites e link), `ReviewList`, `ProjectReviewQueue`, `MyReviewsSection` |
+| `review` | `ReviewWorkspace`, `ReviewHeader`, `ReviewSharingDialog`, `ReviewAccessChoice`, `GuestReviewGate`, `AnnotationLayer`, `SelectionPopover`, `PendingAnnotationPanel`, `ThreadList`, `ThreadCard`, `ThreadComments` (comentários com editar e excluir a própria resposta), `CommentComposer` (também edição: texto inicial, Esc cancela), `ReviewChangesDialog`, `RequestReviewDialog`, `ReviewVersionNotice` (número da versão que será congelada, ajuste ou principal), `RequestReviewResultView` (revisão aberta, convites e link), `ReviewList`, `ProjectReviewQueue`, `MyReviewsSection` |
 | `diff` | `ChangesDialog`, `FileChangeCard`, `DiffView` (texto com `<ins>` e `<del>`, linhas sem mudança recolhidas), `DiffPdfViewer` (PDF marcado com marcas na margem e "Próxima alteração") |
 
 ### Hooks de integração
@@ -204,7 +207,8 @@ Pontos de atenção:
 | `useCarryThreads` | review | Leva as threads abertas da rodada anterior para a revisão nova, reancoradas (trecho pelo `.pages` e pdf.js, pin pelo SyncTeX) |
 | `useReview`, `useReviews`, `useMyReviews` | review | Uma revisão, a fila do projeto e as revisões pedidas ao e-mail da conta |
 | `useThreads`, `useComments` | review | Threads da revisão (na ordem de leitura do PDF) e comentários de cada uma, em tempo real |
-| `useReviewActions` | review | Thread nova (ponto, desenho ou trecho, com `sourceHint`) com o primeiro comentário, resposta com o contador, status da thread e da revisão, e as notificações de cada uma |
+| `useReviewActions`, `useReviewViewer` | review | Thread nova (ponto, desenho ou trecho, com `sourceHint`) com o primeiro comentário, resposta com o contador, status da thread e da revisão, e as notificações de cada uma; marcação nova da thread (`moveThread`), exclusão da thread com os comentários num lote (`deleteThread`), edição e exclusão do próprio comentário. `useReviewViewer` diz quem está vendo (conta, nome do visitante, se edita o projeto) para `canManageThread` e `isCommentAuthor` (`model/review.ts`) |
+| `usePinDrag` | review | Arrastar o pin de uma thread na página: segue o ponteiro a partir do ponto pego, separa clique de arraste (4px) e grava ao soltar |
 | `useReviewDocuments`, `useReviewPdf`, `useReviewPageTexts`, `useReviewSyncData` | review | Documentos concedidos, PDF, texto das páginas e SyncTeX do documento aberto na revisão |
 | `usePageTextDiff`, `useReviewVisualDiff` | review | Diff do texto das páginas e o PDF marcado desde a rodada anterior (o revisor só lê o cache) |
 | `useTextSelection` | review | Seleção de texto dentro de uma página do PDF, para o comentário em trecho |

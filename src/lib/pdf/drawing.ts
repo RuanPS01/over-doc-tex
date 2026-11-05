@@ -68,6 +68,32 @@ export function pinPointFor(bounds: NormalizedRect): NormalizedPoint {
   return { x: round(bounds.x + bounds.width), y: round(bounds.y) };
 }
 
+/**
+ * Pin arrastado para outro lugar da página: o ponto e o desenho andam juntos.
+ * O deslocamento é limitado para nada sair da página (de 0 a 1).
+ */
+export function movePin(point: NormalizedPoint, drawing: Drawing | null, target: NormalizedPoint): { point: NormalizedPoint; drawing: Drawing | null } {
+  let dx = target.x - point.x;
+  let dy = target.y - point.y;
+  if (drawing) {
+    const { bounds } = drawing;
+    dx = Math.min(Math.max(dx, -bounds.x), 1 - bounds.x - bounds.width);
+    dy = Math.min(Math.max(dy, -bounds.y), 1 - bounds.y - bounds.height);
+  }
+  const moved = { x: round(point.x + dx), y: round(point.y + dy) };
+  if (!drawing) return { point: moved, drawing: null };
+  return {
+    point: moved,
+    drawing: {
+      bounds: { ...drawing.bounds, x: round(drawing.bounds.x + dx), y: round(drawing.bounds.y + dy) },
+      strokes: drawing.strokes.map((stroke) => ({
+        ...stroke,
+        points: stroke.points.map((value, index) => round(value + (index % 2 === 0 ? dx : dy))),
+      })),
+    },
+  };
+}
+
 /** Pontos achatados para o atributo points do SVG (viewBox de 0 a 1). */
 export function svgPoints(points: readonly number[]): string {
   const pairs: string[] = [];
