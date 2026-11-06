@@ -7,11 +7,14 @@ import { getFirebase } from '@/lib/firebase/app';
 import { queryKeys } from '@/lib/query-keys';
 import { sortThreads, toCommentSummary, toThreadSummary, type CommentSummary, type ThreadSummary } from '../model/review';
 
+/** Threads visíveis: as excluídas (exclusão lógica) ficam no banco para o desfazer, fora da tela. */
 function threadsFrom(snapshot: QuerySnapshot): ThreadSummary[] {
-  return sortThreads(snapshot.docs.map((item) => toThreadSummary(item.id, item.data({ serverTimestamps: 'estimate' }) as ThreadDoc)));
+  return sortThreads(
+    snapshot.docs.map((item) => toThreadSummary(item.id, item.data({ serverTimestamps: 'estimate' }) as ThreadDoc)).filter((thread) => !thread.isDeleted),
+  );
 }
 
-/** Threads da revisão (membros e o revisor), em tempo real, na ordem de leitura do PDF. */
+/** Threads da revisão (membros e o revisor), em tempo real, na ordem de leitura do PDF; sem as excluídas. */
 export function useThreads(projectId: string, reviewId: string, enabled: boolean) {
   const queryClient = useQueryClient();
 

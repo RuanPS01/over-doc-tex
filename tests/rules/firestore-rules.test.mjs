@@ -2,6 +2,7 @@ import { assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
 import {
   Bytes,
   FieldPath,
+  Timestamp,
   arrayRemove,
   arrayUnion,
   collection,
@@ -330,6 +331,35 @@ await runScenarios('Firestore', [
     byEditor.delete(doc(editor, 'projects/p1/reviews/r1/threads/t11'));
     await assertSucceeds(byEditor.commit());
   }],
+  ['autor exclui a thread sem apagar (lógica) e desfaz a exclusão', async () => {
+    await assertSucceeds(setDoc(doc(rev(), 'projects/p1/reviews/r1/threads/t12'), pinThread()));
+    await assertSucceeds(updateDoc(doc(rev(), 'projects/p1/reviews/r1/threads/t12'), { deletedAt: serverTimestamp(), updatedAt: serverTimestamp() }));
+    await assertSucceeds(updateDoc(doc(rev(), 'projects/p1/reviews/r1/threads/t12'), { deletedAt: null, updatedAt: serverTimestamp() }));
+  }],
+  ['exclusão lógica com data inventada, por leitor ou junto com outro campo é negada', async () => {
+    await assertFails(updateDoc(doc(rev(), 'projects/p1/reviews/r1/threads/t12'), { deletedAt: Timestamp.fromMillis(0), updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(doc(as('caio'), 'projects/p1/reviews/r1/threads/t12'), { deletedAt: serverTimestamp(), updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(doc(rev(), 'projects/p1/reviews/r1/threads/t12'), { deletedAt: serverTimestamp(), status: 'resolved', updatedAt: serverTimestamp() }));
+  }],
+  ['thread não nasce excluída', () =>
+    assertFails(setDoc(doc(rev(), 'projects/p1/reviews/r1/threads/t13'), pinThread({ deletedAt: serverTimestamp() })))],
+  ['desenho sem comentário: só pin com desenho e sem comentários', async () => {
+    await assertSucceeds(setDoc(doc(rev(), 'projects/p1/reviews/r1/threads/t14'), pinThread({ drawingOnly: true })));
+    await assertFails(setDoc(doc(rev(), 'projects/p1/reviews/r1/threads/t15'), pinThread({ drawingOnly: true, commentCount: 1 })));
+    await assertFails(setDoc(doc(rev(), 'projects/p1/reviews/r1/threads/t16'), pinThread({
+      drawingOnly: true, anchor: { type: 'pin', page: 1, point: { x: 0.5, y: 0.5 }, drawing: null },
+    })));
+  }],
+  ['desenho sem comentário não vira trecho nem perde o desenho', async () => {
+    await assertFails(updateDoc(doc(rev(), 'projects/p1/reviews/r1/threads/t14'), {
+      kind: 'text',
+      anchor: { type: 'text', page: 1, rects: [], quote: { exact: 'x', prefix: '', suffix: '' }, position: { start: 0, end: 1 } },
+      updatedAt: serverTimestamp(),
+    }));
+    await assertFails(updateDoc(doc(rev(), 'projects/p1/reviews/r1/threads/t14'), {
+      kind: 'pin', anchor: { type: 'pin', page: 1, point: { x: 0.5, y: 0.5 }, drawing: null }, updatedAt: serverTimestamp(),
+    }));
+  }],
   ['revisor aprova a revisão', () =>
     assertSucceeds(updateDoc(doc(rev(), 'projects/p1/reviews/r1'), { status: 'approved', reviewerUid: 'rev', lastActivityAt: serverTimestamp() }))],
   ['revisor lista "minhas revisões" pelo e-mail (collectionGroup)', () =>
@@ -541,6 +571,12 @@ await runScenarios('Revisão por link', [
     bySame.delete(doc(same, 'projects/p7/reviews/r5/threads/t2/comments/c1'));
     bySame.delete(doc(same, 'projects/p7/reviews/r5/threads/t2'));
     await assertSucceeds(bySame.commit());
+  }],
+  ['mesmo nome em outro aparelho exclui (lógica) e restaura a própria thread', async () => {
+    await assertSucceeds(setDoc(doc(anon('g1'), 'projects/p7/reviews/r5/threads/t4'), guestThread('g1', { authorKey: 'maria souza', commentCount: 0 })));
+    await assertFails(updateDoc(doc(anon('g5'), 'projects/p7/reviews/r5/threads/t4'), { deletedAt: serverTimestamp(), updatedAt: serverTimestamp() }));
+    await assertSucceeds(updateDoc(doc(anon('g4'), 'projects/p7/reviews/r5/threads/t4'), { deletedAt: serverTimestamp(), updatedAt: serverTimestamp() }));
+    await assertSucceeds(updateDoc(doc(anon('g4'), 'projects/p7/reviews/r5/threads/t4'), { deletedAt: null, updatedAt: serverTimestamp() }));
   }],
   ['visitante muda o status da revisão e notifica quem pediu', async () => {
     await assertSucceeds(updateDoc(doc(anon('g1'), 'projects/p7/reviews/r5'), {

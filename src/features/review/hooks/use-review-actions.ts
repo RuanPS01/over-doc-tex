@@ -1,4 +1,4 @@
-import { arrayUnion, collection, doc, getDocs, increment, serverTimestamp, updateDoc, writeBatch } from 'firebase/firestore';
+import { arrayUnion, collection, doc, increment, serverTimestamp, updateDoc, writeBatch } from 'firebase/firestore';
 import { useMemo } from 'react';
 import { firestorePaths } from '@shared/firestore/paths';
 import type {
@@ -11,6 +11,7 @@ import type {
   TextAnchor,
   ThreadAnchor,
   ThreadDoc,
+  ThreadKind,
   ThreadStatus,
 } from '@shared/firestore/types';
 import { sendNotifications } from '@/features/notifications/hooks/use-notifications';
@@ -44,8 +45,18 @@ export interface GuestIdentity {
   viaAccount?: boolean;
 }
 
-/** Teto de gravações de um lote do Firestore: a thread e os comentários saem juntos. */
-const MAX_BATCH_WRITES = 500;
+/** Onde a thread está marcada no PDF: o que o arraste e o "Refazer a marcação" trocam (e o desfazer devolve). */
+export interface ThreadMarking {
+  kind: ThreadKind;
+  anchor: ThreadAnchor;
+  sourceHint: SourceLocation | null;
+}
+
+export const markingOf = (thread: Pick<ThreadSummary, 'kind' | 'anchor' | 'sourceHint'>): ThreadMarking => ({
+  kind: thread.kind,
+  anchor: thread.anchor,
+  sourceHint: thread.sourceHint,
+});
 
 /** Quem está vendo a revisão (conta, nome do visitante e se edita o projeto). */
 export function useReviewViewer(guest: GuestIdentity | null, canEditProject: boolean): ReviewViewer {
@@ -56,6 +67,13 @@ export function useReviewViewer(guest: GuestIdentity | null, canEditProject: boo
 
 const anchorOf = (annotation: NewAnnotation): ThreadAnchor =>
   annotation.kind === 'pin' ? { type: 'pin', page: annotation.page, point: annotation.point, drawing: annotation.drawing } : annotation.anchor;
+
+/** Marcação nova a partir do que a pessoa marcou no PDF. */
+export const markingFrom = (annotation: NewAnnotation, sourceHint: SourceLocation | null): ThreadMarking => ({
+  kind: annotation.kind,
+  anchor: anchorOf(annotation),
+  sourceHint,
+});
 
 /**
  * Gravações da revisão, cada uma no formato que as regras conferem: thread
@@ -121,9 +139,10 @@ export function useReviewActions(review: ReviewSummary | null | undefined, role:
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         };
+        const commentRef = doc(collection(db(), firestorePaths.comments(projectId, reviewId, threadRef.id)));
         const batch = writeBatch(db());
         batch.set(threadRef, thread);
-        batch.set(doc(collection(db(), firestorePaths.comments(projectId, reviewId, threadRef.id))), comment(body));
+        batch.set(commentRef, comment(body));
         await batch.commit();
         void sendNotifications(otherSide(), {
           type: 'thread_created',
@@ -133,13 +152,44 @@ export function useReviewActions(review: ReviewSummary | null | undefined, role:
           title: t('Novo comentário: {review}', { review: label() }),
           body: firstLine(body),
         });
+        return { threadId: threadRef.id, commentId: commentRef.id };
+      },
+
+      /** "Manter só o desenho": thread sem comentário (sem cartão), que aparece no PDF e pode ser apagada. */
+      createDrawing: async (documentId: string, annotation: Extract<NewAnnotation, { kind: 'pin' }>, sourceHint: SourceLocation | null) => {
+        if (!review || !annotation.drawing) return null;
+        const user = currentUser();
+        const threadRef = doc(collection(db(), firestorePaths.threads(projectId, reviewId)));
+        const thread: Omit<ThreadDoc, 'createdAt' | 'updatedAt' | 'lastCommentAt'> & Record<'createdAt' | 'updatedAt' | 'lastCommentAt', unknown> = {
+          projectId,
+          reviewId,
+          snapshotId: review.snapshotId,
+          documentId,
+          kind: 'pin',
+          anchor: anchorOf(annotation),
+          status: 'open',
+          resolution: null,
+          sourceHint,
+          carriedFromThreadId: null,
+          drawingOnly: true,
+          createdBy: user.uid,
+          authorKey: nameGuest?.key ?? null,
+          createdByRole: role,
+          commentCount: 0,
+          participantIds: [user.uid],
+          lastCommentAt: null,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        };
+        await writeBatch(db()).set(threadRef, thread).commit();
         return threadRef.id;
       },
 
       reply: async (thread: ThreadSummary, body: string) => {
         const user = currentUser();
+        const commentRef = doc(collection(db(), firestorePaths.comments(projectId, reviewId, thread.id)));
         const batch = writeBatch(db());
-        batch.set(doc(collection(db(), firestorePaths.comments(projectId, reviewId, thread.id))), comment(body));
+        batch.set(commentRef, comment(body));
         batch.update(doc(db(), firestorePaths.thread(projectId, reviewId, thread.id)), {
           commentCount: increment(1),
           participantIds: arrayUnion(user.uid),
@@ -155,6 +205,7 @@ export function useReviewActions(review: ReviewSummary | null | undefined, role:
           title: t('Resposta: {review}', { review: label() }),
           body: firstLine(body),
         });
+        return commentRef.id;
       },
 
       setThreadStatus: async (thread: ThreadSummary, status: Extract<ThreadStatus, 'open' | 'resolved'>) => {
@@ -179,41 +230,49 @@ export function useReviewActions(review: ReviewSummary | null | undefined, role:
       },
 
       /**
-       * Marcação nova para a mesma thread: o pin arrastado (com o desenho) ou a marcação refeita
-       * (outro ponto, desenho ou trecho). A thread desatualizada volta a aberta.
+       * Marcação nova para a mesma thread: o pin arrastado (com o desenho), a marcação refeita
+       * (outro ponto, desenho ou trecho) ou a anterior, ao desfazer. A thread desatualizada volta a aberta.
        */
-      moveThread: async (thread: ThreadSummary, annotation: NewAnnotation, sourceHint: SourceLocation | null) => {
+      setMarking: async (thread: ThreadSummary, marking: ThreadMarking) => {
         currentUser();
         await updateDoc(doc(db(), firestorePaths.thread(projectId, reviewId, thread.id)), {
-          kind: annotation.kind,
-          anchor: anchorOf(annotation),
-          sourceHint,
-          status: thread.status === 'outdated' ? 'open' : thread.status,
+          kind: marking.kind,
+          anchor: marking.anchor,
+          sourceHint: marking.sourceHint,
+          // Só a desatualizada muda de status: gravar o status lido antes desfaria uma resolução feita nesse meio-tempo.
+          ...(thread.status === 'outdated' ? { status: 'open' } : {}),
           updatedAt: serverTimestamp(),
         });
       },
 
-      /** Exclui a thread (a marcação e a conversa): os comentários saem no mesmo lote, como as regras exigem. */
-      deleteThread: async (thread: ThreadSummary) => {
+      /** Exclui a thread sem apagar nada (exclusão lógica): a marcação e a conversa somem e voltam ao desfazer. */
+      deleteThread: async (thread: Pick<ThreadSummary, 'id'>) => {
         currentUser();
-        const comments = await getDocs(collection(db(), firestorePaths.comments(projectId, reviewId, thread.id)));
-        if (comments.size + 1 > MAX_BATCH_WRITES) throw new Error(t('Esta conversa tem comentários demais para excluir de uma vez.'));
-        const batch = writeBatch(db());
-        for (const item of comments.docs) batch.delete(item.ref);
-        batch.delete(doc(db(), firestorePaths.thread(projectId, reviewId, thread.id)));
-        await batch.commit();
+        await updateDoc(doc(db(), firestorePaths.thread(projectId, reviewId, thread.id)), { deletedAt: serverTimestamp(), updatedAt: serverTimestamp() });
       },
 
-      /** O autor corrige o texto do próprio comentário. */
-      editComment: async (thread: ThreadSummary, commentId: string, body: string) => {
+      /** Desfaz a exclusão da thread. */
+      restoreThread: async (thread: Pick<ThreadSummary, 'id'>) => {
+        currentUser();
+        await updateDoc(doc(db(), firestorePaths.thread(projectId, reviewId, thread.id)), { deletedAt: null, updatedAt: serverTimestamp() });
+      },
+
+      /** O autor corrige o texto do próprio comentário (ou volta o texto anterior, ao desfazer). */
+      editComment: async (thread: Pick<ThreadSummary, 'id'>, commentId: string, body: string) => {
         currentUser();
         await updateDoc(doc(db(), firestorePaths.comment(projectId, reviewId, thread.id, commentId)), { body, editedAt: serverTimestamp() });
       },
 
       /** O autor exclui a própria resposta: o registro fica na conversa, sem o texto. */
-      deleteComment: async (thread: ThreadSummary, commentId: string) => {
+      deleteComment: async (thread: Pick<ThreadSummary, 'id'>, commentId: string) => {
         currentUser();
         await updateDoc(doc(db(), firestorePaths.comment(projectId, reviewId, thread.id, commentId)), { body: '', deletedAt: serverTimestamp() });
+      },
+
+      /** Desfaz a exclusão (ou o envio) de uma resposta: o texto volta. */
+      restoreComment: async (thread: Pick<ThreadSummary, 'id'>, commentId: string, body: string) => {
+        currentUser();
+        await updateDoc(doc(db(), firestorePaths.comment(projectId, reviewId, thread.id, commentId)), { body, deletedAt: null });
       },
 
       /** Revisor: na primeira abertura registra quem é e passa para "Em revisão". */

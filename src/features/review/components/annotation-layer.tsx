@@ -1,58 +1,40 @@
 import { useRef, useState, type PointerEvent } from 'react';
-import type { AnnotationColor, NormalizedPoint, Stroke } from '@shared/firestore/types';
+import type { AnnotationColor, NormalizedPoint } from '@shared/firestore/types';
 import { useT } from '@/hooks/use-t';
-import { movePin, svgPoints } from '@/lib/pdf/drawing';
+import { movePin } from '@/lib/pdf/drawing';
 import { cn } from '@/lib/utils';
 import { usePinDrag } from '../hooks/use-pin-drag';
 import type { PendingAnnotation, ReviewTool, ThreadSummary } from '../model/review';
-
-/** Classes inteiras (o Tailwind só gera o que aparece escrito no código). */
-const STROKE_CLASSES: Record<AnnotationColor, string> = {
-  'annotation-1': 'stroke-annotation-1',
-  'annotation-2': 'stroke-annotation-2',
-  'annotation-3': 'stroke-annotation-3',
-  'annotation-4': 'stroke-annotation-4',
-};
+import { DrawingMark } from './drawing-mark';
+import { Strokes } from './strokes';
 
 interface AnnotationLayerProps {
   page: number;
   /** Threads desta página, com o número exibido. */
   threads: Array<{ thread: ThreadSummary; number: number }>;
+  /** Desenhos sem comentário desta página (sem número). */
+  drawings: ThreadSummary[];
   pending: PendingAnnotation | null;
   tool: ReviewTool;
   selectedThreadId: string | null;
+  selectedDrawingId: string | null;
   onPlacePin: (page: number, point: { x: number; y: number }) => void;
+  /** Um traço começou (verdadeiro) ou acabou, valendo ou não (falso): o salvamento automático da remarcação espera. */
+  onStrokingChange?: (active: boolean) => void;
   /** Traço terminado (pontos normalizados [x, y]). */
   onStroke: (page: number, points: Array<[number, number]>) => void;
   onSelect: (threadId: string) => void;
-  /** Pins (com ou sem desenho) que a pessoa pode arrastar: quem criou a thread ou edita o projeto. */
+  onSelectDrawing: (threadId: string) => void;
+  /** Pins (com ou sem desenho) que a pessoa pode arrastar, e desenhos que ela pode apagar: quem criou ou edita o projeto. */
   canMove: (thread: ThreadSummary) => boolean;
   /** Pin solto em outro lugar da página (o desenho vai junto). */
   onMovePin: (thread: ThreadSummary, point: NormalizedPoint) => Promise<unknown>;
-  /** Thread esperando a marcação nova: a atual aparece esmaecida. */
+  onDeleteDrawing: (thread: ThreadSummary) => Promise<unknown>;
+  /** Thread esperando a marcação nova: a marcação atual sai do PDF (volta se a remarcação for cancelada). */
   relocatingThreadId: string | null;
 }
 
 const clamp = (value: number) => Math.min(1, Math.max(0, value));
-
-function Strokes({ strokes, faded = false }: { strokes: readonly Stroke[]; faded?: boolean }) {
-  return (
-    <svg viewBox="0 0 1 1" preserveAspectRatio="none" className={cn('absolute inset-0 size-full', faded && 'opacity-60')} aria-hidden>
-      {strokes.map((stroke, index) => (
-        <polyline
-          key={index}
-          points={svgPoints(stroke.points)}
-          fill="none"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          vectorEffect="non-scaling-stroke"
-          className={STROKE_CLASSES[stroke.color]}
-          style={{ strokeWidth: 3 }}
-        />
-      ))}
-    </svg>
-  );
-}
 
 /**
  * Tudo que fica sobre a página, em coordenadas de 0 a 1 (acompanha o zoom
@@ -65,14 +47,19 @@ function Strokes({ strokes, faded = false }: { strokes: readonly Stroke[]; faded
 export function AnnotationLayer({
   page,
   threads,
+  drawings,
   pending,
   tool,
   selectedThreadId,
+  selectedDrawingId,
   onPlacePin,
+  onStrokingChange,
   onStroke,
   onSelect,
+  onSelectDrawing,
   canMove,
   onMovePin,
+  onDeleteDrawing,
   relocatingThreadId,
 }: AnnotationLayerProps) {
   const { t } = useT();
@@ -97,6 +84,7 @@ export function AnnotationLayer({
       return;
     }
     if (tool !== 'draw') return;
+    onStrokingChange?.(true);
     event.currentTarget.setPointerCapture(event.pointerId);
     liveRef.current = [pointOf(event)];
     setLive(liveRef.current);
@@ -112,6 +100,7 @@ export function AnnotationLayer({
     const points = liveRef.current;
     liveRef.current = null;
     setLive(null);
+    if (points) onStrokingChange?.(false);
     if (points && points.length >= 2) onStroke(page, points);
   };
 
@@ -129,9 +118,23 @@ export function AnnotationLayer({
       onPointerUp={finishStroke}
       onPointerCancel={finishStroke}
     >
+      {drawings.map((thread) =>
+        thread.id === relocatingThreadId ? null : (
+          <DrawingMark
+            key={thread.id}
+            thread={thread}
+            isSelected={thread.id === selectedDrawingId}
+            isInteractive={tool === 'select'}
+            canDelete={canMove(thread)}
+            onSelect={() => onSelectDrawing(thread.id)}
+            onDelete={() => onDeleteDrawing(thread)}
+          />
+        ),
+      )}
       {threads.map(({ thread, number }) => {
-        // Trecho que não foi reencontrado na versão nova não tem lugar nesta página.
-        if (thread.status === 'outdated') return null;
+        // Trecho que não foi reencontrado na versão nova não tem lugar nesta página; a marcação em
+        // remarcação já saiu (a nova vem no lugar dela).
+        if (thread.status === 'outdated' || thread.id === relocatingThreadId) return null;
         const isResolved = thread.status === 'resolved';
         const isSelected = thread.id === selectedThreadId;
         // Semitransparente para não tampar o texto embaixo; fica opaco no hover, no foco e quando selecionado.
@@ -146,11 +149,10 @@ export function AnnotationLayer({
           if (pinDrag.consumeClick()) return;
           onSelect(thread.id);
         };
-        const fade = thread.id === relocatingThreadId && 'opacity-30';
         if (thread.anchor.type === 'text') {
           const first = thread.anchor.rects[0];
           return (
-            <div key={thread.id} className={cn(fade)}>
+            <div key={thread.id}>
               {thread.anchor.rects.map((rect, index) => (
                 <span
                   key={index}
@@ -179,7 +181,7 @@ export function AnnotationLayer({
         const isDragging = pinDrag.drag?.threadId === thread.id;
         const shown = isDragging ? movePin(thread.anchor.point, thread.anchor.drawing, pinDrag.drag!.point) : thread.anchor;
         return (
-          <div key={thread.id} className={cn(fade)}>
+          <div key={thread.id}>
             {shown.drawing && <Strokes strokes={shown.drawing.strokes} faded={isResolved} />}
             <button
               type="button"

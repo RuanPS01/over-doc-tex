@@ -1,11 +1,11 @@
-import { CheckCircle2, Code2, Crosshair, Loader2, MoreHorizontal, PenLine, RotateCcw, Trash2 } from 'lucide-react';
+import { CheckCircle2, Code2, Crosshair, Loader2, MoreHorizontal, PenLine, RotateCcw, Trash2, X } from 'lucide-react';
 import { forwardRef, useState, type MouseEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useT } from '@/hooks/use-t';
 import { cn } from '@/lib/utils';
 import { useComments } from '../hooks/use-threads';
-import type { ReviewViewer, ThreadSummary } from '../model/review';
+import type { ReviewTool, ReviewViewer, ThreadSummary } from '../model/review';
 import { CommentComposer } from './comment-composer';
 import { ThreadComments } from './thread-comments';
 
@@ -39,16 +39,17 @@ interface ThreadCardProps {
   viewer: ReviewViewer;
   /** Quem criou a thread ou edita o projeto: refaz a marcação e exclui a thread. */
   canManage: boolean;
-  /** Esta thread está esperando a marcação nova no PDF. */
-  isRelocating: boolean;
+  /** Esta thread está esperando a marcação nova no PDF: a ferramenta em uso e se há um desenho em andamento. */
+  relocation: { tool: ReviewTool; isDrawing: boolean } | null;
   /** Autor: abre o código na linha do comentário (SyncTeX da versão). */
   onOpenSource?: () => void;
   onSelect: () => void;
   onReply: (body: string) => Promise<unknown>;
   onStatusChange: (status: 'open' | 'resolved') => Promise<unknown>;
-  onEditComment: (commentId: string, body: string) => Promise<unknown>;
-  onDeleteComment: (commentId: string) => Promise<unknown>;
+  onEditComment: (commentId: string, body: string, previous: string) => Promise<unknown>;
+  onDeleteComment: (commentId: string, body: string) => Promise<unknown>;
   onRelocate: () => void;
+  onCancelRelocate: () => void;
   onDelete: () => Promise<unknown>;
 }
 
@@ -64,7 +65,7 @@ export const ThreadCard = forwardRef<HTMLLIElement, ThreadCardProps>(function Th
     canWrite,
     viewer,
     canManage,
-    isRelocating,
+    relocation,
     onOpenSource,
     onSelect,
     onReply,
@@ -72,6 +73,7 @@ export const ThreadCard = forwardRef<HTMLLIElement, ThreadCardProps>(function Th
     onEditComment,
     onDeleteComment,
     onRelocate,
+    onCancelRelocate,
     onDelete,
   },
   ref,
@@ -84,6 +86,16 @@ export const ThreadCard = forwardRef<HTMLLIElement, ThreadCardProps>(function Th
   const isResolved = thread.status === 'resolved';
   const isOutdated = thread.status === 'outdated';
   const isPin = thread.anchor.type === 'pin';
+  const isRelocating = relocation !== null;
+  const relocationHint = !relocation
+    ? ''
+    : relocation.tool === 'select'
+      ? t('Selecione no PDF o trecho novo deste comentário.')
+      : relocation.tool === 'pin'
+        ? t('Clique no PDF no lugar novo deste comentário.')
+        : relocation.isDrawing
+          ? t('Desenho em andamento: ele é salvo quando você parar de desenhar.')
+          : t('Desenhe no PDF a marcação nova deste comentário.');
 
   // Clicar no cartão (fora de botões e campos) escolhe a thread ou, se ela já está escolhida, tira a seleção.
   // O teclado usa o botão do topo, que faz o mesmo.
@@ -145,7 +157,7 @@ export const ThreadCard = forwardRef<HTMLLIElement, ThreadCardProps>(function Th
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" collisionPadding={8} className="w-64 max-w-[calc(100vw-1rem)]">
-              <DropdownMenuItem onSelect={onRelocate}>
+              <DropdownMenuItem disabled={isRelocating} onSelect={onRelocate}>
                 <Crosshair />
                 {t('Refazer a marcação no PDF')}
               </DropdownMenuItem>
@@ -161,7 +173,7 @@ export const ThreadCard = forwardRef<HTMLLIElement, ThreadCardProps>(function Th
       </div>
       {confirmDelete && (
         <div role="alertdialog" aria-label={t('Excluir comentário')} className="mx-3 mb-2 flex flex-col gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs">
-          <p>{t('Excluir este comentário, a marcação no PDF e as respostas? Não dá para desfazer.')}</p>
+          <p>{t('Excluir este comentário, a marcação no PDF e as respostas? Dá para desfazer com Ctrl+Z ou o botão Desfazer.')}</p>
           {deleteError && <p className="text-destructive">{deleteError}</p>}
           <div className="flex justify-end gap-2">
             <Button variant="ghost" size="sm" className="h-7" disabled={isDeleting} onClick={() => setConfirmDelete(false)}>
@@ -174,7 +186,16 @@ export const ThreadCard = forwardRef<HTMLLIElement, ThreadCardProps>(function Th
           </div>
         </div>
       )}
-      {isRelocating && <p className="mx-3 mb-2 text-xs text-muted-foreground">{t('Esperando a marcação nova no PDF.')}</p>}
+      {relocation && (
+        // A marcação antiga já saiu do PDF; a nova vale assim que for feita. Cancelar traz a antiga de volta.
+        <div data-keep-selection className="mx-3 mb-2 flex flex-col gap-2 rounded-md border border-annotation-3/60 bg-annotation-3/10 p-2 text-xs">
+          <p role="status">{relocationHint}</p>
+          <Button variant="outline" size="sm" className="h-7 self-start" onClick={onCancelRelocate}>
+            <X />
+            {t('Cancelar remarcação')}
+          </Button>
+        </div>
+      )}
       {isOutdated && (
         <p className="mx-3 mb-2 text-xs text-muted-foreground">
           {t('O trecho comentado não foi encontrado na versão nova; a citação abaixo é da versão anterior.')}

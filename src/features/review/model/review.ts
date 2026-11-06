@@ -87,17 +87,23 @@ export function parseEmails(text: string): { valid: string[]; invalid: string[] 
   return { valid, invalid: parts.filter((part) => !valid.includes(part)) };
 }
 
-export interface ThreadSummary extends Omit<ThreadDoc, 'createdAt' | 'updatedAt' | 'lastCommentAt' | 'resolution'> {
+export interface ThreadSummary extends Omit<ThreadDoc, 'createdAt' | 'updatedAt' | 'lastCommentAt' | 'resolution' | 'deletedAt' | 'drawingOnly'> {
   id: string;
   resolution: { kind: NonNullable<ThreadDoc['resolution']>['kind']; by: string; fixedInSnapshotId: string | null } | null;
   createdAt: Date | null;
+  /** Excluída (exclusão lógica, que dá para desfazer): fora da tela. */
+  isDeleted: boolean;
+  /** Só o desenho, sem comentário: sem cartão nem número. */
+  drawingOnly: boolean;
 }
 
 export function toThreadSummary(id: string, data: ThreadDoc): ThreadSummary {
-  const { createdAt, updatedAt: _updatedAt, lastCommentAt: _lastCommentAt, resolution, ...rest } = data;
+  const { createdAt, updatedAt: _updatedAt, lastCommentAt: _lastCommentAt, resolution, deletedAt, drawingOnly, ...rest } = data;
   return {
     ...rest,
     id,
+    isDeleted: Boolean(deletedAt),
+    drawingOnly: drawingOnly === true,
     resolution: resolution ? { kind: resolution.kind, by: resolution.by, fixedInSnapshotId: resolution.fixedInSnapshotId ?? null } : null,
     createdAt: createdAt?.toDate() ?? null,
   };

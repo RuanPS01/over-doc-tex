@@ -1,7 +1,8 @@
-import { FileCheck2, Highlighter, MapPin, MessageSquare, PanelRightClose, PenLine, TextSelect } from 'lucide-react';
+import { FileCheck2, Highlighter, MapPin, MessageSquare, PanelRightClose, PenLine, TextSelect, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState, useRef, type MouseEvent, type ReactNode } from 'react';
 import { useDefaultLayout } from 'react-resizable-panels';
 import { useLocation } from 'wouter';
+import { UndoRedoButtons } from '@/components/common/undo-redo-buttons';
 import { Button } from '@/components/ui/button';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup, safeLayoutStorage } from '@/components/ui/resizable';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -11,6 +12,7 @@ import { PdfDocumentView } from '@/features/pdf-viewer/components/pdf-document-v
 import { useCollapsiblePanel } from '@/hooks/use-collapsible-panel';
 import { useLayoutMode } from '@/hooks/use-layout-mode';
 import { useT } from '@/hooks/use-t';
+import { useUndoShortcuts } from '@/hooks/use-undo-shortcuts';
 import { downloadBytes, slugify } from '@/lib/download';
 import { msg } from '@/lib/i18n';
 import { sourceAt } from '@/lib/latex/synctex';
@@ -19,8 +21,9 @@ import { buildQuote, normalizeRects } from '@/lib/pdf/text-anchor';
 import { cn } from '@/lib/utils';
 import type { AnnotationColor, ParticipantRole, ReviewStatus, SourceLocation } from '@shared/firestore/types';
 import { useAnnotatedPdf } from '../hooks/use-annotated-pdf';
-import { useReviewActions, useReviewViewer, type GuestIdentity, type NewAnnotation } from '../hooks/use-review-actions';
+import { markingFrom, useReviewActions, useReviewViewer, type GuestIdentity, type NewAnnotation } from '../hooks/use-review-actions';
 import { useReviewDocuments, useReviewPageTexts, useReviewPdf, useReviewSyncData } from '../hooks/use-review-files';
+import { useReviewHistory } from '../hooks/use-review-history';
 import { useTextSelection } from '../hooks/use-text-selection';
 import { useThreads } from '../hooks/use-threads';
 import { anchorPoint, canManageThread, type PendingAnnotation, type ReviewSummary, type ReviewTool, type ThreadSummary } from '../model/review';
@@ -31,6 +34,9 @@ import { ReviewHeader } from './review-header';
 import { ReviewSharingDialog } from './review-sharing-dialog';
 import { SelectionPopover } from './selection-popover';
 import { ThreadList } from './thread-list';
+
+/** Remarcação com desenho: o desenho vale quando a pessoa para de desenhar por este tempo (dá para fazer vários traços). */
+const RELOCATE_DRAW_DELAY = 1200;
 
 const TOOLS: Array<{ id: ReviewTool; label: string; icon: ReactNode }> = [
   { id: 'select', label: msg('Selecionar texto'), icon: <TextSelect /> },
@@ -65,8 +71,12 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
   const [documentId, setDocumentId] = useState(review.grantedDocumentIds[0]!);
   const currentDocument = documents.find((item) => item.id === documentId);
   const { data: allThreads = [] } = useThreads(review.projectId, review.id, true);
-  const threads = useMemo(() => allThreads.filter((thread) => thread.documentId === documentId), [allThreads, documentId]);
+  // Cartões e números só para as threads com comentário; o desenho sem comentário fica só no PDF.
+  const threads = useMemo(() => allThreads.filter((thread) => thread.documentId === documentId && !thread.drawingOnly), [allThreads, documentId]);
+  const drawings = useMemo(() => allThreads.filter((thread) => thread.documentId === documentId && thread.drawingOnly), [allThreads, documentId]);
   const actions = useReviewActions(review, role, guest);
+  const reviewHistory = useReviewHistory(actions);
+  const { history } = reviewHistory;
   const viewer = useReviewViewer(guest, canManage);
   const [sharingOpen, setSharingOpen] = useState(false);
   const { pdf, error: pdfError } = useReviewPdf(review, documentId);
@@ -77,8 +87,11 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
   const [drawColor, setDrawColor] = useState<AnnotationColor>('annotation-2');
   const [pending, setPending] = useState<PendingAnnotation | null>(null);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
-  // "Refazer a marcação": a thread espera a marcação nova (trecho, ponto ou desenho), feita como a de um comentário novo.
+  const [selectedDrawingId, setSelectedDrawingId] = useState<string | null>(null);
+  // "Refazer a marcação": a marcação antiga sai do PDF e a thread espera a nova, que vale assim que é feita.
   const [relocatingId, setRelocatingId] = useState<string | null>(null);
+  // Traço em andamento (botão apertado): o salvamento automático do desenho espera ele terminar.
+  const strokingRef = useRef(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [changesOpen, setChangesOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -121,6 +134,7 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
         return;
       }
       setSelectedThreadId(threadId);
+      setSelectedDrawingId(null);
       if (isDesktop) comments.expand();
       else setSheetOpen(true);
       const thread = threads.find((item) => item.id === threadId);
@@ -135,15 +149,22 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
     // Soltar uma seleção de texto também gera clique: a seleção do comentário continua.
     if (!(window.getSelection()?.isCollapsed ?? true)) return;
     setSelectedThreadId(null);
+    setSelectedDrawingId(null);
+  };
+
+  /** Trecho selecionado no PDF como marcação (citação com contexto e retângulos de 0 a 1). */
+  const textPendingOf = (current: NonNullable<typeof selection>): PendingAnnotation | null => {
+    const quote = buildQuote(pageTexts?.[current.page - 1] ?? '', current.text);
+    const rects = normalizeRects(current.rects, current.pageBox);
+    if (!quote || rects.length === 0) return null;
+    return { kind: 'text', anchor: { type: 'text', page: current.page, rects, ...quote } };
   };
 
   const commentSelection = () => {
     if (!selection) return;
-    const quote = buildQuote(pageTexts?.[selection.page - 1] ?? '', selection.text);
-    const rects = normalizeRects(selection.rects, selection.pageBox);
-    if (!quote || rects.length === 0) return;
-    startPending({ kind: 'text', anchor: { type: 'text', page: selection.page, rects, ...quote } });
+    const next = textPendingOf(selection);
     clearSelection();
+    if (next) startPending(next);
   };
 
   const handleStroke = (page: number, points: Array<[number, number]>) => {
@@ -155,7 +176,8 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
     );
     // No celular o Sheet só abre pelo botão: abrir a cada traço impediria desenhar o resto.
     setSelectedThreadId(null);
-    if (isDesktop) comments.expand();
+    setSelectedDrawingId(null);
+    if (isDesktop && !relocatingId) comments.expand();
   };
 
   /** Linha do código sob o ponto (SyncTeX da versão), guardada na thread para "Abrir no código". */
@@ -193,56 +215,133 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
     // A ferramenta volta na hora: esperar o servidor desfaria uma ferramenta escolhida nesse meio-tempo.
     if (submitted.kind !== 'text') setTool('select');
     const { annotation, sourceHint } = annotationOf(submitted);
-    const threadId = await actions.createThread(documentId, annotation, body, sourceHint);
+    const created = await reviewHistory.createThread(documentId, annotation, body, sourceHint);
     // Só limpa se a pessoa não começou outra marcação enquanto gravava.
     setPending((current) => (current === submitted ? null : current));
-    if (threadId) setSelectedThreadId((current) => current ?? threadId);
+    if (created) setSelectedThreadId((current) => current ?? created.threadId);
   };
 
-  /** "Refazer a marcação": a thread fica com a marcação nova; a conversa não muda. */
+  /** "Manter só o desenho": o desenho fica no PDF sem comentário (sem cartão), e dá para apagá-lo depois. */
+  const keepDrawing = async () => {
+    if (pending?.kind !== 'draw') return;
+    const submitted = pending;
+    const { annotation, sourceHint } = annotationOf(submitted);
+    if (annotation.kind !== 'pin') return;
+    setTool('select');
+    await reviewHistory.createDrawing(documentId, annotation, sourceHint);
+    setPending((current) => (current === submitted ? null : current));
+  };
+
+  /**
+   * "Refazer a marcação": a marcação antiga sai do PDF e a ferramenta segue o tipo dela (trecho
+   * seleciona texto, ponto marca ponto, desenho desenha na mesma cor). A marcação nova vale assim
+   * que é feita; "Cancelar remarcação", no cartão, traz a antiga de volta.
+   */
   const startRelocate = (thread: ThreadSummary) => {
     setShowMarkings(true);
     setPending(null);
     clearSelection();
-    setTool('select');
     setSelectedThreadId(null);
+    setSelectedDrawingId(null);
     setRelocatingId(thread.id);
-    // No celular o Sheet fecha para liberar o PDF; ele volta quando houver o que salvar.
+    if (thread.anchor.type === 'text') setTool('select');
+    else if (thread.anchor.drawing) {
+      setTool('draw');
+      setDrawColor(thread.anchor.drawing.strokes[0]?.color ?? drawColor);
+    } else setTool('pin');
+    // No celular o Sheet fecha para liberar o PDF.
     if (isDesktop) comments.expand();
     else setSheetOpen(false);
   };
 
-  const cancelPending = () => {
+  const cancelRelocate = () => {
+    setRelocatingId(null);
+    setPending(null);
+    setTool('select');
+  };
+
+  /** A marcação nova vai para a thread que esperava por ela (dá para desfazer). */
+  const assignRelocation = (submitted: PendingAnnotation) => {
+    const target = relocating;
+    if (!target) return;
     setPending(null);
     setRelocatingId(null);
-  };
-
-  const saveRelocation = async () => {
-    if (!pending || !relocating) return;
-    const submitted = pending;
-    const { thread } = relocating;
     setTool('select');
-    const { annotation, sourceHint } = annotationOf(submitted);
-    await actions.moveThread(thread, annotation, sourceHint);
-    setPending((current) => (current === submitted ? null : current));
-    setRelocatingId(null);
-    setSelectedThreadId(thread.id);
+    void run(async () => {
+      const { annotation, sourceHint } = annotationOf(submitted);
+      await reviewHistory.setMarking(target.thread, markingFrom(annotation, sourceHint));
+      setSelectedThreadId(target.thread.id);
+    });
   };
 
-  /** Pin arrastado: o ponto e o desenho vão para o lugar novo, com a linha do código de lá. */
+  // Remarcação por trecho: soltar a seleção já basta.
+  useEffect(() => {
+    if (!relocating || !selection) return;
+    const next = textPendingOf(selection);
+    clearSelection();
+    if (next) assignRelocation(next);
+  }, [selection, relocatingId]);
+
+  // Remarcação por desenho: vale quando a pessoa para de desenhar (dá para fazer vários traços antes).
+  // Com um traço em andamento, espera ele terminar; um traço novo recomeça a contagem.
+  useEffect(() => {
+    if (!relocating || pending?.kind !== 'draw' || pending.strokes.length === 0) return;
+    const submitted = pending;
+    let timer: ReturnType<typeof setTimeout>;
+    const attempt = () => {
+      if (strokingRef.current) timer = setTimeout(attempt, 300);
+      else assignRelocation(submitted);
+    };
+    timer = setTimeout(attempt, RELOCATE_DRAW_DELAY);
+    return () => clearTimeout(timer);
+  }, [pending, relocatingId]);
+
+  // Esc cancela a remarcação (a marcação antiga volta).
+  useEffect(() => {
+    if (!relocatingId) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !event.defaultPrevented) cancelRelocate();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [relocatingId]);
+
+  /** Pin arrastado: o ponto e o desenho vão para o lugar novo, com a linha do código de lá (dá para desfazer). */
   const movePinTo = (thread: ThreadSummary, target: { x: number; y: number }) =>
     run(async () => {
       if (thread.anchor.type !== 'pin') return;
       const moved = movePin(thread.anchor.point, thread.anchor.drawing, target);
       const page = thread.anchor.page;
-      await actions.moveThread(thread, { kind: 'pin', page, point: moved.point, drawing: moved.drawing }, sourceHintAt(page, moved.point.x, moved.point.y));
+      const annotation: NewAnnotation = { kind: 'pin', page, point: moved.point, drawing: moved.drawing };
+      await reviewHistory.setMarking(thread, markingFrom(annotation, sourceHintAt(page, moved.point.x, moved.point.y)));
     });
 
   const deleteThread = async (thread: ThreadSummary) => {
-    await actions.deleteThread(thread);
+    await reviewHistory.deleteThread(thread);
     setSelectedThreadId((current) => (current === thread.id ? null : current));
+    setSelectedDrawingId((current) => (current === thread.id ? null : current));
     setRelocatingId((current) => (current === thread.id ? null : current));
   };
+
+  /** Ctrl+Z: com traços de um desenho ainda sem comentário, sai o último traço; senão, a última ação gravada. */
+  const handleUndo = () => {
+    if (pending?.kind === 'draw' && pending.strokes.length > 0) {
+      setPending((current) =>
+        current?.kind === 'draw' ? (current.strokes.length > 1 ? { ...current, strokes: current.strokes.slice(0, -1) } : null) : current,
+      );
+      return;
+    }
+    setActionError(null);
+    void history.undo().catch(() => setActionError(t('Não foi possível desfazer. Outra pessoa pode ter mudado o mesmo comentário.')));
+  };
+
+  const handleRedo = () => {
+    setActionError(null);
+    void history.redo().catch(() => setActionError(t('Não foi possível refazer. Outra pessoa pode ter mudado o mesmo comentário.')));
+  };
+
+  useUndoShortcuts({ enabled: canWrite, onUndo: handleUndo, onRedo: handleRedo });
+  const hasStrokesToUndo = pending?.kind === 'draw' && pending.strokes.length > 0;
 
   const openSource = (thread: ThreadSummary) => {
     if (!thread.sourceHint) return;
@@ -258,20 +357,21 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
     }
   };
 
-  const pendingPanel = pending || relocating ? (
+  // Na remarcação não há painel: a marcação vale sozinha e o cartão mostra o andamento e o cancelar.
+  const pendingPanel = pending && !relocating ? (
     <PendingAnnotationPanel
       pending={pending}
-      relocateNumber={relocating?.number}
       onColor={(color) => {
         setDrawColor(color);
         setPending((current) => (current?.kind === 'draw' ? { ...current, color, strokes: current.strokes.map((stroke) => ({ ...stroke, color })) } : current));
       }}
       onUndoStroke={() => setPending((current) => (current?.kind === 'draw' ? { ...current, strokes: current.strokes.slice(0, -1) } : current))}
       onSubmit={submitPending}
-      onSave={saveRelocation}
-      onCancel={cancelPending}
+      onKeepDrawing={keepDrawing}
+      onCancel={() => setPending(null)}
     />
   ) : null;
+  const pendingKey = pendingPanel && pending ? (pending.kind === 'text' ? `text-${pending.anchor.page}` : `${pending.kind}-${pending.page}`) : null;
 
   const threadList = (
     <ThreadList
@@ -280,19 +380,21 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
       previousReviewId={review.previousReviewId}
       threads={threads}
       pendingPanel={pendingPanel}
+      pendingKey={pendingKey}
       selectedThreadId={selectedThreadId}
       canWrite={canWrite}
       canOpenSource={role === 'author'}
       viewer={viewer}
-      relocatingThreadId={relocating?.thread.id ?? null}
+      relocation={relocating ? { threadId: relocating.thread.id, tool, isDrawing: pending?.kind === 'draw' } : null}
       onSelect={selectThread}
       onClearSelection={() => setSelectedThreadId(null)}
       onOpenSource={openSource}
-      onReply={actions.reply}
-      onStatusChange={actions.setThreadStatus}
-      onEditComment={actions.editComment}
-      onDeleteComment={actions.deleteComment}
+      onReply={reviewHistory.reply}
+      onStatusChange={reviewHistory.setThreadStatus}
+      onEditComment={reviewHistory.editComment}
+      onDeleteComment={reviewHistory.deleteComment}
       onRelocate={startRelocate}
+      onCancelRelocate={cancelRelocate}
       onDelete={deleteThread}
     />
   );
@@ -306,6 +408,7 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
           setPending(null);
           setRelocatingId(null);
           setSelectedThreadId(null);
+          setSelectedDrawingId(null);
           setPageSizes([]);
         }}
       >
@@ -374,14 +477,17 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
   // Dica da ferramenta e mensagem de quem pediu a revisão: no espaço livre da barra do PDF, ao lado do
   // título (sem faixa nova acima do PDF). No celular a barra não tem espaço: a dica flutua sobre o PDF
   // e a mensagem vai para o topo do painel de comentários.
-  const toolHint =
-    tool === 'pin'
+  const toolHint = relocating
+    ? tool === 'pin'
+      ? t('Clique no lugar novo do comentário {number}.', { number: relocating.number })
+      : tool === 'draw'
+        ? t('Desenhe a marcação nova do comentário {number}; ela vale quando você parar de desenhar.', { number: relocating.number })
+        : t('Selecione o trecho novo do comentário {number}.', { number: relocating.number })
+    : tool === 'pin'
       ? t('Clique no ponto do PDF que quer comentar.')
       : tool === 'draw'
         ? t('Desenhe sobre a página; depois escreva o comentário ao lado.')
-        : relocating && !pending
-          ? t('Marque de novo o comentário {number}: selecione um trecho, ou use Ponto ou Desenhar.', { number: relocating.number })
-          : null;
+        : null;
   const authorMessage = review.description ? (
     <>
       <span className="font-medium text-foreground">{t('Mensagem:')}</span> {review.description}
@@ -427,7 +533,7 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
     setIsExporting(true);
     setActionError(null);
     try {
-      const bytes = await annotatedPdf(pdf, numbered);
+      const bytes = await annotatedPdf(pdf, numbered, drawings);
       downloadBytes(bytes, `${pdfBaseName}-${t('anotado')}.pdf`, 'application/pdf');
     } catch {
       setActionError(t('Não foi possível gerar o PDF com anotações. Confira a conexão e tente de novo.'));
@@ -446,6 +552,18 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
         <>
           {markingsSwitch}
           {tools}
+          {canWrite && (
+            <UndoRedoButtons
+              className="hidden sm:flex"
+              canUndo={history.canUndo || hasStrokesToUndo}
+              canRedo={history.canRedo}
+              onUndo={handleUndo}
+              onRedo={handleRedo}
+              undoLabel={hasStrokesToUndo ? t('último traço') : history.undoLabel}
+              redoLabel={history.redoLabel}
+              isBusy={history.isBusy}
+            />
+          )}
           {commentsToggle}
         </>
       }
@@ -471,17 +589,31 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
               <AnnotationLayer
                 page={page}
                 threads={numbered.filter(({ thread }) => thread.anchor.page === page)}
+                drawings={drawings.filter((thread) => thread.anchor.page === page)}
                 pending={pending}
                 tool={canAnnotate ? tool : 'select'}
                 selectedThreadId={selectedThreadId}
+                selectedDrawingId={selectedDrawingId}
                 onPlacePin={(pinPage, point) => {
-                  startPending({ kind: 'pin', page: pinPage, point });
-                  setTool('select');
+                  // Na remarcação, o ponto novo já vai para a thread que esperava.
+                  if (relocating) assignRelocation({ kind: 'pin', page: pinPage, point });
+                  else {
+                    startPending({ kind: 'pin', page: pinPage, point });
+                    setTool('select');
+                  }
+                }}
+                onStrokingChange={(active) => {
+                  strokingRef.current = active;
                 }}
                 onStroke={handleStroke}
                 onSelect={selectThread}
+                onSelectDrawing={(threadId) => {
+                  setSelectedDrawingId((current) => (current === threadId ? null : threadId));
+                  setSelectedThreadId(null);
+                }}
                 canMove={(thread) => canAnnotate && thread.anchor.type === 'pin' && thread.id !== relocatingId && canManageThread(thread, viewer)}
                 onMovePin={movePinTo}
+                onDeleteDrawing={(thread) => run(() => deleteThread(thread))}
                 relocatingThreadId={relocating?.thread.id ?? null}
               />
             )
@@ -550,18 +682,35 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
         ) : (
           <>
             <div className="min-w-0 flex-1">{pdfView}</div>
-            <Button className="absolute bottom-4 right-4 z-20 shadow-lg" onClick={() => setSheetOpen(true)}>
-              <MessageSquare />
-              {relocating && pending
-                ? t('Salvar a marcação nova')
-                : pending
-                  ? t('Escrever comentário')
-                  : t('Comentários ({count})', { count: threads.length })}
-            </Button>
+            {canWrite && (history.canUndo || history.canRedo || hasStrokesToUndo) && (
+              // No celular a barra do PDF não tem espaço: desfazer e refazer flutuam no canto oposto ao dos comentários.
+              <UndoRedoButtons
+                className="absolute bottom-4 left-4 z-20 rounded-full border bg-background/95 p-0.5 shadow-lg sm:hidden"
+                buttonClassName="size-9 rounded-full"
+                canUndo={history.canUndo || hasStrokesToUndo}
+                canRedo={history.canRedo}
+                onUndo={handleUndo}
+                onRedo={handleRedo}
+                undoLabel={hasStrokesToUndo ? t('último traço') : history.undoLabel}
+                redoLabel={history.redoLabel}
+                isBusy={history.isBusy}
+              />
+            )}
+            {relocating ? (
+              <Button variant="outline" className="absolute bottom-4 right-4 z-20 bg-background shadow-lg" onClick={cancelRelocate}>
+                <X />
+                {t('Cancelar remarcação')}
+              </Button>
+            ) : (
+              <Button className="absolute bottom-4 right-4 z-20 shadow-lg" onClick={() => setSheetOpen(true)}>
+                <MessageSquare />
+                {pending ? t('Escrever comentário') : t('Comentários ({count})', { count: threads.length })}
+              </Button>
+            )}
           </>
         )}
       </main>
-      {selection && <SelectionPopover selection={selection} relocating={Boolean(relocating)} onComment={commentSelection} />}
+      {selection && !relocating && <SelectionPopover selection={selection} onComment={commentSelection} />}
       {!isDesktop && (
         <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
           <SheetContent side="bottom" className="h-[75dvh] gap-0 p-0">
