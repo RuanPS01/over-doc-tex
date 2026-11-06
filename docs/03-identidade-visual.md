@@ -80,7 +80,7 @@ Escala: `text-xs` (metadados, barras de painel), `text-sm` (padrão da interface
 
 - Biblioteca: `lucide-react`, tamanho padrão `size-4` (definido no `Button`).
 - Botão só com ícone exige `aria-label` em português.
-- Ícones de referência: `Play` (compilar), `Send` (solicitar revisão), `History` (revisões e versões), `Snowflake` (versão congelada), `GitCompare` (ver alterações), `Highlighter` (marcações no PDF), `FileCheck2` (PDF com anotações), `Sparkles` (IA), `FolderTree` (arquivos).
+- Ícones de referência: `Play` (compilar), `Send` (solicitar revisão), `History` (revisões e versões), `Snowflake` (versão congelada), `GitCompare` (ver alterações), `Highlighter` (marcações no PDF), `FileCheck2` (PDF com anotações), `Undo2` e `Redo2` (desfazer e refazer), `Sparkles` (IA), `FolderTree` (arquivos).
 
 ## 6. Texto da interface
 

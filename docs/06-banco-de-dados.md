@@ -170,10 +170,13 @@ As contagens de threads abertas e resolvidas vêm de consultas de agregação (`
 
 A thread guarda a âncora (texto ou pin com desenho, coordenadas de 0 a 1), status, resolução, `sourceHint` (SyncTeX) e os contadores `commentCount`, `participantIds` e `lastCommentAt`, que o app atualiza no mesmo lote do comentário (as regras só aceitam +1 e a entrada do próprio autor nos participantes). A thread criada por um visitante pelo link leva `authorKey` (a chave do nome, como nos comentários), conferida pelas regras na criação.
 
+Campos opcionais da thread: `drawingOnly: true` marca o desenho sem comentário ("Manter só o desenho": sempre pin com desenho e `commentCount: 0`, conferido na criação e na marcação nova) e `deletedAt` marca a thread excluída (exclusão lógica). A thread não nasce excluída. O app esconde as excluídas na leitura (`useThreads`), não as leva para a rodada seguinte e não carimba correção nelas; o desenho sem comentário segue para a rodada seguinte como desenho sem comentário.
+
 **Quem mexe numa thread** (`canManageThread` nas regras): quem a criou (`createdBy`, ou o visitante com o mesmo `authorKey` em qualquer aparelho) e quem edita o projeto.
 
 - **Marcação nova** (arrastar o pin ou "Refazer a marcação"): a atualização só muda `kind`, `anchor`, `sourceHint`, `status` e `updatedAt`, com `anchor.type` igual a `kind` e página a partir de 1. O status não muda, exceto de `outdated` para `open`.
-- **Exclusão:** a thread sai num lote junto com os comentários dela. Um comentário só pode ser apagado nesse lote (a thread não existe ao fim dele) e por quem pode excluir a thread. O app recusa conversas com mais de 499 comentários (teto de 500 gravações por lote).
+- **Exclusão (a da interface):** lógica, para dar para desfazer: a atualização só muda `deletedAt` (a hora do pedido, `request.time`, ou nulo para restaurar) e `updatedAt`. Nada é apagado.
+- **Exclusão definitiva:** as regras também aceitam apagar a thread num lote junto com os comentários dela (um comentário só sai nesse lote, por quem pode excluir a thread). A interface não usa; fica para uma limpeza futura.
 - **Comentários:** quem escreveu edita o texto (`body` e `editedAt`) e exclui a própria resposta de forma lógica (`body` vazio e `deletedAt`), como já era nas regras.
 
 ```json
@@ -279,7 +282,7 @@ O cache offline do Firestore (`persistentLocalCache`) também guarda os pedaços
 | Abrir revisão | um `grants/{email}` para cada e-mail convidado e `links/{código}` (pelo link) mais `reviews/{nova}` mais `projects/{id}` (`counters.reviews`) | Número igual ao contador anterior mais 1; snapshot existe depois do lote; por e-mail, o grant de `reviewerEmail` também (pelo link, o e-mail pode vir vazio); `reviewerEmails` com até 50 |
 | Envio da revisão | `reviews/{id}` (só `access`, `reviewerEmails`, `lastActivityAt`), `grants/{email}` de cada e-mail novo e `links/{código}` | Quem edita o projeto |
 | Comentar | `comments/{novo}` mais a thread (`commentCount`, `participantIds`) | Contador sobe exatamente 1; só o autor entra nos participantes |
-| Excluir thread | todos os `comments/{id}` da thread mais a própria thread | Quem criou a thread ou edita o projeto; comentário só sai com a thread no mesmo lote |
+| Excluir thread de vez (fora da interface) | todos os `comments/{id}` da thread mais a própria thread | Quem criou a thread ou edita o projeto; comentário só sai com a thread no mesmo lote |
 | Aceitar convite de coautoria | `projects/{id}` (`members`, `memberIds`, `pendingMembers`, `memberProfiles`) | O usuário entra com o papel do convite do próprio e-mail verificado, o convite some e só a entrada dele entra em `memberProfiles` |
 | Remover membro | `projects/{id}` (`members`, `memberIds`, `memberProfiles`) | Só o dono; o dono continua dono; `memberProfiles` não ganha nem muda entradas e só tem chaves de membros |
 | Carimbar correção | thread (`resolution.fixedInSnapshotId`) | Só esse campo, só em thread resolvida e ainda sem carimbo |
@@ -295,7 +298,7 @@ O cache offline do Firestore (`persistentLocalCache`) também guarda os pedaços
 | `snapshots` | membros ou grant por e-mail | criar no lote de congelamento; nunca alterar |
 | `grants` | membros ou o próprio e-mail | owner/editor |
 | `reviews` | membros ou o revisor (e-mail) | criar no lote de abertura; autor e revisor mudam status permitido |
-| `threads`, `comments` | membros ou o revisor | criar com âncora válida; status, contador e carimbo conforme a seção 4; marcação nova e exclusão por quem criou a thread ou edita o projeto; texto do comentário só por quem escreveu |
+| `threads`, `comments` | membros ou o revisor | criar com âncora válida; status, contador e carimbo conforme a seção 4; marcação nova e exclusão (lógica ou definitiva) por quem criou a thread ou edita o projeto; texto do comentário só por quem escreveu |
 | `diffs` | membros ou grant na versão alvo | owner/editor, uma vez; com `pdf`, o último pedaço precisa existir |
 | `blobs` e `chunks` | membros | owner/editor; pedaços até o cabeçalho existir, depois nada |
 | `snapshots/{sid}/files` e `chunks` | membros ou revisor com o documento no grant | owner/editor, só antes de congelar |
@@ -303,7 +306,7 @@ O cache offline do Firestore (`persistentLocalCache`) também guarda os pedaços
 | `aiConversations`, `messages` | só o criador | só o criador |
 | `notifications` | só o destinatário | quem age, se participa do projeto ou da revisão |
 
-**Testes** (`npm run test:rules`): 90 de 90 cenários aprovados no emulador (9 para marcação nova e exclusão de thread: autor move e exclui, leitor que não criou não mexe, editor mexe em qualquer uma, tipo de âncora errado, campos fora da lista, desatualizada que volta a aberta, comentário que não sai sozinho), mais 25 de 25 na suíte "Revisão por link" (inclui a revisão aberta com vários e-mails, um grant para cada no mesmo lote, e o visitante que move e exclui a própria thread de outro aparelho pelo mesmo nome), 2 para threads levadas entre rodadas (só thread com `carriedFromThreadId` nasce `outdated`), 5 para comentário em trecho, documento não concedido e notificações, 7 para a lista de membros (`memberProfiles`: a própria entrada sim, a de outro não, o dono só remove) e 20 para os arquivos em pedaços (cabeçalho sem o último pedaço, hash diferente do id, tamanho incoerente, pedaço grande demais, gravação depois de finalizar, leitura do revisor por documento concedido). A suíte começa com o Firestore vazio (`createTestEnv` em `tests/rules/harness.mjs`).
+**Testes** (`npm run test:rules`): 95 de 95 cenários aprovados no emulador (14 para marcação nova e exclusão de thread: autor move e exclui, leitor que não criou não mexe, editor mexe em qualquer uma, tipo de âncora errado, campos fora da lista, desatualizada que volta a aberta, comentário que não sai sozinho, exclusão lógica e restauração, data de exclusão inventada, thread que nasce excluída, desenho sem comentário válido e inválido, desenho sem comentário que perderia o desenho), mais 26 de 26 na suíte "Revisão por link" (inclui a revisão aberta com vários e-mails, um grant para cada no mesmo lote, e o visitante que move, exclui e restaura a própria thread de outro aparelho pelo mesmo nome), 2 para threads levadas entre rodadas (só thread com `carriedFromThreadId` nasce `outdated`), 5 para comentário em trecho, documento não concedido e notificações, 7 para a lista de membros (`memberProfiles`: a própria entrada sim, a de outro não, o dono só remove) e 20 para os arquivos em pedaços (cabeçalho sem o último pedaço, hash diferente do id, tamanho incoerente, pedaço grande demais, gravação depois de finalizar, leitura do revisor por documento concedido). A suíte começa com o Firestore vazio (`createTestEnv` em `tests/rules/harness.mjs`).
 
 ## 6. Índices
 

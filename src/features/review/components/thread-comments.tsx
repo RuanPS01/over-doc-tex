@@ -10,9 +10,10 @@ interface ThreadCommentsProps {
   comments: readonly CommentSummary[];
   /** Sem ele, a lista é só leitura (rodada anterior, revisão encerrada). */
   viewer?: ReviewViewer;
-  onEdit?: (commentId: string, body: string) => Promise<unknown>;
-  /** Exclui uma resposta. O primeiro comentário sai com a thread inteira, pelo menu do cartão. */
-  onDelete?: (commentId: string) => Promise<unknown>;
+  /** Texto novo e o anterior (o desfazer volta para ele). */
+  onEdit?: (commentId: string, body: string, previous: string) => Promise<unknown>;
+  /** Exclui uma resposta (o texto vai junto para o desfazer). O primeiro comentário sai com a thread inteira, pelo menu do cartão. */
+  onDelete?: (commentId: string, body: string) => Promise<unknown>;
 }
 
 /**
@@ -27,10 +28,10 @@ export function ThreadComments({ comments, viewer, onEdit, onDelete }: ThreadCom
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const remove = async (commentId: string) => {
+  const remove = async (commentId: string, body: string) => {
     setError(null);
     try {
-      await onDelete?.(commentId);
+      await onDelete?.(commentId, body);
       setConfirmDeleteId(null);
     } catch {
       setError(t('Não foi possível excluir. Confira a conexão e tente de novo.'));
@@ -86,7 +87,7 @@ export function ThreadComments({ comments, viewer, onEdit, onDelete }: ThreadCom
                 submitLabel={t('Salvar')}
                 submitIcon={<Check />}
                 onSubmit={async (body) => {
-                  if (body !== comment.body) await onEdit?.(comment.id, body);
+                  if (body !== comment.body) await onEdit?.(comment.id, body, comment.body);
                   setEditingId(null);
                 }}
                 onCancel={() => setEditingId(null)}
@@ -100,7 +101,7 @@ export function ThreadComments({ comments, viewer, onEdit, onDelete }: ThreadCom
                 <Button variant="ghost" size="sm" className="h-7" onClick={() => setConfirmDeleteId(null)}>
                   {t('Cancelar')}
                 </Button>
-                <Button variant="destructive" size="sm" className="h-7" onClick={() => void remove(comment.id)}>
+                <Button variant="destructive" size="sm" className="h-7" onClick={() => void remove(comment.id, comment.body)}>
                   <Trash2 />
                   {t('Excluir')}
                 </Button>

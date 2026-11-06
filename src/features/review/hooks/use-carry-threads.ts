@@ -56,7 +56,10 @@ export function useCarryThreads(projectId: string) {
       const uid = auth.currentUser?.uid;
       if (!uid) return 0;
       const open = await getDocs(query(collection(db, firestorePaths.threads(projectId, previousReviewId)), where('status', '==', 'open')));
-      const threads = open.docs.map((item) => ({ id: item.id, data: item.data() as ThreadDoc })).filter(({ data }) => review.grantedDocumentIds.includes(data.documentId));
+      // Excluídas (exclusão lógica) não seguem para a rodada nova.
+      const threads = open.docs
+        .map((item) => ({ id: item.id, data: item.data() as ThreadDoc }))
+        .filter(({ data }) => review.grantedDocumentIds.includes(data.documentId) && !data.deletedAt);
       if (threads.length === 0) return 0;
 
       const views = new Map<string, Promise<DocumentView>>();
@@ -112,6 +115,8 @@ export function useCarryThreads(projectId: string) {
             resolution: null,
             sourceHint,
             carriedFromThreadId: id,
+            // O desenho sem comentário segue sem comentário (sem cartão) na rodada nova.
+            ...(data.drawingOnly ? { drawingOnly: true } : {}),
             createdBy: uid,
             createdByRole: data.createdByRole,
             commentCount: 0,

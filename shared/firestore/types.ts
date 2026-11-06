@@ -433,6 +433,16 @@ export interface ThreadDoc {
   sourceHint: SourceLocation | null;
   /** Thread herdada de uma rodada anterior ainda aberta. */
   carriedFromThreadId: ThreadId | null;
+  /**
+   * Só o desenho, sem comentário ("Manter só o desenho"): sem cartão nem número, aparece no PDF e
+   * pode ser apagado. Sempre `kind: 'pin'` com `anchor.drawing` e `commentCount: 0`. Ausente nos demais.
+   */
+  drawingOnly?: boolean;
+  /**
+   * Exclusão lógica (pode ser desfeita): a thread some da revisão, mas continua no banco com os
+   * comentários. Nulo ou ausente numa thread visível.
+   */
+  deletedAt?: TimestampLike | null;
   createdBy: UserId;
   /**
    * Revisor pelo link, sem conta: identidade pelo nome (ReviewGuestDoc.guestKey), como nos

@@ -1,9 +1,11 @@
 import Editor, { useMonaco, type Monaco, type OnMount } from '@monaco-editor/react';
 import { Crosshair, FileCode2 } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { UndoRedoButtons } from '@/components/common/undo-redo-buttons';
 import { Button } from '@/components/ui/button';
 import { useIsDarkTheme } from '@/hooks/use-is-dark-theme';
 import { useT } from '@/hooks/use-t';
+import { useUndoShortcuts } from '@/hooks/use-undo-shortcuts';
 import { msg } from '@/lib/i18n';
 import { LATEX_LANGUAGE_ID, registerLatexLanguage } from '@/lib/monaco/latex-language';
 import { applyEditorTheme } from '@/lib/monaco/theme-from-tokens';
@@ -39,6 +41,21 @@ export function CodeEditorPanel() {
   const autosave = useFileAutosave(projectId);
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
   const { synctex, showInPdf } = useCompileStore();
+  // Desfazer e refazer do arquivo aberto: o histórico é o do próprio Monaco (um por arquivo, pelo `path`).
+  const [history, setHistory] = useState({ canUndo: false, canRedo: false });
+  const syncHistory = () => {
+    const model = editorRef.current?.getModel();
+    setHistory({ canUndo: Boolean(model?.canUndo()), canRedo: Boolean(model?.canRedo()) });
+  };
+  const runHistory = (command: 'undo' | 'redo') => {
+    const editor = editorRef.current;
+    if (!editor || !canEdit) return;
+    editor.focus();
+    editor.trigger('toolbar', command, null);
+    syncHistory();
+  };
+  // Dentro do Monaco o atalho é dele; fora (árvore de arquivos, barra), Ctrl+Z também desfaz o arquivo aberto.
+  useUndoShortcuts({ enabled: canEdit && file?.content != null, onUndo: () => runHistory('undo'), onRedo: () => runHistory('redo') });
   const canShowInPdf = Boolean(synctex && file && synctex.files.includes(file.path));
 
   // Clique num erro da compilação, duplo clique no PDF ou "Abrir no código": abre o arquivo
@@ -75,6 +92,15 @@ export function CodeEditorPanel() {
         <FileCode2 className="size-3.5 shrink-0" />
         <span className="min-w-0 flex-1 truncate">{file?.path ?? t('Nenhum arquivo aberto')}</span>
         {!canEdit && <span className="shrink-0">{t('Somente leitura')}</span>}
+        {canEdit && file?.content != null && (
+          <UndoRedoButtons
+            canUndo={history.canUndo}
+            canRedo={history.canRedo}
+            onUndo={() => runHistory('undo')}
+            onRedo={() => runHistory('redo')}
+            buttonClassName="size-7"
+          />
+        )}
         <Button
           variant="ghost"
           size="icon"
@@ -114,6 +140,9 @@ export function CodeEditorPanel() {
             beforeMount={handleBeforeMount}
             onMount={(editor) => {
               editorRef.current = editor;
+              editor.onDidChangeModelContent(syncHistory);
+              editor.onDidChangeModel(syncHistory);
+              syncHistory();
               const pending = revealRef.current;
               if (pending && pending.fileId === file.id) reveal(editor, pending.line);
             }}

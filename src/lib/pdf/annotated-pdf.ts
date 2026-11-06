@@ -41,6 +41,8 @@ export interface AnnotatedPdfThread {
   /** Conversa da rodada anterior (thread levada adiante). */
   previousRound: AnnotatedPdfComment[];
   comments: AnnotatedPdfComment[];
+  /** Desenho sem comentário: só o traço na página, sem pin nem cartão. */
+  markOnly?: boolean;
 }
 
 /** Textos já traduzidos (o PDF fica no idioma de quem baixou). */
@@ -365,15 +367,17 @@ function drawMarks(ctx: Context, page: PDFPage, threads: readonly AnnotatedPdfTh
   }
   // Pins por último, por cima dos destaques e desenhos.
   for (const thread of threads) {
-    if (thread.state === 'outdated') continue;
+    if (thread.state === 'outdated' || thread.markOnly) continue;
     const point = pinPoint(thread.anchor);
     drawBadge(ctx, page, thread, point.x * width, height - point.y * height, PIN_RADIUS, PIN_OPACITY);
   }
 }
 
 /** Margem com os cartões. Devolve se algum cartão foi encurtado ou ficou de fora. */
-function drawMargin(ctx: Context, page: PDFPage, threads: readonly AnnotatedPdfThread[], width: number, height: number, margin: number): boolean {
+function drawMargin(ctx: Context, page: PDFPage, onPage: readonly AnnotatedPdfThread[], width: number, height: number, margin: number): boolean {
   const { palette, text } = ctx.input;
+  // Desenho sem comentário não tem cartão.
+  const threads = onPage.filter((thread) => !thread.markOnly);
   page.drawRectangle({ x: width, y: 0, width: margin, height, color: colorOf(ctx, palette.panel) });
   page.drawLine({ start: { x: width, y: 0 }, end: { x: width, y: height }, thickness: 0.6, color: colorOf(ctx, palette.rule) });
   const panelWidth = margin - PANEL_PADDING * 2;
@@ -520,7 +524,7 @@ function appendSummary(ctx: Context, pdf: PDFDocument, threads: readonly Annotat
   write(text.summaryTitle, 'bold', 13, 'ink');
   write(text.heading, 'regular', 8.5, 'muted');
   y -= 8;
-  const ordered = [...threads].sort((a, b) => a.anchor.page - b.anchor.page || a.number - b.number);
+  const ordered = threads.filter((thread) => !thread.markOnly).sort((a, b) => a.anchor.page - b.anchor.page || a.number - b.number);
   for (const thread of ordered) {
     ensure(40);
     y -= 10;

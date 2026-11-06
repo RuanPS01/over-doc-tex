@@ -84,6 +84,10 @@ const messages: Record<string, string> = {
   '{count} arquivos do repositório de pacotes não foram baixados: {names}': '{count} archivos del repositorio de paquetes no se descargaron: {names}',
   'PDF original': 'PDF original',
   'Como a versão foi congelada, sem marcações nem comentários.': 'Tal como se congeló la versión, sin marcas ni comentarios.',
+  'Desfazer: {action} (Ctrl+Z)': 'Deshacer: {action} (Ctrl+Z)',
+  'Desfazer (Ctrl+Z)': 'Deshacer (Ctrl+Z)',
+  'Refazer: {action} (Ctrl+Shift+Z)': 'Rehacer: {action} (Ctrl+Shift+Z)',
+  'Refazer (Ctrl+Shift+Z)': 'Rehacer (Ctrl+Shift+Z)',
 };
 
 export default messages;
