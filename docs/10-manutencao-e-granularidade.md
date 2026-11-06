@@ -34,6 +34,7 @@ Não há servidor: todo código de produto roda no navegador. O que antes seria 
 | Caches do Siglum (formato desligado, chave dos auxiliares) | `withCacheKey` em `src/lib/latex/prepare.ts` e `loadCompiler` em `src/lib/latex/compiler.ts`; mudar o jeito de montar a entrada do compilador pede um `CACHE_KEY_VERSION` novo |
 | Reancoragem de trechos entre versões | `src/lib/pdf/reanchor.ts`; geometria do texto em `src/lib/pdf/page-text.ts` |
 | Âncoras de trecho e desenho (puro) | `src/lib/pdf/text-anchor.ts`, `src/lib/pdf/drawing.ts` |
+| Desfazer e refazer de uma tela | Pilhas puras em `src/lib/undo-history.ts` (testes em `tests/unit/undo-history.test.ts`), estado em `useUndoStack`, atalhos em `useUndoShortcuts` e botões em `UndoRedoButtons`. Na revisão, cada ação nova que muda o banco entra em `useReviewHistory` com o caminho de volta permitido pelas regras |
 | PDF com anotações (margem de comentários, marcações, páginas "Comentários completos") | Geração com o pdf-lib em `src/lib/pdf/annotated-pdf.ts` (geometria por rotação em `pageGeometry`); regras puras da margem (texto do Markdown, quebra de linha, posição dos cartões) em `src/lib/pdf/comment-layout.ts`; dados e cores em `useAnnotatedPdf`. Testes em `tests/unit/annotated-pdf.test.ts` |
 | Cor de token para biblioteca que exige outro formato (Monaco, pdf-lib) | `src/lib/color.ts` (`hslChannelsToRgb`, `readColorToken`); nunca cor escrita no código |
 | Índice do PDF (marcadores, seção atual) | `src/lib/pdf/outline.ts`; estado e rolagem em `src/features/pdf-viewer/hooks/use-pdf-outline.ts` |

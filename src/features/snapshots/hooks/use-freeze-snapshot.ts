@@ -195,8 +195,8 @@ async function stampFixedThreads(projectId: string, snapshotId: string): Promise
     for (const review of reviews.docs) {
       const resolved = await getDocs(query(collection(db, firestorePaths.threads(projectId, review.id)), where('status', '==', 'resolved')));
       for (const thread of resolved.docs) {
-        const resolution = (thread.data() as ThreadDoc).resolution;
-        if (resolution?.kind !== 'fixed_next_version' || resolution.fixedInSnapshotId) continue;
+        const { resolution, deletedAt } = thread.data() as ThreadDoc;
+        if (deletedAt || resolution?.kind !== 'fixed_next_version' || resolution.fixedInSnapshotId) continue;
         await updateDoc(thread.ref, { 'resolution.fixedInSnapshotId': snapshotId, updatedAt: serverTimestamp() });
       }
     }

@@ -36,7 +36,7 @@ export function useAnnotatedPdf(review: ReviewSummary) {
   const { projectId, id: reviewId, previousReviewId, number, snapshotLabel } = review;
 
   return useCallback(
-    async (pdf: Uint8Array, threads: ReadonlyArray<{ thread: ThreadSummary; number: number }>): Promise<Uint8Array> => {
+    async (pdf: Uint8Array, threads: ReadonlyArray<{ thread: ThreadSummary; number: number }>, drawings: readonly ThreadSummary[] = []): Promise<Uint8Array> => {
       const { db } = getFirebase();
       const dateFormat = new Intl.DateTimeFormat(getLocale(), { dateStyle: 'short', timeStyle: 'short' });
       const readComments = async (fromReviewId: string, threadId: string): Promise<AnnotatedPdfComment[]> => {
@@ -72,9 +72,21 @@ export function useAnnotatedPdf(review: ReviewSummary) {
         }),
       );
 
+      // Desenhos sem comentário: só o traço, sem número nem cartão.
+      const marks: AnnotatedPdfThread[] = drawings.map((thread) => ({
+        number: 0,
+        anchor: thread.anchor,
+        state: thread.status === 'resolved' ? 'resolved' : 'open',
+        kindLabel: '',
+        statusLabel: '',
+        previousRound: [],
+        comments: [],
+        markOnly: true,
+      }));
+
       const heading = t('Revisão #{number} · versão {version} · comentários', { number, version: snapshotLabel });
       return buildAnnotatedPdf(pdf, {
-        threads: exported,
+        threads: [...exported, ...marks],
         palette: readPalette(),
         text: {
           heading,

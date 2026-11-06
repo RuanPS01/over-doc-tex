@@ -93,7 +93,7 @@ over-doc-tex/
 │   ├── components/
 │   │   ├── ui/                        shadcn/ui puro: button, dialog, dropdown-menu, input, resizable, select, sheet, tabs, textarea
 │   │   └── common/                    markdown-content, botões de tema e de idioma, cabeçalho mínimo
-│   ├── hooks/                         hooks genéricos: media query, modo de layout, tema, tradução (useT)
+│   ├── hooks/                         hooks genéricos: media query, modo de layout, tema, tradução (useT), desfazer e refazer
 │   ├── lib/
 │   │   ├── ai/                        motor de IA: provedores, fila, RAG, prompts, tarefas, referências
 │   │   ├── project-archive/           caminhos seguros, plano de importação, zip
@@ -107,6 +107,7 @@ over-doc-tex/
 │   │   ├── i18n/                      idioma (sistema ou escolha), t() e msg(), dicionários en e es por área
 │   │   ├── email.ts                   validação de e-mail e endereço de volta do link de acesso
 │   │   ├── color.ts                   conversão dos tokens de cor (HSL) para Monaco e pdf-lib
+│   │   ├── undo-history.ts            pilhas de desfazer e refazer (puro)
 │   │   ├── download.ts, query-keys.ts, utils.ts
 │   └── styles/globals.css             tokens e utilitários (.h-viewport)
 ├── tests/

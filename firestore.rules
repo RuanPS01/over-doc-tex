@@ -497,11 +497,19 @@ service cloud.firestore {
               && d.anchor.page is int && d.anchor.page >= 1;
           }
 
+          // Desenho sem comentário: só pin com desenho, e sem comentários.
+          function validDrawingOnly(d) {
+            return d.get('drawingOnly', false) == false
+              || (d.drawingOnly == true && d.kind == 'pin' && d.anchor.get('drawing', null) != null && d.commentCount == 0);
+          }
+
           function validNewThread() {
             let d = request.resource.data;
             let review = reviewData(pid, rid);
             return d.createdBy == uid()
               && validAuthorKey(d)
+              && validDrawingOnly(d)
+              && d.get('deletedAt', null) == null
               && d.projectId == pid
               && d.reviewId == rid
               && d.snapshotId == review.snapshotId
@@ -542,13 +550,22 @@ service cloud.firestore {
             return canManageThread(resource.data)
               && onlyChanges(['kind', 'anchor', 'sourceHint', 'status', 'updatedAt'])
               && validAnchor(d)
+              && (resource.data.get('drawingOnly', false) == false || (d.kind == 'pin' && d.anchor.get('drawing', null) != null))
               && (d.status == resource.data.status || (resource.data.status == 'outdated' && d.status == 'open'));
+          }
+
+          // Excluir e restaurar (desfazer) sem apagar nada: deletedAt vira a hora do pedido ou volta a nulo.
+          function togglingDeleted() {
+            let deletedAt = request.resource.data.get('deletedAt', null);
+            return canManageThread(resource.data)
+              && onlyChanges(['deletedAt', 'updatedAt'])
+              && (deletedAt == null || deletedAt == request.time);
           }
 
           allow read: if canParticipate();
           allow create: if canParticipate() && validNewThread();
-          allow update: if canParticipate() && (countingComment() || changingStatus() || stampingFix() || movingAnchor());
-          // Os comentários saem no mesmo lote (regra de exclusão abaixo).
+          allow update: if canParticipate() && (countingComment() || changingStatus() || stampingFix() || movingAnchor() || togglingDeleted());
+          // Exclusão definitiva (a interface usa a lógica, que dá para desfazer); os comentários saem no mesmo lote.
           allow delete: if canParticipate() && canManageThread(resource.data);
 
           match /comments/{cid} {

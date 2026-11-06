@@ -48,17 +48,31 @@ export function useTextSelection(containerRef: RefObject<HTMLElement>, enabled: 
       });
     };
     // Lê ao soltar (mouse ou toque) e quando a seleção muda pelo teclado ou pelas alças do celular.
+    // Com o botão ainda apertado não lê: uma pausa no meio do arraste não vira seleção pronta (na
+    // remarcação por trecho, ela já seria gravada).
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const handleChange = () => {
+    let isPressed = false;
+    const schedule = () => {
       clearTimeout(timer);
-      timer = setTimeout(read, 250);
+      timer = setTimeout(() => !isPressed && read(), 250);
     };
-    document.addEventListener('selectionchange', handleChange);
-    document.addEventListener('pointerup', handleChange);
+    const handleDown = () => {
+      isPressed = true;
+    };
+    const handleUp = () => {
+      isPressed = false;
+      schedule();
+    };
+    document.addEventListener('selectionchange', schedule);
+    document.addEventListener('pointerdown', handleDown);
+    document.addEventListener('pointerup', handleUp);
+    document.addEventListener('pointercancel', handleUp);
     return () => {
       clearTimeout(timer);
-      document.removeEventListener('selectionchange', handleChange);
-      document.removeEventListener('pointerup', handleChange);
+      document.removeEventListener('selectionchange', schedule);
+      document.removeEventListener('pointerdown', handleDown);
+      document.removeEventListener('pointerup', handleUp);
+      document.removeEventListener('pointercancel', handleUp);
     };
   }, [containerRef, enabled]);
 
