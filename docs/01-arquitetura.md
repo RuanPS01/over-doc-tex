@@ -88,6 +88,7 @@ over-doc-tex/
 │   │   │   └── hooks/                 useAiConfig, useAiStream, useProviderModels
 │   │   ├── snapshots/                 congelar versão, histórico, PDF e código de cada versão
 │   │   ├── review/                    solicitar revisão, ReviewPage (trecho, ponto, desenho), threads, fila e "Revisões para você"
+│   │   ├── pdf-rooms/                 salas de revisão de PDF avulso: enviar PDF e versões, renomear, excluir (reusa review)
 │   │   ├── notifications/             sino e gravação das notificações
 │   │   └── diff/                      "Ver alterações": código e PDF marcado (com cache em diffs/{diffKey})
 │   ├── components/

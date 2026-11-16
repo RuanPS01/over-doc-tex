@@ -56,6 +56,7 @@ Configuração da IA do usuário (`UserAiConfigDoc`): lista ordenada de modelos,
 | Campo | Tipo | Notas |
 | --- | --- | --- |
 | `name`, `description` | string, string ou null | |
+| `kind` | `'latex' \| 'pdf'` (opcional) | Ausente vale `latex`. `pdf`: sala de revisão de PDF avulso (seção 2.10). Definido na criação e nunca muda (`editingDetails` não o aceita) |
 | `ownerId` | string | uid do dono |
 | `members` | mapa `uid: 'owner' \| 'editor' \| 'viewer'` | Fonte da verdade das regras |
 | `memberIds` | string[] | Espelho das chaves de `members` para `array-contains` |
@@ -136,7 +137,8 @@ O id é o e-mail do revisor em minúsculas. A existência do documento libera a 
 | Campo | Tipo | Notas |
 | --- | --- | --- |
 | `number` | number | Sequencial ("#2"); igual ao `counters.reviews` do mesmo lote |
-| `title`, `description`, `projectName` | string | `projectName` denormalizado para o revisor |
+| `title`, `description`, `projectName` | string | `projectName` denormalizado para o revisor; ao renomear uma sala de PDF, acompanha o projeto no mesmo lote (a regra confere que é igual ao nome novo) |
+| `projectKind` | `'pdf'` (opcional) | Denormalizado como `projectName`: rodada de uma sala de PDF avulso. A tela de revisão esconde "Abrir no código" e o PDF marcado de "Ver alterações" (fica só o texto). Ausente vale `latex` |
 | `snapshotId`, `snapshotLabel`, `baseSnapshotId`, `previousReviewId` | | |
 | `requestedBy`, `requestedAt` | | |
 | `reviewerEmail` | string | Minúsculas; o primeiro e-mail convidado na criação (vazio numa revisão aberta só pelo link). As regras conferem o grant dele no lote de abertura |
@@ -230,7 +232,16 @@ Cache do diff gerado no navegador (`useVisualDiff`): o autor grava ao pedir a ro
 }
 ```
 
-### 2.10 Demais coleções
+### 2.10 Salas de revisão de PDF avulso (`kind: 'pdf'`)
+
+Um PDF qualquer, sem código, recebe as mesmas ferramentas da revisão (trecho, ponto, desenho, respostas, status, envio por e-mail ou link). A sala é um projeto com `kind: 'pdf'` e reaproveita as coleções de sempre:
+
+- **Projeto:** só o dono como membro, sem `files` nem `documents`; `mainDocumentId: 'main'`.
+- **Versão (snapshot):** cada PDF enviado. `files: []` (sem manifesto), `sourceHash` igual ao sha256 do PDF e um único documento `main`, com `rootPath` e `title` iguais ao nome do arquivo, `synctexPath: null` e os arquivos `main.pdf` e `main.pages` (até 50 MB, o mesmo teto dos arquivos de versão). A primeira é 1.0; as seguintes, ajuste ou principal, como no congelamento.
+- **Rodada (review):** cada versão abre uma, com `projectKind: 'pdf'`, `grantedDocumentIds: ['main']` e `previousReviewId` apontando para a rodada mais recente da sala (não a do mesmo revisor, como no LaTeX). As threads abertas vêm para a nova, reancoradas pela citação (pins ficam no mesmo lugar, sem SyncTeX); a anterior pode ser encerrada no mesmo envio.
+- **Exclusão:** só o dono, e só numa sala (`ownsPdfRoom` nas regras). O app apaga de baixo para cima em lotes de até 450: comentários junto com a thread, links, rodadas, concessões, fichas de visitante, pedaços e cabeçalhos dos arquivos, versões e, por último, o projeto (as regras dos filhos leem o projeto). Projeto LaTeX continua sem exclusão.
+
+### 2.11 Demais coleções
 
 - `aiConversations/{id}` e `messages/{id}`: privados do criador, gravados pelo app.
 - `referenceChecks/{id}`: relatório final de `checkReferences`, gravado por um membro.
@@ -286,6 +297,8 @@ O cache offline do Firestore (`persistentLocalCache`) também guarda os pedaços
 | Aceitar convite de coautoria | `projects/{id}` (`members`, `memberIds`, `pendingMembers`, `memberProfiles`) | O usuário entra com o papel do convite do próprio e-mail verificado, o convite some e só a entrada dele entra em `memberProfiles` |
 | Remover membro | `projects/{id}` (`members`, `memberIds`, `memberProfiles`) | Só o dono; o dono continua dono; `memberProfiles` não ganha nem muda entradas e só tem chaves de membros |
 | Carimbar correção | thread (`resolution.fixedInSnapshotId`) | Só esse campo, só em thread resolvida e ainda sem carimbo |
+| Renomear sala de PDF | `projects/{id}` (`name`, `updatedAt`) mais cada `reviews/{id}` (só `projectName`) | Quem edita; `projectName` igual ao nome do projeto depois do lote |
+| Excluir sala de PDF | comentários com a thread, depois links, rodadas, concessões, fichas, pedaços, arquivos e versões; o projeto por último | Só o dono e só com `kind: 'pdf'` |
 | Finalizar arquivo em pedaços | últimos `chunks/{i}` mais o cabeçalho (ou o documento do diff) | Cabeçalho coerente (tamanho, número de pedaços, sha256, autor, data do servidor) e último pedaço existindo depois do lote |
 
 ## 5. Regras de segurança (resumo)
@@ -293,11 +306,11 @@ O cache offline do Firestore (`persistentLocalCache`) também guarda os pedaços
 | Recurso | Ler | Escrever |
 | --- | --- | --- |
 | `users/{uid}/private/ai` | só o dono | só o dono |
-| `projects` | membros e convidados por e-mail (`list` exige `memberIds array-contains uid`) | criar como dono, com contadores zerados; detalhes por owner/editor; membros e convites pelo dono; aceite pelo convidado; cada membro grava a própria entrada em `memberProfiles` |
+| `projects` | membros e convidados por e-mail (`list` exige `memberIds array-contains uid`) | criar como dono, com contadores zerados e `kind` ausente, `latex` ou `pdf`; detalhes por owner/editor; membros e convites pelo dono; aceite pelo convidado; cada membro grava a própria entrada em `memberProfiles`; excluir só a sala de PDF, pelo dono |
 | `files`, `documents` | membros | owner/editor |
-| `snapshots` | membros ou grant por e-mail | criar no lote de congelamento; nunca alterar |
+| `snapshots` | membros ou grant por e-mail | criar no lote de congelamento; nunca alterar; excluir só numa sala de PDF, pelo dono (também os arquivos e pedaços dela) |
 | `grants` | membros ou o próprio e-mail | owner/editor |
-| `reviews` | membros ou o revisor (e-mail) | criar no lote de abertura; autor e revisor mudam status permitido |
+| `reviews` | membros ou o revisor (e-mail) | criar no lote de abertura; autor e revisor mudam status permitido; `projectName` acompanha o nome do projeto; excluir só numa sala de PDF, pelo dono |
 | `threads`, `comments` | membros ou o revisor | criar com âncora válida; status, contador e carimbo conforme a seção 4; marcação nova e exclusão (lógica ou definitiva) por quem criou a thread ou edita o projeto; texto do comentário só por quem escreveu |
 | `diffs` | membros ou grant na versão alvo | owner/editor, uma vez; com `pdf`, o último pedaço precisa existir |
 | `blobs` e `chunks` | membros | owner/editor; pedaços até o cabeçalho existir, depois nada |
@@ -306,7 +319,7 @@ O cache offline do Firestore (`persistentLocalCache`) também guarda os pedaços
 | `aiConversations`, `messages` | só o criador | só o criador |
 | `notifications` | só o destinatário | quem age, se participa do projeto ou da revisão |
 
-**Testes** (`npm run test:rules`): 95 de 95 cenários aprovados no emulador (14 para marcação nova e exclusão de thread: autor move e exclui, leitor que não criou não mexe, editor mexe em qualquer uma, tipo de âncora errado, campos fora da lista, desatualizada que volta a aberta, comentário que não sai sozinho, exclusão lógica e restauração, data de exclusão inventada, thread que nasce excluída, desenho sem comentário válido e inválido, desenho sem comentário que perderia o desenho), mais 26 de 26 na suíte "Revisão por link" (inclui a revisão aberta com vários e-mails, um grant para cada no mesmo lote, e o visitante que move, exclui e restaura a própria thread de outro aparelho pelo mesmo nome), 2 para threads levadas entre rodadas (só thread com `carriedFromThreadId` nasce `outdated`), 5 para comentário em trecho, documento não concedido e notificações, 7 para a lista de membros (`memberProfiles`: a própria entrada sim, a de outro não, o dono só remove) e 20 para os arquivos em pedaços (cabeçalho sem o último pedaço, hash diferente do id, tamanho incoerente, pedaço grande demais, gravação depois de finalizar, leitura do revisor por documento concedido). A suíte começa com o Firestore vazio (`createTestEnv` em `tests/rules/harness.mjs`).
+**Testes** (`npm run test:rules`): 95 de 95 cenários aprovados no emulador, mais 8 de 8 na suíte "Sala de PDF avulso" (criar com `kind: 'pdf'`, tipo desconhecido, tipo que não muda, nome das rodadas que acompanha o projeto, editor e revisor que não excluem, projeto LaTeX que não é excluído nem pelo dono, exclusão completa de baixo para cima) (14 para marcação nova e exclusão de thread: autor move e exclui, leitor que não criou não mexe, editor mexe em qualquer uma, tipo de âncora errado, campos fora da lista, desatualizada que volta a aberta, comentário que não sai sozinho, exclusão lógica e restauração, data de exclusão inventada, thread que nasce excluída, desenho sem comentário válido e inválido, desenho sem comentário que perderia o desenho), mais 26 de 26 na suíte "Revisão por link" (inclui a revisão aberta com vários e-mails, um grant para cada no mesmo lote, e o visitante que move, exclui e restaura a própria thread de outro aparelho pelo mesmo nome), 2 para threads levadas entre rodadas (só thread com `carriedFromThreadId` nasce `outdated`), 5 para comentário em trecho, documento não concedido e notificações, 7 para a lista de membros (`memberProfiles`: a própria entrada sim, a de outro não, o dono só remove) e 20 para os arquivos em pedaços (cabeçalho sem o último pedaço, hash diferente do id, tamanho incoerente, pedaço grande demais, gravação depois de finalizar, leitura do revisor por documento concedido). A suíte começa com o Firestore vazio (`createTestEnv` em `tests/rules/harness.mjs`).
 
 ## 6. Índices
 

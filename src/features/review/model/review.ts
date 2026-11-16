@@ -12,6 +12,9 @@ export const REVIEW_STATUS_LABELS: Record<ReviewStatus, string> = {
 
 export const MAX_COMMENT_LENGTH = 10_000;
 
+/** Teto das regras para reviewerEmails (validAccess em firestore.rules). */
+export const MAX_REVIEWER_EMAILS = 50;
+
 /** Revisão como a interface usa: datas convertidas, id junto e campos novos preenchidos. */
 export interface ReviewSummary extends Omit<ReviewDoc, 'requestedAt' | 'lastActivityAt' | 'closedAt' | 'access' | 'reviewerEmails'> {
   id: string;

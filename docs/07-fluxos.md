@@ -281,6 +281,29 @@ async function runDiff(job: DiffRequest): Promise<DiffOutcome> {
 
 O motor roda no navegador, sem servidor. A especificação completa (provedores, fila de reserva com pausa por motivo, saída estruturada com Zod, eventos, verificação de referências e testes) está em `11-servico-de-ia.md`.
 
+## Cenário E: revisão de PDF avulso (implementado)
+
+Para um PDF qualquer, sem projeto LaTeX: um relatório, um artigo já diagramado, um capítulo exportado de outro editor.
+
+### O que o usuário vê
+
+1. Em "Meus projetos", a seção "Revisões de PDF avulso" (separada dos projetos LaTeX) tem "Revisar um PDF". O diálogo pede o PDF (escolher ou arrastar, até 50 MB), o nome da sala (sugerido pelo nome do arquivo), quem pode abrir (e-mails convidados com login ou qualquer pessoa com o link), os e-mails, o título e a mensagem, como em "Solicitar revisão".
+2. "Abrir a sala de revisão" mostra o mesmo resultado da revisão de projeto: link para copiar, convites enviados por e-mail e "Abrir a revisão".
+3. A revisão é a mesma tela: comentário em trecho, ponto, desenho, respostas, status, PDF com anotações e "Envio" no cabeçalho. Sem código, não há "Abrir no código"; "Ver alterações" mostra só o texto das páginas comparado (sem o PDF marcado, que depende de recompilar). Voltar leva à tela inicial, não ao editor.
+4. Cada sala vira um cartão com a versão, o status e o revisor da rodada mais recente. O menu do cartão tem: abrir a revisão, "Envio da revisão" (acesso, link novo, mais e-mails), "Nova versão do PDF", "Rodadas" (todas, da mais nova para a mais antiga), "Renomear" e "Excluir a sala" (só o dono, com confirmação).
+5. "Nova versão do PDF" sobe outro PDF como versão 1.1 (ajuste) ou 2.0 (principal), já com o acesso e os e-mails da rodada anterior, e abre a rodada seguinte. Os comentários abertos vêm junto e, por padrão, a rodada anterior é encerrada.
+6. Quem abre `/p/{id}` de uma sala (uma notificação sem revisão, por exemplo) vai para a rodada mais recente.
+
+### Mecânica (no navegador)
+
+1. `usePublishPdf` confere a assinatura `%PDF-` e o tamanho, extrai o texto de cada página com o pdf.js (o mesmo `.pages` do congelamento) e, na sala nova, cria o projeto `kind: 'pdf'`.
+2. Grava `main.pdf` e `main.pages` da versão em pedaços e, num lote, o snapshot e o contador do projeto (as mesmas regras do congelamento).
+3. `openReviewRound` (o mesmo de "Solicitar revisão") abre a rodada num lote com os grants, o código do link e o contador; a base de "Ver alterações" é a versão da rodada mais recente da sala.
+4. Numa sala existente, `useCarryThreads` leva as threads abertas (trecho reancorado pela citação; ponto no mesmo lugar) e a rodada anterior pode ser encerrada. Por fim, os convites por e-mail.
+5. Renomear e excluir estão em `usePdfRoomActions` (modelo e regras em `06-banco-de-dados.md`, seção 2.10).
+
+Verificado de ponta a ponta contra os emuladores de Auth e Firestore, com as regras reais: sala criada pelo link, visitante sem conta comentando, autora vendo o comentário sem "Abrir no código", versão 1.1 com o acesso herdado e o comentário levado, "Ver alterações" só em texto, rota do editor indo para a rodada 2, rodadas listadas (a 1 encerrada), nome novo visto pelo visitante, exclusão completa (o link deixa de abrir) e diálogo no celular (360 px) sem rolagem horizontal.
+
 ## Importação e exportação de projeto (implementado)
 
 ### Exportar

@@ -39,10 +39,11 @@ export function DemoProjectList() {
   );
 }
 
-/** Projetos de que o usuário é membro, mais recentes primeiro. */
+/** Projetos LaTeX de que o usuário é membro, mais recentes primeiro (as salas de PDF ficam na seção delas). */
 export function ProjectList({ onCreate }: { onCreate: () => void }) {
   const { t, locale } = useT();
-  const { data: projects, isPending, isError, error, refetch } = useProjects();
+  const { data, isPending, isError, error, refetch } = useProjects();
+  const projects = useMemo(() => data?.filter((project) => project.kind !== 'pdf') ?? [], [data]);
   const dateFormat = useMemo(() => new Intl.DateTimeFormat(locale, { dateStyle: 'short', timeStyle: 'short' }), [locale]);
 
   if (isPending) {

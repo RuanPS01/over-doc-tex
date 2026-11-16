@@ -653,6 +653,77 @@ await runScenarios('Revisão por link', [
   }],
 ]);
 
+// Sala de revisão de PDF avulso (kind "pdf"): p8 da ana, com bia como editora e uma rodada completa.
+const ROOM_TOKEN = 'r'.repeat(24);
+await env.withSecurityRulesDisabled(async (ctx) => {
+  const db = ctx.firestore();
+  await setDoc(doc(db, 'projects/p8'), {
+    name: 'Artigo', kind: 'pdf', ownerId: 'ana', members: { ana: 'owner', bia: 'editor' }, memberIds: ['ana', 'bia'],
+    pendingMembers: {}, counters: { snapshots: 1, reviews: 1 }, latestSnapshotId: 's1', mainDocumentId: 'main',
+  });
+  await setDoc(doc(db, 'projects/p8/snapshots/s1'), { sequence: 1, label: '1.0', files: [] });
+  await setDoc(doc(db, 'projects/p8/snapshots/s1/grants/rev@uni.br'), { documentIds: ['main'], grantedBy: 'ana' });
+  await setDoc(doc(db, 'projects/p8/snapshots/s1/guests/g8'), { reviewId: 'r1', token: ROOM_TOKEN, name: 'Gil', guestKey: 'gil' });
+  for (const name of ['main.pdf', 'main.pages']) {
+    await setDoc(doc(db, `projects/p8/snapshots/s1/files/${name}`), { ...fileInfo(10), createdBy: 'ana', createdAt: 1 });
+    await setDoc(doc(db, `projects/p8/snapshots/s1/files/${name}/chunks/0`), { data: zeros(10) });
+  }
+  await setDoc(doc(db, 'projects/p8/reviews/r1'), {
+    number: 1, projectName: 'Artigo', projectKind: 'pdf', reviewerEmail: 'rev@uni.br', reviewerEmails: ['rev@uni.br'], reviewerUid: null,
+    snapshotId: 's1', grantedDocumentIds: ['main'], status: 'invited', access: 'link', lastActivityAt: 1,
+  });
+  await setDoc(doc(db, `projects/p8/reviews/r1/links/${ROOM_TOKEN}`), { createdBy: 'ana' });
+  await setDoc(doc(db, 'projects/p8/reviews/r1/threads/t1'), {
+    projectId: 'p8', reviewId: 'r1', createdBy: 'rev', status: 'open', resolution: null, commentCount: 1, participantIds: ['rev'],
+  });
+  await setDoc(doc(db, 'projects/p8/reviews/r1/threads/t1/comments/c1'), { authorId: 'rev', body: 'ok' });
+});
+
+const newRoom = (uid, overrides = {}) => ({
+  name: 'Relatório', kind: 'pdf', ownerId: uid, members: { [uid]: 'owner' }, memberIds: [uid], pendingMembers: {},
+  counters: { snapshots: 0, reviews: 0 }, latestSnapshotId: null, mainDocumentId: 'main', ...overrides,
+});
+
+await runScenarios('Sala de PDF avulso', [
+  ['qualquer conta cria a própria sala com kind "pdf"', () => assertSucceeds(setDoc(doc(as('eva'), 'projects/p9'), newRoom('eva')))],
+  ['tipo de projeto desconhecido é recusado', () => assertFails(setDoc(doc(as('eva'), 'projects/p10'), newRoom('eva', { kind: 'word' })))],
+  ['o tipo não muda depois da criação', () => assertFails(updateDoc(doc(as('ana'), 'projects/p8'), { kind: 'latex', updatedAt: serverTimestamp() }))],
+  ['renomear: o nome nas rodadas acompanha o projeto no mesmo lote', () => {
+    const db = as('bia');
+    const batch = writeBatch(db);
+    batch.update(doc(db, 'projects/p8'), { name: 'Artigo final', updatedAt: serverTimestamp() });
+    batch.update(doc(db, 'projects/p8/reviews/r1'), { projectName: 'Artigo final' });
+    return assertSucceeds(batch.commit());
+  }],
+  ['nome da rodada diferente do nome do projeto é recusado', () =>
+    assertFails(updateDoc(doc(as('bia'), 'projects/p8/reviews/r1'), { projectName: 'Outro nome' }))],
+  ['editor e revisor não excluem a sala nem as partes dela', async () => {
+    await assertFails(deleteDoc(doc(as('bia'), 'projects/p8')));
+    await assertFails(deleteDoc(doc(as('bia'), 'projects/p8/reviews/r1')));
+    await assertFails(deleteDoc(doc(as('bia'), 'projects/p8/snapshots/s1/files/main.pdf')));
+    await assertFails(deleteDoc(doc(rev(), 'projects/p8/reviews/r1')));
+    await assertFails(deleteDoc(doc(rev(), 'projects/p8/snapshots/s1')));
+  }],
+  ['projeto LaTeX não é excluído nem pelo dono', async () => {
+    await assertFails(deleteDoc(doc(as('ana'), 'projects/p1/reviews/r1')));
+    await assertFails(deleteDoc(doc(as('ana'), 'projects/p1/snapshots/s1/files/main.pdf/chunks/0')));
+    await assertFails(deleteDoc(doc(as('ana'), 'projects/p1/snapshots/s1')));
+    await assertFails(deleteDoc(doc(as('ana'), 'projects/p1')));
+  }],
+  ['o dono exclui a sala de baixo para cima, com o projeto por último', async () => {
+    const db = as('ana');
+    await assertSucceeds(deleteDocs(db, ['projects/p8/reviews/r1/threads/t1/comments/c1', 'projects/p8/reviews/r1/threads/t1']));
+    await assertSucceeds(deleteDocs(db, [`projects/p8/reviews/r1/links/${ROOM_TOKEN}`, 'projects/p8/reviews/r1']));
+    await assertSucceeds(deleteDocs(db, ['projects/p8/snapshots/s1/grants/rev@uni.br', 'projects/p8/snapshots/s1/guests/g8']));
+    await assertSucceeds(deleteDocs(db, [
+      'projects/p8/snapshots/s1/files/main.pdf/chunks/0', 'projects/p8/snapshots/s1/files/main.pdf',
+      'projects/p8/snapshots/s1/files/main.pages/chunks/0', 'projects/p8/snapshots/s1/files/main.pages',
+      'projects/p8/snapshots/s1',
+    ]));
+    await assertSucceeds(deleteDoc(doc(db, 'projects/p8')));
+  }],
+]);
+
 async function deleteDocs(db, paths) {
   const batch = writeBatch(db);
   for (const path of paths) batch.delete(doc(db, path));

@@ -9,6 +9,7 @@ import { ChangesDialog } from '@/features/diff/components/changes-dialog';
 import { EditorShell } from '@/features/editor/components/editor-shell';
 import { useProjectFiles } from '@/features/editor/hooks/use-project-files';
 import { EditorStoreProvider, useEditorStore } from '@/features/editor/state/editor-store';
+import { PdfRoomRedirect } from '@/features/pdf-rooms/components/pdf-room-redirect';
 import { ProjectSettingsDialog } from '@/features/projects/components/project-settings-dialog';
 import { roleOf, useProject, type ProjectInfo } from '@/features/projects/hooks/use-project';
 import { useProjectDocuments, withMainDocument } from '@/features/projects/hooks/use-project-documents';
@@ -212,6 +213,8 @@ export default function EditorPage() {
       />
     );
   }
+  // Sala de revisão de PDF avulso: não tem código, só as rodadas de revisão.
+  if (project.kind === 'pdf') return <PdfRoomRedirect projectId={projectId} />;
 
   return (
     <EditorStoreProvider key={projectId} projectId={projectId} projectName={project.name} role={role} initialFileId={MAIN_FILE_ID}>

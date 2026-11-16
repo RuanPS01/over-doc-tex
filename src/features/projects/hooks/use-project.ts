@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { useEffect } from 'react';
 import { firestorePaths } from '@shared/firestore/paths';
-import type { MemberProfile, ProjectDoc, ProjectRole } from '@shared/firestore/types';
+import type { MemberProfile, ProjectDoc, ProjectKind, ProjectRole } from '@shared/firestore/types';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { getFirebase, isFirebaseConfigured } from '@/lib/firebase/app';
 import { msg, t } from '@/lib/i18n';
@@ -13,6 +13,8 @@ export const DEMO_PROJECT_NAME = msg('Revisão Colaborativa de Documentos LaTeX'
 export interface ProjectInfo {
   id: string;
   name: string;
+  /** "pdf": sala de revisão de PDF avulso (o editor não abre; vai para a rodada mais recente). */
+  kind: ProjectKind;
   description: string | null;
   ownerId: string;
   members: Record<string, ProjectRole>;
@@ -30,6 +32,7 @@ function toProjectInfo(id: string, data: ProjectDoc): ProjectInfo {
   return {
     id,
     name: data.name,
+    kind: data.kind ?? 'latex',
     description: data.description ?? null,
     ownerId: data.ownerId,
     members: data.members ?? {},
@@ -41,6 +44,7 @@ function toProjectInfo(id: string, data: ProjectDoc): ProjectInfo {
 
 const demoProject = (): Omit<ProjectInfo, 'id'> => ({
   name: t(DEMO_PROJECT_NAME),
+  kind: 'latex',
   description: null,
   ownerId: 'demo',
   members: { demo: 'owner' },

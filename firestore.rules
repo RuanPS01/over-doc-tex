@@ -58,6 +58,12 @@ service cloud.firestore {
       return signedIn() && roleIn(pid) == 'owner';
     }
 
+    // Sala de revisão de PDF avulso (kind "pdf"): só o dono apaga a sala inteira, de baixo para
+    // cima (comentários, threads, rodadas, arquivos, versões e, por último, o projeto).
+    function ownsPdfRoom(pid) {
+      return isOwner(pid) && projectData(pid).get('kind', 'latex') == 'pdf';
+    }
+
     function grantPath(pid, sid, email) {
       return /databases/$(database)/documents/projects/$(pid)/snapshots/$(sid)/grants/$(email);
     }
@@ -291,9 +297,11 @@ service cloud.firestore {
         && next().members[uid()] == 'owner'
         && next().memberIds == [uid()]
         && pending(next()).size() == 0
-        && next().counters == {'snapshots': 0, 'reviews': 0};
+        && next().counters == {'snapshots': 0, 'reviews': 0}
+        && next().get('kind', 'latex') in ['latex', 'pdf'];
       allow update: if editingDetails() || freezingSnapshot() || openingReview() || managingMembers() || claimingInvite() || updatingOwnProfile();
-      allow delete: if false;
+      // Projeto LaTeX nunca é apagado; a sala de PDF, só pelo dono (as subcoleções saem antes).
+      allow delete: if ownsPdfRoom(pid);
 
       match /files/{fileId} {
         allow read: if isMember(pid);
@@ -345,7 +353,8 @@ service cloud.firestore {
           && request.resource.data.sequence == projectData(pid).counters.snapshots + 1
           && request.resource.data.sequence == projectAfter(pid).counters.snapshots
           && projectAfter(pid).latestSnapshotId == sid;
-        allow update, delete: if false;
+        allow update: if false;
+        allow delete: if ownsPdfRoom(pid);
 
         // Ficha do visitante que entrou pelo link de uma revisão desta versão (ver isGuest).
         // Gravada por ele mesmo, com o código do link. Sem conta, o nome vira a identidade
@@ -407,7 +416,8 @@ service cloud.firestore {
             && beforeFreeze()
             && validStoredFile(52428800)
             && lastChunkWritten(filePath(), request.resource.data);
-          allow update, delete: if false;
+          allow update: if false;
+          allow delete: if ownsPdfRoom(pid);
 
           match /chunks/{index} {
             allow read: if readable();
@@ -416,7 +426,7 @@ service cloud.firestore {
               && beforeFreeze()
               && !headerExists(filePath())
               && validChunk();
-            allow delete: if false;
+            allow delete: if ownsPdfRoom(pid);
           }
         }
       }
@@ -456,8 +466,12 @@ service cloud.firestore {
           || ((amReviewer() || isGuest(pid, rid))
             && onlyChanges(['status', 'reviewerUid', 'reviewerName', 'lastActivityAt'])
             && next().reviewerUid == uid()
-            && next().status in ['in_review', 'changes_requested', 'approved']);
-        allow delete: if false;
+            && next().status in ['in_review', 'changes_requested', 'approved'])
+          // Projeto renomeado: o nome denormalizado acompanha, no mesmo lote do projeto.
+          || (canEdit(pid)
+            && onlyChanges(['projectName'])
+            && next().projectName == projectAfter(pid).name);
+        allow delete: if ownsPdfRoom(pid);
 
         // Código do link de acesso sem conta (o id é o código). Só quem edita vê, cria e revoga;
         // o visitante prova que o conhece ao gravar a ficha (exists, nas regras acima).
