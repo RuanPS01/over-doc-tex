@@ -1,4 +1,4 @@
-import { CheckCircle2, Code2, Crosshair, Loader2, MoreHorizontal, PenLine, RotateCcw, Trash2, X } from 'lucide-react';
+import { CheckCircle2, Code2, Crosshair, Loader2, MoreHorizontal, PenLine, Pencil, RotateCcw, Trash2, X } from 'lucide-react';
 import { forwardRef, useState, type MouseEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -49,6 +49,8 @@ interface ThreadCardProps {
   onEditComment: (commentId: string, body: string, previous: string) => Promise<unknown>;
   onDeleteComment: (commentId: string, body: string) => Promise<unknown>;
   onRelocate: () => void;
+  /** Só no comentário com desenho: abre o desenho para editar. */
+  onEditDrawing?: () => void;
   onCancelRelocate: () => void;
   onDelete: () => Promise<unknown>;
 }
@@ -73,6 +75,7 @@ export const ThreadCard = forwardRef<HTMLLIElement, ThreadCardProps>(function Th
     onEditComment,
     onDeleteComment,
     onRelocate,
+    onEditDrawing,
     onCancelRelocate,
     onDelete,
   },
@@ -157,6 +160,12 @@ export const ThreadCard = forwardRef<HTMLLIElement, ThreadCardProps>(function Th
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" collisionPadding={8} className="w-64 max-w-[calc(100vw-1rem)]">
+              {onEditDrawing && (
+                <DropdownMenuItem disabled={isRelocating} onSelect={onEditDrawing}>
+                  <Pencil />
+                  {t('Editar o desenho')}
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem disabled={isRelocating} onSelect={onRelocate}>
                 <Crosshair />
                 {t('Refazer a marcação no PDF')}

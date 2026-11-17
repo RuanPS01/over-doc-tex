@@ -1,12 +1,17 @@
-import { useRef, useState, type PointerEvent } from 'react';
-import type { AnnotationColor, NormalizedPoint } from '@shared/firestore/types';
+import { useRef, useState, type MouseEvent, type PointerEvent } from 'react';
+import type { NormalizedPoint, Stroke, TextBox } from '@shared/firestore/types';
+import { useElementSize } from '@/hooks/use-element-size';
 import { useT } from '@/hooks/use-t';
 import { movePin } from '@/lib/pdf/drawing';
 import { cn } from '@/lib/utils';
 import { usePinDrag } from '../hooks/use-pin-drag';
+import { constrainEnd, strokeFromInput, styledStroke, type DrawStyle } from '../model/markup';
 import type { PendingAnnotation, ReviewTool, ThreadSummary } from '../model/review';
 import { DrawingMark } from './drawing-mark';
+import { DrawingView } from './drawing-view';
 import { Strokes } from './strokes';
+import { TextBoxEditor } from './text-box-editor';
+import { TextBoxView } from './text-box-view';
 
 interface AnnotationLayerProps {
   page: number;
@@ -21,8 +26,19 @@ interface AnnotationLayerProps {
   onPlacePin: (page: number, point: { x: number; y: number }) => void;
   /** Um traço começou (verdadeiro) ou acabou, valendo ou não (falso): o salvamento automático da remarcação espera. */
   onStrokingChange?: (active: boolean) => void;
-  /** Traço terminado (pontos normalizados [x, y]). */
-  onStroke: (page: number, points: Array<[number, number]>) => void;
+  /** Ferramenta, cores e espessura do desenho (painel "Desenho"). */
+  drawStyle: DrawStyle;
+  /** Traço ou forma terminada, já no formato gravado. */
+  onStroke: (page: number, stroke: Stroke) => void;
+  /** Caixa de texto do rascunho em edição (ferramenta "Texto"). */
+  activeTextIndex: number | null;
+  /** Clique num lugar vazio com "Texto": caixa nova aqui. */
+  onTextCreate: (page: number, point: NormalizedPoint) => void;
+  /** Escolhe outra caixa do rascunho (ou nenhuma). */
+  onTextSelect: (index: number | null) => void;
+  onTextChange: (index: number, box: TextBox) => void;
+  /** Abre um desenho gravado para editar. */
+  onEditDrawing: (thread: ThreadSummary) => void;
   onSelect: (threadId: string) => void;
   onSelectDrawing: (threadId: string) => void;
   /** Pins (com ou sem desenho) que a pessoa pode arrastar, e desenhos que ela pode apagar: quem criou ou edita o projeto. */
@@ -54,7 +70,13 @@ export function AnnotationLayer({
   selectedDrawingId,
   onPlacePin,
   onStrokingChange,
+  drawStyle,
   onStroke,
+  activeTextIndex,
+  onTextCreate,
+  onTextSelect,
+  onTextChange,
+  onEditDrawing,
   onSelect,
   onSelectDrawing,
   canMove,
@@ -68,32 +90,58 @@ export function AnnotationLayer({
     const thread = threads.find((item) => item.thread.id === threadId)?.thread;
     return thread ? onMovePin(thread, point) : Promise.resolve();
   });
+  const size = useElementSize(rootRef);
+  const aspect = size.width > 0 ? size.height / size.width : 1;
   const [live, setLive] = useState<Array<[number, number]> | null>(null);
   const liveRef = useRef<Array<[number, number]> | null>(null);
-  const pendingColor: AnnotationColor = pending?.kind === 'draw' ? pending.color : 'annotation-2';
+  const freehand = drawStyle.tool === 'pen' || drawStyle.tool === 'highlighter';
 
   const pointOf = (event: PointerEvent<HTMLDivElement>): [number, number] => {
     const box = event.currentTarget.getBoundingClientRect();
     return [clamp((event.clientX - box.left) / box.width), clamp((event.clientY - box.top) / box.height)];
   };
 
+  /** Ponteiro em pixels da página (para as alças da caixa de texto). */
+  const toPage = (clientX: number, clientY: number): [number, number] => {
+    const box = rootRef.current?.getBoundingClientRect();
+    return box ? [clientX - box.left, clientY - box.top] : [0, 0];
+  };
+
   const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    const [x, y] = pointOf(event);
+    const point = { x: Math.round(x * 10_000) / 10_000, y: Math.round(y * 10_000) / 10_000 };
     if (tool === 'pin') {
-      const [x, y] = pointOf(event);
-      onPlacePin(page, { x: Math.round(x * 10_000) / 10_000, y: Math.round(y * 10_000) / 10_000 });
+      onPlacePin(page, point);
       return;
     }
     if (tool !== 'draw') return;
     onStrokingChange?.(true);
     event.currentTarget.setPointerCapture(event.pointerId);
-    liveRef.current = [pointOf(event)];
+    liveRef.current = [[x, y]];
     setLive(liveRef.current);
   };
 
   const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
     if (tool !== 'draw' || !liveRef.current) return;
-    liveRef.current = [...liveRef.current, pointOf(event)];
+    const point = pointOf(event);
+    // Forma: só o começo e o ponto atual (com Shift, quadrado, círculo ou 45 graus).
+    liveRef.current = freehand ? [...liveRef.current, point] : [liveRef.current[0]!, event.shiftKey ? constrainEnd(drawStyle.tool, liveRef.current[0]!, point, aspect) : point];
     setLive(liveRef.current);
+  };
+
+  /**
+   * "Texto": o toque (clique) num lugar vazio cria a caixa; no celular, começar a rolar a página não
+   * cria nada. Com uma caixa em edição, o clique fora só termina a edição; o próximo cria outra.
+   */
+  const handleClick = (event: MouseEvent<HTMLDivElement>) => {
+    if (tool !== 'write') return;
+    if (activeTextIndex !== null) {
+      onTextSelect(null);
+      return;
+    }
+    const box = event.currentTarget.getBoundingClientRect();
+    const round = (value: number) => Math.round(clamp(value) * 10_000) / 10_000;
+    onTextCreate(page, { x: round((event.clientX - box.left) / box.width), y: round((event.clientY - box.top) / box.height) });
   };
 
   const finishStroke = () => {
@@ -101,8 +149,13 @@ export function AnnotationLayer({
     liveRef.current = null;
     setLive(null);
     if (points) onStrokingChange?.(false);
-    if (points && points.length >= 2) onStroke(page, points);
+    const stroke = points ? strokeFromInput(drawStyle, points) : null;
+    if (stroke) onStroke(page, stroke);
   };
+
+  // Prévia do traço em andamento, com o estilo escolhido (sem simplificar).
+  const liveStroke: Stroke | null = live ? styledStroke(drawStyle, freehand ? live.flat() : [...live[0]!, ...live.at(-1)!]) : null;
+  const draft = pending?.kind === 'draw' && pending.page === page ? pending : null;
 
   return (
     <div
@@ -112,22 +165,26 @@ export function AnnotationLayer({
         tool === 'select' && 'pointer-events-none',
         tool === 'pin' && 'cursor-crosshair',
         tool === 'draw' && 'cursor-crosshair touch-none',
+        tool === 'write' && 'cursor-text',
       )}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={finishStroke}
       onPointerCancel={finishStroke}
+      onClick={handleClick}
     >
       {drawings.map((thread) =>
         thread.id === relocatingThreadId ? null : (
           <DrawingMark
             key={thread.id}
             thread={thread}
+            size={size}
             isSelected={thread.id === selectedDrawingId}
             isInteractive={tool === 'select'}
             canDelete={canMove(thread)}
             onSelect={() => onSelectDrawing(thread.id)}
             onDelete={() => onDeleteDrawing(thread)}
+            onEdit={() => onEditDrawing(thread)}
           />
         ),
       )}
@@ -182,7 +239,7 @@ export function AnnotationLayer({
         const shown = isDragging ? movePin(thread.anchor.point, thread.anchor.drawing, pinDrag.drag!.point) : thread.anchor;
         return (
           <div key={thread.id}>
-            {shown.drawing && <Strokes strokes={shown.drawing.strokes} faded={isResolved} />}
+            {shown.drawing && <DrawingView strokes={shown.drawing.strokes} texts={shown.drawing.texts} size={size} faded={isResolved} />}
             <button
               type="button"
               aria-label={t('Comentário {number}', { number })}
@@ -215,8 +272,29 @@ export function AnnotationLayer({
             className="absolute animate-pulse rounded-sm bg-annotation-3/30"
           />
         ))}
-      {pending?.kind === 'draw' && pending.page === page && <Strokes strokes={pending.strokes} />}
-      {live && <Strokes strokes={[{ tool: 'pen', color: pendingColor, width: 0.004, points: live.flat() }]} />}
+      {draft && <Strokes strokes={draft.strokes} size={size} />}
+      {draft?.texts.map((box, index) =>
+        tool === 'write' && index === activeTextIndex ? (
+          <TextBoxEditor
+            key={index}
+            box={box}
+            size={size}
+            toPage={toPage}
+            autoFocus
+            onChange={(next) => onTextChange(index, next)}
+            onDone={() => onTextSelect(null)}
+          />
+        ) : (
+          <TextBoxView
+            key={index}
+            box={box}
+            pageWidth={size.width}
+            onClick={tool === 'write' ? () => onTextSelect(index) : undefined}
+            label={t('Editar este texto')}
+          />
+        ),
+      )}
+      {liveStroke && <Strokes strokes={[liveStroke]} size={size} />}
     </div>
   );
 }

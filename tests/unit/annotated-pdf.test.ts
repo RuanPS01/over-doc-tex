@@ -21,7 +21,18 @@ const palette: AnnotatedPdfInput['palette'] = {
   panel: color('0 0% 96.5%'),
   paper: color('0 0% 100%'),
   pinText: color('0 0% 100%'),
-  annotation: { 'annotation-1': color('48 96% 53%'), 'annotation-2': color('0 84% 60%'), 'annotation-3': color('217 91% 60%'), 'annotation-4': color('142 71% 45%') },
+  annotation: {
+    'annotation-1': color('48 96% 53%'),
+    'annotation-2': color('0 84% 60%'),
+    'annotation-3': color('217 91% 60%'),
+    'annotation-4': color('142 71% 45%'),
+    'annotation-5': color('25 95% 53%'),
+    'annotation-6': color('271 81% 56%'),
+    'annotation-7': color('330 81% 60%'),
+    'annotation-8': color('0 0% 9%'),
+    'annotation-9': color('0 0% 55%'),
+    'annotation-10': color('0 0% 100%'),
+  },
 };
 const text: AnnotatedPdfInput['text'] = {
   heading: 'Revisão #1 · versão 1.0 · comentários',
@@ -155,6 +166,52 @@ describe('PDF com anotações: arquivo final', () => {
     const result = await buildAnnotatedPdf(await samplePdf(1), { threads: [pin(1, 1, 0.2, long)], text, palette });
     const doc = await PDFDocument.load(result);
     expect(doc.getPageCount()).toBeGreaterThan(1);
+  });
+
+  it('formas, preenchimento, transparência e texto girado vão para a página', async () => {
+    const drawn: AnnotatedPdfThread = {
+      ...pin(1, 1, 0.1),
+      markOnly: true,
+      anchor: {
+        type: 'pin',
+        page: 1,
+        point: { x: 0.9, y: 0.1 },
+        drawing: {
+          bounds: { x: 0.1, y: 0.1, width: 0.8, height: 0.6 },
+          strokes: [
+            { tool: 'rect', color: 'annotation-8', width: 0.004, points: [0.1, 0.1, 0.4, 0.3], fill: { color: 'annotation-1', opacity: 0.3 } },
+            { tool: 'ellipse', color: 'annotation-3', width: 0.003, points: [0.5, 0.1, 0.9, 0.3], dash: 'dashed', opacity: 0.5 },
+            { tool: 'arrow', color: 'annotation-2', width: 0.004, points: [0.1, 0.5, 0.6, 0.6], dash: 'dotted' },
+            { tool: 'highlighter', color: 'annotation-1', width: 0.02, points: [0.1, 0.7, 0.5, 0.7] },
+          ],
+          texts: [
+            {
+              text: 'Revisar esta seção\ncom calma ação',
+              rect: { x: 0.2, y: 0.4, width: 0.4, height: 0.1 },
+              rotation: -20,
+              font: 'serif',
+              size: 0.02,
+              color: 'annotation-6',
+              opacity: 0.9,
+              bold: true,
+              italic: true,
+              underline: true,
+              strike: false,
+              align: 'center',
+              background: { color: 'annotation-10', opacity: 0.7 },
+              border: 'annotation-9',
+            },
+          ],
+        },
+      },
+    };
+    const result = await buildAnnotatedPdf(await samplePdf(1), { threads: [drawn], text, palette });
+    const doc = await PDFDocument.load(result);
+    expect(doc.getPageCount()).toBe(1);
+    // A fonte do texto (Times negrito itálico) foi embutida só porque o texto a usa.
+    const fonts = doc.context.enumerateIndirectObjects().map(([, object]) => String(object)).filter((object) => object.includes('/BaseFont'));
+    expect(fonts.some((font) => font.includes('Times-BoldItalic'))).toBe(true);
+    expect(fonts.some((font) => font.includes('Courier'))).toBe(false);
   });
 
   it('página girada: a margem fica à direita de quem lê', async () => {

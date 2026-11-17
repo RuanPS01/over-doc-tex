@@ -70,8 +70,21 @@ export type ThreadKind = 'text' | 'pin';
 export type ThreadStatus = 'open' | 'resolved' | 'wont_fix' | 'outdated';
 export type ResolutionKind = 'fixed_next_version' | 'answered' | 'not_applicable';
 export type CommentKind = 'comment' | 'status_change' | 'system';
-/** Cores de anotação como tokens semânticos (ver docs/03-identidade-visual.md). */
-export type AnnotationColor = 'annotation-1' | 'annotation-2' | 'annotation-3' | 'annotation-4';
+/**
+ * Cores de anotação como tokens semânticos (ver docs/03-identidade-visual.md): amarelo, vermelho,
+ * azul, verde, laranja, roxo, rosa, preto, cinza e branco. Grava-se o nome do token, nunca a cor.
+ */
+export type AnnotationColor =
+  | 'annotation-1'
+  | 'annotation-2'
+  | 'annotation-3'
+  | 'annotation-4'
+  | 'annotation-5'
+  | 'annotation-6'
+  | 'annotation-7'
+  | 'annotation-8'
+  | 'annotation-9'
+  | 'annotation-10';
 export type DiffGranularity = 'word' | 'paragraph' | 'text-only';
 export type NotificationType =
   | 'review_requested'
@@ -388,21 +401,62 @@ export interface TextAnchor {
   position: { start: number; end: number };
 }
 
+/** Traço livre, marca-texto ou forma geométrica do desenho. */
+export type StrokeTool = 'pen' | 'highlighter' | 'line' | 'arrow' | 'rect' | 'ellipse';
+export type LineStyle = 'solid' | 'dashed' | 'dotted';
+
 export interface Stroke {
-  tool: 'pen' | 'highlighter';
+  tool: StrokeTool;
+  /** Cor do traço (ou da borda, nas formas). */
   color: AnnotationColor;
   /** Espessura como fração da largura da página. */
   width: number;
   /**
    * Pontos achatados [x0, y0, x1, y1, ...] normalizados.
    * O Firestore não aceita arrays diretamente aninhados, por isso não usamos [[x, y]].
-   * Os traços são simplificados (Ramer-Douglas-Peucker) antes de gravar.
+   * Traço livre e marca-texto: o caminho, simplificado (Ramer-Douglas-Peucker) antes de gravar.
+   * Linha e seta: início e fim. Retângulo e elipse: dois cantos opostos da caixa.
    */
   points: number[];
+  /** Opacidade do traço, de 0 a 1. Ausente: 1 (0,4 no marca-texto). */
+  opacity?: number;
+  /** Estilo da linha. Ausente: contínua. */
+  dash?: LineStyle;
+  /** Preenchimento do retângulo e da elipse. Ausente ou nulo: sem preenchimento. */
+  fill?: { color: AnnotationColor; opacity: number } | null;
+}
+
+export type TextFont = 'sans' | 'serif' | 'mono';
+export type TextAlign = 'left' | 'center' | 'right';
+
+/** Texto flutuante escrito sobre a página, numa caixa que pode ser movida, redimensionada e girada. */
+export interface TextBox {
+  text: string;
+  /** Caixa antes da rotação, de 0 a 1 na página. */
+  rect: NormalizedRect;
+  /** Graus no sentido horário, em torno do centro da caixa. */
+  rotation: number;
+  font: TextFont;
+  /** Tamanho da letra como fração da largura da página (acompanha o zoom). */
+  size: number;
+  color: AnnotationColor;
+  /** De 0 a 1. */
+  opacity: number;
+  bold: boolean;
+  italic: boolean;
+  underline: boolean;
+  strike: boolean;
+  align: TextAlign;
+  /** Fundo da caixa; nulo é transparente. */
+  background: { color: AnnotationColor; opacity: number } | null;
+  /** Borda da caixa; nulo é sem borda. */
+  border: AnnotationColor | null;
 }
 
 export interface Drawing {
   strokes: Stroke[];
+  /** Textos flutuantes do desenho. Ausente nos desenhos antigos e nos que só têm traços. */
+  texts?: TextBox[];
   bounds: NormalizedRect;
 }
 

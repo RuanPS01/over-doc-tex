@@ -48,6 +48,8 @@ interface PdfDocumentViewProps {
   downloadOptions?: readonly PdfDownloadOption[];
   /** Um desses downloads está sendo gerado (o botão gira e fica desligado). */
   isPreparingDownload?: boolean;
+  /** Painel que flutua no canto superior direito da área do PDF, sem rolar com as páginas. */
+  floatingPanel?: ReactNode;
 }
 
 /**
@@ -72,6 +74,7 @@ export function PdfDocumentView({
   onAreaClick,
   downloadOptions,
   isPreparingDownload = false,
+  floatingPanel,
 }: PdfDocumentViewProps) {
   const { t } = useT();
   const [zoomIndex, setZoomIndex] = useState(2);
@@ -171,6 +174,7 @@ export function PdfDocumentView({
         </Button>
       </div>
       <PdfOutlineFrame outline={outline} frameRef={frameRef} widthKey={`overdoctex.pdf-outline-width.${outlineKey}`}>
+        <div className="relative flex min-h-0 min-w-0 flex-1">
         <div ref={areaRef} className="relative min-h-0 min-w-0 flex-1 overflow-auto p-3 sm:p-4" onClick={onAreaClick}>
           {shownError ? (
             <p className="m-auto max-w-sm p-6 text-center text-sm text-destructive">{shownError}</p>
@@ -191,6 +195,8 @@ export function PdfDocumentView({
               {loadingLabel ?? t('Carregando o PDF')}
             </p>
           )}
+        </div>
+        {floatingPanel && <div className="pointer-events-none absolute bottom-2 right-2 top-2 z-20 flex flex-col items-end">{floatingPanel}</div>}
         </div>
       </PdfOutlineFrame>
     </section>

@@ -111,17 +111,21 @@ ReviewPage                               pages/review-page.tsx: membro entra com
     │   ├── título                       seletor de documento quando a revisão concede mais de um; no espaço livre da barra, à direita,
     │   │                                junto das ferramentas, a dica da ferramenta (Ponto, Desenhar) ou a mensagem de quem pediu a revisão
     │   ├── Marcações (Switch)           liga e desliga destaques, desenhos e pins no PDF; desligado, as ferramentas e o "Comentar trecho" somem
-    │   ├── ferramentas                  Selecionar texto | Ponto | Desenhar (na barra do PDF)
+    │   ├── ferramentas                  Selecionar texto | Ponto | Desenhar | Texto (na barra do PDF)
+    │   ├── MarkupPanel                  painel flutuante e recolhível no canto superior direito da área do PDF (floatingPanel):
+    │   │                                "Desenho" (ferramenta, cores, espessura, opacidade, linha, preenchimento) ou "Texto" (fonte,
+    │   │                                tamanho, estilo, alinhamento, cores, fundo, borda, rotação); "Salvar alterações" na edição
     │   ├── UndoRedoButtons              Desfazer e Refazer na barra (a partir de sm; no celular, flutuando à esquerda, embaixo)
-    │   └── AnnotationLayer (por página) destaques dos trechos, desenhos (Strokes), pins numerados, desenhos sem comentário
-    │                                    (DrawingMark: clicar seleciona e mostra "Apagar desenho") e a marcação pendente
+    │   └── AnnotationLayer (por página) destaques dos trechos, desenhos (DrawingView: Strokes em SVG e TextBoxView), pins numerados,
+    │                                    desenhos sem comentário (DrawingMark: clicar seleciona e mostra "Editar" e "Apagar desenho"),
+    │                                    a marcação pendente e a caixa de texto em edição (TextBoxEditor: mover, redimensionar, girar)
     ├── SelectionPopover                 "Comentar trecho" logo abaixo da seleção de texto
     ├── ThreadList                       painel de comentários redimensionável e recolhível (desktop) ou Sheet inferior (celular)
-    │   ├── PendingAnnotationPanel       comentário da marcação nova (citação do trecho; cor, desfazer traço e "Manter só o desenho"
-    │   │                                no desenho); rola para ficar à vista quando a marcação muda
+    │   ├── PendingAnnotationPanel       comentário da marcação nova (citação do trecho; "Manter só o desenho" ou "só o texto" e
+    │   │                                desfazer traço no desenho); rola para ficar à vista quando a marcação muda
     │   └── ThreadCard                   citação, "Rodada anterior" (conversa da thread de origem), comentários (ThreadComments: editar
     │                                    o próprio texto, excluir a própria resposta), responder, resolver ou reabrir, "Abrir no código"
-    │                                    (autor), aviso de "Desatualizada" e o menu "..." (Refazer a marcação no PDF, Excluir comentário)
+    │                                    (autor), aviso de "Desatualizada" e o menu "..." (Editar o desenho, Refazer a marcação no PDF, Excluir comentário)
     └── ReviewChangesDialog              abas "PDF marcado" (DiffPdfViewer) e "Texto" (DiffView do texto das páginas)
 ```
 
@@ -130,7 +134,8 @@ Pontos de atenção:
 - **Índice do documento:** na revisão, o índice (marcadores do PDF) abre por padrão ao lado das páginas para guiar a leitura; a escolha de fechar fica lembrada neste navegador (`overdoctex.pdf-outline.review`). Num visualizador estreito (celular), começa fechado e abre por cima do PDF.
 - **Dica e mensagem sem faixa nova:** a dica de "Ponto" e "Desenhar" e a mensagem do pedido de revisão ficam no espaço livre da barra do PDF, alinhadas à direita, junto das ferramentas, então escolher uma ferramenta não empurra o PDF para baixo. No celular a barra não tem espaço: a dica flutua sobre o topo do PDF (sem ocupar espaço) e a mensagem fica no topo do painel de comentários.
 - **Painéis redimensionáveis (desktop):** como as colunas do editor, o índice, as páginas e os comentários ficam lado a lado e as bordas entre eles arrastam para mudar a largura. Arrastar o índice ou os comentários até a borda recolhe o painel, e puxar a borda abre de novo. O índice também abre e fecha pelo botão no começo da barra do PDF; os comentários, pelo botão com o total de comentários na mesma barra e pelo botão no topo do painel. Começar um comentário (trecho, ponto ou desenho) ou escolher uma marcação no PDF reabre os comentários. Ao reabrir, o painel volta com a última largura usada, e não com o mínimo. Comentários: 384px por padrão, de 260px até 55% da tela, grupo lembrado em `review-desktop`. Índice: 224px por padrão, de 160px até metade do visualizador.
-- **Coordenadas normalizadas:** destaques, traços e pins usam valores de 0 a 1, então zoom e tamanho de tela não exigem recalcular nada no banco. Os traços são SVG com `vector-effect: non-scaling-stroke`.
+- **Coordenadas normalizadas:** destaques, traços, formas, textos e pins usam valores de 0 a 1, então zoom e tamanho de tela não exigem recalcular nada no banco. A camada mede a página na tela (`useElementSize`) e desenha em pixels: a espessura do traço e o tamanho da letra são frações da largura da página e acompanham o zoom.
+- **Desenho e texto:** o painel flutuante aparece com "Desenhar" e "Texto" e na edição de um desenho gravado; fica por cima do PDF, no canto superior direito, sem rolar com as páginas, e recolhe num botão. Com o painel na tela, a dica da ferramenta no celular vai para a esquerda. Os detalhes do fluxo estão em `07-fluxos.md` (cenário B, "Pin com desenho livre, formas e texto flutuante").
 - **Pins semitransparentes:** os números sobre a página ficam com 60% de opacidade (45% nos resolvidos) para o texto embaixo continuar legível; ficam opacos no hover, no foco e quando a thread está selecionada.
 - **Mexer num comentário:** quem criou a thread (o visitante pelo mesmo nome, em qualquer aparelho) e quem edita o projeto veem o menu "..." no cartão: "Refazer a marcação no PDF" e "Excluir comentário" (com confirmação dentro do cartão; a marcação e todas as respostas somem, e o desfazer traz de volta). Na remarcação, a marcação antiga sai do PDF na hora e a ferramenta segue o tipo dela (trecho: "Selecionar texto"; ponto: "Ponto"; desenho: "Desenhar", na mesma cor). A marcação nova vale sozinha: soltar a seleção, clicar o ponto ou parar de desenhar por 1,2 s (dá para fazer vários traços; o salvamento espera o traço em andamento). O cartão mostra o que fazer e "Cancelar remarcação" (Esc também cancela, e no celular o botão flutuante vira "Cancelar remarcação"), que traz a marcação antiga de volta. A conversa continua a mesma, e uma thread desatualizada volta a aberta. Os mesmos arrastam o pin no PDF para mudar de lugar (o desenho vai junto, sem sair da página); o arraste só começa depois de 4px, então um clique continua abrindo a thread. Texto de um comentário só quem escreveu edita (lápis, salvo com "editado" ao lado da data) e só quem escreveu exclui a própria resposta (fica "Comentário excluído."). Os botões aparecem no hover e sempre em telas de toque. Nada disso aparece com a revisão encerrada.
 - **Desenho sem comentário:** no painel do desenho novo, "Manter só o desenho" grava só o desenho (`drawingOnly`): sem cartão nem número. Clicar no traço (em "Selecionar texto") seleciona o desenho, com contorno tracejado e, para quem pode, "Apagar desenho". Ele entra no PDF com anotações sem cartão na margem.

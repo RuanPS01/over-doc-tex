@@ -1,7 +1,8 @@
 import type { PDFDocument, PDFFont, PDFPage } from 'pdf-lib';
-import type { AnnotationColor, NormalizedRect, ThreadAnchor } from '@shared/firestore/types';
+import type { AnnotationColor, NormalizedRect, Stroke, TextBox, ThreadAnchor } from '@shared/firestore/types';
 import type { RgbColor } from '@/lib/color';
 import { ellipsize, layoutMarginBoxes, markdownToPlainText, wrapText } from './comment-layout';
+import { TEXT_BORDER_FRACTION, TEXT_LINE_HEIGHT, TEXT_PADDING, arrowHead, strokeOpacity } from './drawing';
 
 /**
  * PDF da revisão com as marcações e os comentários (opção "PDF com anotações"
@@ -187,9 +188,16 @@ interface Fonts {
   italic: PDFFont;
 }
 
+/** Fonte de um texto flutuante: família, negrito e itálico (as 12 fontes padrão do PDF). */
+type TextFontKey = `${TextBox['font']}-${boolean}-${boolean}`;
+
+const textFontKey = (box: Pick<TextBox, 'font' | 'bold' | 'italic'>): TextFontKey => `${box.font}-${box.bold}-${box.italic}`;
+
 interface Context {
   lib: typeof import('pdf-lib');
   fonts: Fonts;
+  /** Fontes dos textos flutuantes, embutidas só as que aparecem. */
+  textFonts: Map<TextFontKey, PDFFont>;
   /** Troca o que a fonte padrão (WinAnsi) não desenha: sem isso o pdf-lib lança erro. */
   encode: (text: string) => string;
   input: AnnotatedPdfInput;
@@ -329,6 +337,145 @@ function pinPoint(anchor: ThreadAnchor): { x: number; y: number } {
   return { x: first?.x ?? 0, y: first?.y ?? 0 };
 }
 
+/** Tracejado ou pontilhado do traço, em pontos (o mesmo desenho da tela). */
+function dashOf(stroke: Stroke, lineWidth: number): number[] | undefined {
+  if (stroke.dash === 'dashed') return [lineWidth * 4, lineWidth * 2.5];
+  if (stroke.dash === 'dotted') return [0.1, lineWidth * 2.2];
+  return undefined;
+}
+
+/**
+ * Traço livre, marca-texto, linha, seta, retângulo ou elipse, com cor,
+ * espessura, opacidade, tracejado e preenchimento. Os caminhos SVG do pdf-lib
+ * usam y para baixo a partir do topo (origem em x 0, y `height`).
+ */
+function drawStroke(ctx: Context, page: PDFPage, stroke: Stroke, width: number, height: number, fade: number) {
+  const { lib, input } = ctx;
+  const lineWidth = Math.max(0.5, stroke.width * width);
+  const opacity = strokeOpacity(stroke) * fade;
+  const borderColor = colorOf(ctx, input.palette.annotation[stroke.color]);
+  const dash = dashOf(stroke, lineWidth);
+  const fill = stroke.fill ? { color: colorOf(ctx, input.palette.annotation[stroke.fill.color]), opacity: stroke.fill.opacity * fade } : null;
+  const [x1 = 0, y1 = 0, x2 = 0, y2 = 0] = stroke.points;
+
+  if (stroke.tool === 'rect') {
+    page.drawRectangle({
+      x: Math.min(x1, x2) * width,
+      y: height - Math.max(y1, y2) * height,
+      width: Math.abs(x2 - x1) * width,
+      height: Math.abs(y2 - y1) * height,
+      borderColor,
+      borderWidth: lineWidth,
+      borderOpacity: opacity,
+      borderDashArray: dash,
+      borderLineCap: dash ? lib.LineCapStyle.Round : undefined,
+      ...(fill ? { color: fill.color, opacity: fill.opacity } : {}),
+    });
+    return;
+  }
+  if (stroke.tool === 'ellipse') {
+    page.drawEllipse({
+      x: ((x1 + x2) / 2) * width,
+      y: height - ((y1 + y2) / 2) * height,
+      xScale: (Math.abs(x2 - x1) / 2) * width,
+      yScale: (Math.abs(y2 - y1) / 2) * height,
+      borderColor,
+      borderWidth: lineWidth,
+      borderOpacity: opacity,
+      borderDashArray: dash,
+      borderLineCap: dash ? lib.LineCapStyle.Round : undefined,
+      ...(fill ? { color: fill.color, opacity: fill.opacity } : {}),
+    });
+    return;
+  }
+  if (stroke.tool === 'line' || stroke.tool === 'arrow') {
+    page.drawLine({
+      start: { x: x1 * width, y: height - y1 * height },
+      end: { x: x2 * width, y: height - y2 * height },
+      thickness: lineWidth,
+      color: borderColor,
+      opacity,
+      dashArray: dash,
+      lineCap: lib.LineCapStyle.Round,
+    });
+    if (stroke.tool === 'arrow') {
+      const head = arrowHead(x1 * width, y1 * height, x2 * width, y2 * height, lineWidth);
+      page.drawSvgPath(`M ${head.map(([x, y]) => `${x.toFixed(2)} ${y.toFixed(2)}`).join(' L ')} Z`, {
+        x: 0,
+        y: height,
+        color: borderColor,
+        opacity,
+        borderColor,
+        borderWidth: lineWidth / 2,
+        borderOpacity: opacity,
+        borderLineCap: lib.LineCapStyle.Round,
+      });
+    }
+    return;
+  }
+  const points: string[] = [];
+  for (let i = 0; i + 1 < stroke.points.length; i += 2) points.push(`${(stroke.points[i]! * width).toFixed(2)} ${(stroke.points[i + 1]! * height).toFixed(2)}`);
+  if (points.length < 2) return;
+  page.drawSvgPath(`M ${points.join(' L ')}`, {
+    x: 0,
+    y: height,
+    borderColor,
+    borderWidth: lineWidth,
+    borderOpacity: opacity,
+    borderDashArray: dash,
+    borderLineCap: stroke.tool === 'highlighter' ? lib.LineCapStyle.Butt : lib.LineCapStyle.Round,
+    blendMode: stroke.tool === 'highlighter' ? lib.BlendMode.Multiply : undefined,
+  });
+}
+
+/**
+ * Caixa de texto flutuante: fundo, borda e as linhas quebradas na largura da
+ * caixa, tudo girado em torno do centro como na tela (o ângulo da tela é no
+ * sentido horário com y para baixo; aqui, y para cima, ele troca de sinal).
+ */
+function drawTextBox(ctx: Context, page: PDFPage, box: TextBox, width: number, height: number, fade: number) {
+  const { lib, input } = ctx;
+  const font = ctx.textFonts.get(textFontKey(box)) ?? ctx.fonts.regular;
+  const boxWidth = box.rect.width * width;
+  const boxHeight = box.rect.height * height;
+  const center = { x: (box.rect.x + box.rect.width / 2) * width, y: height - (box.rect.y + box.rect.height / 2) * height };
+  const angle = -box.rotation;
+  const radians = (angle * Math.PI) / 180;
+  // Ponto local (a partir do centro, y para cima) já girado e levado para a página.
+  const at = (dx: number, dy: number) => ({ x: center.x + dx * Math.cos(radians) - dy * Math.sin(radians), y: center.y + dx * Math.sin(radians) + dy * Math.cos(radians) });
+  const rotate = lib.degrees(angle);
+  const corner = at(-boxWidth / 2, -boxHeight / 2);
+
+  if (box.background) {
+    page.drawRectangle({ ...corner, width: boxWidth, height: boxHeight, rotate, color: colorOf(ctx, input.palette.annotation[box.background.color]), opacity: box.background.opacity * fade });
+  }
+  if (box.border) {
+    page.drawRectangle({ ...corner, width: boxWidth, height: boxHeight, rotate, borderColor: colorOf(ctx, input.palette.annotation[box.border]), borderWidth: Math.max(0.5, TEXT_BORDER_FRACTION * width), borderOpacity: fade });
+  }
+
+  const fontSize = box.size * width;
+  if (fontSize <= 0) return;
+  const padding = fontSize * TEXT_PADDING;
+  const lineHeight = fontSize * TEXT_LINE_HEIGHT;
+  const measureText = (text: string) => font.widthOfTextAtSize(text, fontSize);
+  const lines = wrapText(ctx.encode(box.text), Math.max(fontSize, boxWidth - padding * 2), measureText);
+  const color = colorOf(ctx, input.palette.annotation[box.color]);
+  const opacity = box.opacity * fade;
+  lines.forEach((line, index) => {
+    const lineWidth = measureText(line);
+    const left = box.align === 'center' ? (boxWidth - lineWidth) / 2 : box.align === 'right' ? boxWidth - padding - lineWidth : padding;
+    // Linha de base dentro da linha, como o navegador centraliza a letra na altura da linha.
+    const baseline = padding + index * lineHeight + (lineHeight - fontSize) / 2 + fontSize * 0.8;
+    const dx = left - boxWidth / 2;
+    const dy = boxHeight / 2 - baseline;
+    if (line) page.drawText(line, { ...at(dx, dy), size: fontSize, font, color, opacity, rotate });
+    const rule = (offset: number) =>
+      page.drawLine({ start: at(dx, dy + offset), end: at(dx + lineWidth, dy + offset), thickness: Math.max(0.4, fontSize * 0.06), color, opacity });
+    if (box.underline && line) rule(-fontSize * 0.12);
+    if (box.strike && line) rule(fontSize * 0.3);
+  });
+}
+
 /** Destaques, desenhos e pins de uma página (sistema da página mostrada, y para cima). */
 function drawMarks(ctx: Context, page: PDFPage, threads: readonly AnnotatedPdfThread[], width: number, height: number) {
   const { lib, input } = ctx;
@@ -350,19 +497,9 @@ function drawMarks(ctx: Context, page: PDFPage, threads: readonly AnnotatedPdfTh
         });
       }
     } else if (anchor.drawing) {
-      for (const stroke of anchor.drawing.strokes) {
-        const points: string[] = [];
-        for (let i = 0; i + 1 < stroke.points.length; i += 2) points.push(`${(stroke.points[i]! * width).toFixed(2)} ${(stroke.points[i + 1]! * height).toFixed(2)}`);
-        if (points.length < 2) continue;
-        page.drawSvgPath(`M ${points.join(' L ')}`, {
-          x: 0,
-          y: height,
-          borderColor: colorOf(ctx, input.palette.annotation[stroke.color]),
-          borderWidth: 1.4,
-          borderOpacity: resolved ? 0.5 : 0.85,
-          borderLineCap: lib.LineCapStyle.Round,
-        });
-      }
+      const fade = resolved ? 0.55 : 1;
+      for (const stroke of anchor.drawing.strokes) drawStroke(ctx, page, stroke, width, height, fade);
+      for (const box of anchor.drawing.texts ?? []) drawTextBox(ctx, page, box, width, height, fade);
     }
   }
   // Pins por último, por cima dos destaques e desenhos.
@@ -560,7 +697,22 @@ export async function buildAnnotatedPdf(original: Uint8Array, input: AnnotatedPd
     bold: await pdf.embedFont(lib.StandardFonts.HelveticaBold),
     italic: await pdf.embedFont(lib.StandardFonts.HelveticaOblique),
   };
-  const ctx: Context = { lib, fonts, encode: makeEncoder(new Set(fonts.regular.getCharacterSet())), input };
+  // Fontes dos textos flutuantes: Helvetica, Times ou Courier, com negrito e itálico.
+  const standard: Record<TextBox['font'], [string, string, string, string]> = {
+    sans: [lib.StandardFonts.Helvetica, lib.StandardFonts.HelveticaBold, lib.StandardFonts.HelveticaOblique, lib.StandardFonts.HelveticaBoldOblique],
+    serif: [lib.StandardFonts.TimesRoman, lib.StandardFonts.TimesRomanBold, lib.StandardFonts.TimesRomanItalic, lib.StandardFonts.TimesRomanBoldItalic],
+    mono: [lib.StandardFonts.Courier, lib.StandardFonts.CourierBold, lib.StandardFonts.CourierOblique, lib.StandardFonts.CourierBoldOblique],
+  };
+  const textFonts = new Map<TextFontKey, PDFFont>();
+  for (const thread of input.threads) {
+    for (const box of thread.anchor.type === 'pin' ? (thread.anchor.drawing?.texts ?? []) : []) {
+      const key = textFontKey(box);
+      if (textFonts.has(key)) continue;
+      const variants = standard[box.font] ?? standard.sans;
+      textFonts.set(key, await pdf.embedFont(variants[(box.bold ? 1 : 0) + (box.italic ? 2 : 0)]!));
+    }
+  }
+  const ctx: Context = { lib, fonts, textFonts, encode: makeEncoder(new Set(fonts.regular.getCharacterSet())), input };
 
   const pages = pdf.getPages();
   let needsSummary = false;
