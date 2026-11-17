@@ -96,11 +96,15 @@ O botão de download da barra do PDF abre um menu: "PDF original" (os bytes da v
 4. Um `writeBatch` cria a thread (`status: open`, `commentCount: 1`, `participantIds: [uid]`) e o primeiro comentário. As regras conferem snapshot, documento concedido e autoria.
 5. Comentários seguintes vão num lote com a atualização da thread (`commentCount + 1`, o autor entra em `participantIds`). Em seguida o app grava a notificação em `users/{autor}/notifications`.
 
-### Pin com desenho livre
+### Pin com desenho livre, formas e texto flutuante
 
 1. Na ferramenta "Desenhar", eventos `pointerdown`, `pointermove` e `pointerup` sobre a página coletam pontos normalizados. `touch-action: none` só na camada de desenho, para não bloquear a rolagem fora dela.
-2. Ao terminar, os traços são simplificados (Ramer-Douglas-Peucker, epsilon 0.002) e o pin é posicionado no canto superior direito da caixa do desenho (ajustável pelo revisor).
-3. A thread é criada com `kind: 'pin'` e `anchor.drawing`. O traço é renderizado como SVG por cima da página, então acompanha o zoom.
+2. O painel "Desenho" flutua no canto superior direito da área do PDF (recolhível; no celular começa recolhido, e a escolha fica lembrada em `overdoctex.markup-panel-collapsed`). Nele: traço livre, marca-texto, linha, seta, retângulo e elipse; cor do traço (ou da borda), espessura, opacidade e estilo da linha (contínua, tracejada, pontilhada); no retângulo e na elipse, preenchimento com cor e opacidade próprias. Com Shift, o retângulo vira quadrado, a elipse vira círculo e a linha anda de 45 em 45 graus.
+3. Ao terminar, o traço livre é simplificado (Ramer-Douglas-Peucker, epsilon 0.002); a forma guarda só os dois pontos (início e fim, ou os cantos opostos).
+4. Na ferramenta "Texto", o clique (o toque, no celular) num lugar vazio cria uma caixa de texto ali, com o estilo do painel "Texto": fonte (sem serifa, com serifa, monoespaçada), tamanho em pontos, negrito, itálico, sublinhado, tachado, alinhamento, cor e opacidade do texto, fundo com opacidade, borda e rotação. O texto se digita direto na caixa, que cresce para baixo; as alças movem (canto superior esquerdo), redimensionam (canto inferior direito) e giram (acima do centro, com encaixe a cada 15 graus perto deles e sempre com Shift). Clicar fora termina a edição (a caixa vazia sai), e clicar numa caixa do rascunho volta a editá-la. Os ajustes do painel valem para a caixa escolhida e para as próximas.
+5. Traços, formas e textos da mesma página formam um desenho só: o pin fica no canto superior direito da caixa que contém tudo, e o comentário é escrito ao lado. "Manter só o desenho" (ou "Manter só o texto") grava sem comentário.
+6. A thread é criada com `kind: 'pin'` e `anchor.drawing` (`strokes` e, quando há, `texts`). Tudo é desenhado por cima da página em pixels da página na tela (SVG para traços e formas, caixas giradas para os textos), então acompanha o zoom.
+7. Desenho gravado continua editável por quem criou a thread ou edita o projeto: "Editar" ao selecionar o desenho sem comentário, ou "Editar o desenho" no menu do cartão. O desenho vira o rascunho (a marcação antiga sai do PDF), e "Salvar alterações" no painel grava a marcação nova, que dá para desfazer.
 
 ### Resposta e resolução
 

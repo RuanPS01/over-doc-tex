@@ -8,7 +8,7 @@ import { getLocale, t } from '@/lib/i18n';
 import { buildAnnotatedPdf, type AnnotatedPdfComment, type AnnotatedPdfPalette, type AnnotatedPdfThread } from '@/lib/pdf/annotated-pdf';
 import { toCommentSummary, type ReviewSummary, type ThreadSummary } from '../model/review';
 
-const ANNOTATION_TOKENS: AnnotationColor[] = ['annotation-1', 'annotation-2', 'annotation-3', 'annotation-4'];
+const ANNOTATION_TOKENS: AnnotationColor[] = Array.from({ length: 10 }, (_, index) => `annotation-${index + 1}` as AnnotationColor);
 
 /**
  * Cores do PDF anotado, lidas dos tokens na hora: --export-* (papel branco,
@@ -63,7 +63,14 @@ export function useAnnotatedPdf(review: ReviewSummary) {
             number: threadNumber,
             anchor: thread.anchor,
             state,
-            kindLabel: thread.anchor.type === 'text' ? t('Trecho') : thread.anchor.drawing ? t('Desenho') : t('Ponto'),
+            kindLabel:
+              thread.anchor.type === 'text'
+                ? t('Trecho')
+                : thread.anchor.drawing
+                  ? thread.anchor.drawing.strokes.length === 0 && thread.anchor.drawing.texts?.length
+                    ? t('Texto')
+                    : t('Desenho')
+                  : t('Ponto'),
             statusLabel:
               state === 'resolved' ? (thread.resolution?.fixedInSnapshotId ? t('Corrigida') : t('Resolvida')) : state === 'outdated' ? t('Desatualizada') : '',
             previousRound,

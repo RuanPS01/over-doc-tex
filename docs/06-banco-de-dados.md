@@ -195,7 +195,18 @@ Campos opcionais da thread: `drawingOnly: true` marca o desenho sem comentário 
     "drawing": {
       "bounds": { "x": 0.48, "y": 0.22, "width": 0.30, "height": 0.18 },
       "strokes": [
-        { "tool": "pen", "color": "annotation-2", "width": 0.004, "points": [0.50, 0.25, 0.55, 0.23, 0.70, 0.24, 0.76, 0.31] }
+        { "tool": "pen", "color": "annotation-2", "width": 0.004, "points": [0.50, 0.25, 0.55, 0.23, 0.70, 0.24, 0.76, 0.31] },
+        { "tool": "rect", "color": "annotation-8", "width": 0.004, "points": [0.48, 0.22, 0.60, 0.30], "dash": "dashed", "fill": { "color": "annotation-1", "opacity": 0.3 } }
+      ],
+      "texts": [
+        {
+          "text": "Rever esta seção",
+          "rect": { "x": 0.62, "y": 0.26, "width": 0.16, "height": 0.03 },
+          "rotation": -15,
+          "font": "sans", "size": 0.0235, "color": "annotation-6", "opacity": 1,
+          "bold": true, "italic": false, "underline": false, "strike": false, "align": "left",
+          "background": { "color": "annotation-10", "opacity": 0.6 }, "border": null
+        }
       ]
     }
   },
@@ -208,7 +219,15 @@ Campos opcionais da thread: `drawingOnly: true` marca o desenho sem comentário 
 }
 ```
 
-Decisões da âncora: coordenadas normalizadas (independem de zoom e tela); três seletores de texto (geometria, citação com contexto, posição) para reancorar; pontos achatados (`[x0, y0, x1, y1, ...]`, porque o Firestore não aceita array dentro de array), simplificados e limitados a 2.000 por desenho; cor como token (`annotation-2`).
+Decisões da âncora: coordenadas normalizadas (independem de zoom e tela); três seletores de texto (geometria, citação com contexto, posição) para reancorar; pontos achatados (`[x0, y0, x1, y1, ...]`, porque o Firestore não aceita array dentro de array), simplificados e limitados a 2.000 por desenho; cor como token (`annotation-2`, de `annotation-1` a `annotation-10`).
+
+Campos do desenho (`Stroke` e `TextBox` em `shared/firestore/types.ts`):
+
+- **Traço (`strokes`):** `tool` é `pen`, `highlighter`, `line`, `arrow`, `rect` ou `ellipse`. No traço livre e no marca-texto, `points` é o caminho; na linha e na seta, início e fim; no retângulo e na elipse, dois cantos opostos. `width` é a espessura como fração da largura da página. Opcionais (gravados só quando valem algo, porque o Firestore não aceita `undefined`): `opacity` (ausente: 1; 0,4 no marca-texto), `dash` (`dashed` ou `dotted`; ausente: contínua) e `fill` (cor e opacidade, só em retângulo e elipse).
+- **Texto (`texts`, ausente nos desenhos sem texto):** `rect` é a caixa antes da rotação; `rotation`, graus no sentido horário em torno do centro (a conta usa a proporção da página, para a caixa girada não deformar); `size`, o tamanho da letra como fração da largura da página (o painel mostra em pontos); `font` (`sans`, `serif`, `mono`), estilo (`bold`, `italic`, `underline`, `strike`), `align`, `color` e `opacity`; `background` (cor e opacidade) e `border` (cor), ambos podendo ser nulos. Até 40 caixas por desenho e 4.000 caracteres por caixa.
+- **`bounds`:** a caixa que contém traços, formas e textos girados; o pin nasce no canto superior direito dela. Mover o pin, levar a thread para a rodada seguinte ou editar o desenho desloca tudo junto.
+
+As regras não mudaram: elas conferem o tipo da âncora e a página, e o desenho sem comentário continua exigindo `anchor.drawing`.
 
 Rodada seguinte: as threads abertas viram threads novas na revisão nova, criadas pelo autor com `commentCount: 0`, `carriedFromThreadId` e a âncora reancorada; as regras só deixam nascer `outdated` quem tem `carriedFromThreadId`.
 

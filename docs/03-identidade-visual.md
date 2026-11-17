@@ -29,7 +29,7 @@ Paleta monocromática (Colab Arena). Definida em `src/styles/globals.css` como c
 | `--overlay` | preto | preto | `bg-overlay/45` (claro), `dark:bg-overlay/70` | Fundo atrás de modais e menus laterais: escurece a tela nos dois temas (usar `--foreground` clareava a tela no escuro) |
 | `--crt-glow` | branco | branco | (só no CSS de `.tv-screen`) | Linha luminosa da animação de TV antiga dos modais |
 | `--diff-*` | verde e vermelho | verde e vermelho | `text-diff-added`, `bg-diff-removed-bg`... | Inserções e remoções no diff (cor de conteúdo, fora da paleta neutra) |
-| `--annotation-1` a `--annotation-4` | amarelo, vermelho, azul, verde | idem | `text-annotation-1`... | Paleta do revisor (cor de conteúdo); pins abertos da revisão usam `bg-annotation-3` com `text-background`, e os resolvidos, `bg-muted` com borda, ambos semitransparentes (`opacity-60` e `opacity-45`) para não tampar o texto, opacos no hover, no foco e quando selecionados; trechos comentados, `bg-annotation-1/35`; traços do desenho, `stroke-annotation-*` (a cor escolhida, gravada como token) |
+| `--annotation-1` a `--annotation-10` | amarelo, vermelho, azul, verde, laranja, roxo, rosa, preto, cinza, branco | idem (o papel do PDF é branco nos dois temas) | `text-annotation-1`, `bg-`, `border-`, `stroke-`, `fill-`... | Paleta do revisor (cor de conteúdo), toda ela nos painéis "Desenho" e "Texto" (traço, borda, preenchimento, cor do texto, fundo e borda da caixa); pins abertos da revisão usam `bg-annotation-3` com `text-background`, e os resolvidos, `bg-muted` com borda, ambos semitransparentes (`opacity-60` e `opacity-45`) para não tampar o texto, opacos no hover, no foco e quando selecionados; trechos comentados, `bg-annotation-1/35`; traços do desenho, `stroke-annotation-*` (a cor escolhida, gravada como token) |
 | `--export-ink`, `-muted`, `-rule`, `-panel`, `-paper`, `-pin-text` | texto, apoio, borda, faixa, papel e número do pin do tema claro | iguais (não mudam no `.dark`) | (lidos em runtime) | "PDF com anotações" da revisão: o papel é branco nos dois temas, então o PDF sempre usa as cores do claro |
 | `--editor-*` | neutros da paleta | neutros da paleta | (lidos em runtime) | Tema do Monaco; comandos, comentários e matemática mantêm cor para leitura do código |
 
@@ -46,7 +46,7 @@ O tema escuro redefine os mesmos tokens sob `.dark`. A pessoa escolhe **Claro**,
 
 ### Cores de anotação gravadas no banco
 
-Traços e destaques guardam o **nome do token** (`'annotation-2'`), nunca a cor. Assim o desenho do revisor acompanha o tema claro ou escuro e o contraste continua correto.
+Traços, formas, textos e destaques guardam o **nome do token** (`'annotation-2'`), nunca a cor. Assim a tela e o PDF com anotações leem a mesma cor, e a paleta pode ser ajustada num lugar só. A transparência escolhida pelo revisor vai em campos próprios (`opacity`, `fill.opacity`, `background.opacity`) e é aplicada com `opacity`, `fill-opacity` e `stroke-opacity`, sem cor literal no código.
 
 ### Exceções controladas
 
@@ -54,7 +54,7 @@ Traços e destaques guardam o **nome do token** (`'annotation-2'`), nunca a cor.
 | --- | --- | --- |
 | `theme_color` e `background_color` do manifesto, `<meta name="theme-color">` (um por tema) | O navegador exige valor literal | `hsl(...)` espelhando `--primary` e `--background`, com comentário apontando a origem |
 | Tema do Monaco | O Monaco só aceita hexadecimal | `src/lib/monaco/theme-from-tokens.ts` lê os tokens CSS e converte em runtime |
-| PDF com anotações | O pdf-lib desenha com cor em RGB | `useAnnotatedPdf` lê `--export-*` e `--annotation-*` e converte com `hslChannelsToRgb` (`src/lib/color.ts`); no PDF os pins ficam com 55% de opacidade e os destaques com 35%, em modo multiplicar |
+| PDF com anotações | O pdf-lib desenha com cor em RGB | `useAnnotatedPdf` lê `--export-*` e `--annotation-*` (as 10) e converte com `hslChannelsToRgb` (`src/lib/color.ts`); no PDF os pins ficam com 55% de opacidade e os destaques com 35%, em modo multiplicar; formas e textos levam a opacidade escolhida, e os textos usam as fontes padrão do PDF (Helvetica, Times, Courier) |
 | Preâmbulo LaTeX do diff | Cores vivem no PDF | `xcolor` com misturas nomeadas (`green!50!black`), definidas só no worker |
 | Ícone do app (`public/icons/icon.svg`) | Arquivo de imagem | `hsl(...)` dos tokens |
 | Logo do Google no botão de login (`public/icons/google-g.svg`) | As diretrizes do "Sign in with Google" exigem o "G" nas quatro cores da marca, sem versão monocromática nem recoloração | Arquivo SVG com as cores oficiais, usado por `<img>`; logo de 18px a 10px do texto, centralizado com ele no botão |

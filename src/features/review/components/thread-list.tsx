@@ -29,6 +29,8 @@ interface ThreadListProps {
   onDeleteComment: (thread: ThreadSummary, commentId: string, body: string) => Promise<unknown>;
   onRelocate: (thread: ThreadSummary) => void;
   onCancelRelocate: () => void;
+  /** Abre o desenho do comentário (formas e textos) para editar. */
+  onEditDrawing: (thread: ThreadSummary) => void;
   onDelete: (thread: ThreadSummary) => Promise<unknown>;
 }
 
@@ -54,6 +56,7 @@ export function ThreadList({
   onDeleteComment,
   onRelocate,
   onCancelRelocate,
+  onEditDrawing,
   onDelete,
 }: ThreadListProps) {
   const { t } = useT();
@@ -125,6 +128,7 @@ export function ThreadList({
             onDeleteComment={(commentId, body) => onDeleteComment(thread, commentId, body)}
             onRelocate={() => onRelocate(thread)}
             onCancelRelocate={onCancelRelocate}
+            onEditDrawing={thread.anchor.type === 'pin' && thread.anchor.drawing ? () => onEditDrawing(thread) : undefined}
             onDelete={() => onDelete(thread)}
           />
         ))}

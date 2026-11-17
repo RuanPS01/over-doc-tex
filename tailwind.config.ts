@@ -43,6 +43,12 @@ export default {
           2: token('annotation-2'),
           3: token('annotation-3'),
           4: token('annotation-4'),
+          5: token('annotation-5'),
+          6: token('annotation-6'),
+          7: token('annotation-7'),
+          8: token('annotation-8'),
+          9: token('annotation-9'),
+          10: token('annotation-10'),
         },
         status: {
           online: token('status-online'),

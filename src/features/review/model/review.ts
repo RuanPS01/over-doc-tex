@@ -1,4 +1,4 @@
-import type { AnnotationColor, CommentDoc, NormalizedPoint, ReviewAccess, ReviewDoc, ReviewStatus, Stroke, TextAnchor, ThreadDoc } from '@shared/firestore/types';
+import type { CommentDoc, NormalizedPoint, ReviewAccess, ReviewDoc, ReviewStatus, Stroke, TextAnchor, TextBox, ThreadDoc } from '@shared/firestore/types';
 import { msg, t } from '@/lib/i18n';
 
 /** Rótulos são chaves de tradução (msg): quem mostra chama t(). */
@@ -162,23 +162,17 @@ export function reviewPath(projectId: string, reviewId: string): string {
   return `/p/${projectId}/reviews/${reviewId}`;
 }
 
-/** Ferramenta ativa sobre o PDF: selecionar texto (padrão), marcar um ponto ou desenhar. */
-export type ReviewTool = 'select' | 'pin' | 'draw';
+/** Ferramenta ativa sobre o PDF: selecionar texto (padrão), marcar um ponto, desenhar ou escrever texto flutuante. */
+export type ReviewTool = 'select' | 'pin' | 'draw' | 'write';
 
-/** Marcação ainda sem comentário, esperando o texto no painel lateral. */
+/**
+ * Marcação ainda sem comentário, esperando o texto no painel lateral. O
+ * desenho junta traços, formas e caixas de texto da mesma página.
+ */
 export type PendingAnnotation =
   | { kind: 'pin'; page: number; point: NormalizedPoint }
   | { kind: 'text'; anchor: TextAnchor }
-  | { kind: 'draw'; page: number; strokes: Stroke[]; color: AnnotationColor };
-
-export const ANNOTATION_COLORS: AnnotationColor[] = ['annotation-2', 'annotation-3', 'annotation-4', 'annotation-1'];
-
-export const ANNOTATION_COLOR_LABELS: Record<AnnotationColor, string> = {
-  'annotation-1': msg('Amarelo'),
-  'annotation-2': msg('Vermelho'),
-  'annotation-3': msg('Azul'),
-  'annotation-4': msg('Verde'),
-};
+  | { kind: 'draw'; page: number; strokes: Stroke[]; texts: TextBox[] };
 
 /** Página e ponto de referência de qualquer âncora (para ordenar e rolar até ela). */
 export function anchorPoint(thread: Pick<ThreadSummary, 'anchor'>): { page: number; x: number; y: number } {
