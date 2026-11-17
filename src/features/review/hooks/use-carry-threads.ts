@@ -5,6 +5,7 @@ import type { PinAnchor, SourceLocation, ThreadAnchor, ThreadDoc, ThreadStatus }
 import { useSnapshotFiles } from '@/features/snapshots/hooks/use-snapshot-files';
 import { getFirebase } from '@/lib/firebase/app';
 import { pdfAt, sourceAt, type SyncData } from '@/lib/latex/synctex';
+import { shiftDrawing } from '@/lib/pdf/drawing';
 import { createTextLocator, type TextLocator } from '@/lib/pdf/page-text';
 import { reanchorQuote } from '@/lib/pdf/reanchor';
 import { collapseSpaces, contextAt } from '@/lib/pdf/text-anchor';
@@ -24,18 +25,14 @@ function movePin(anchor: PinAnchor, hint: SourceLocation | null, view: DocumentV
   const target = hint && view.sync ? pdfAt(view.sync, hint.path, hint.line) : null;
   const size = target ? view.locator.pageSizes[target.page - 1] : undefined;
   if (!target || !size) return { ...anchor, page: Math.min(anchor.page, pageCount) };
-  const dy = clamp(target.y / size.height) - anchor.point.y;
-  const shift = (points: number[]) => points.map((value, index) => (index % 2 === 1 ? clamp(value + dy) : value));
+  let dy = clamp(target.y / size.height) - anchor.point.y;
+  // O desenho (traços, formas e textos) desce ou sobe inteiro, sem sair da página.
+  if (anchor.drawing) dy = Math.min(Math.max(dy, -anchor.drawing.bounds.y), 1 - anchor.drawing.bounds.y - anchor.drawing.bounds.height);
   return {
     type: 'pin',
     page: target.page,
     point: { x: anchor.point.x, y: clamp(anchor.point.y + dy) },
-    drawing: anchor.drawing
-      ? {
-          strokes: anchor.drawing.strokes.map((stroke) => ({ ...stroke, points: shift(stroke.points) })),
-          bounds: { ...anchor.drawing.bounds, y: clamp(anchor.drawing.bounds.y + dy) },
-        }
-      : null,
+    drawing: anchor.drawing ? shiftDrawing(anchor.drawing, 0, dy) : null,
   };
 }
 
