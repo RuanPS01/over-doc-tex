@@ -1,16 +1,11 @@
-import { sendSignInLinkToEmail } from 'firebase/auth';
-import { arrayUnion, collection, doc, getDoc, getDocs, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { useCallback } from 'react';
-import { firestorePaths } from '@shared/firestore/paths';
-import type { ProjectDoc, ReviewAccess, ReviewDoc } from '@shared/firestore/types';
+import type { ReviewAccess } from '@shared/firestore/types';
 import { useVisualDiff } from '@/features/diff/hooks/use-visual-diff';
 import { MAIN_DOCUMENT_ID } from '@/features/projects/model/new-project';
 import { useFreezeSnapshot, type FreezeStage } from '@/features/snapshots/hooks/use-freeze-snapshot';
 import { useSnapshots } from '@/features/snapshots/hooks/use-snapshots';
 import { nextVersion, versionLabel, type VersionBump } from '@/features/snapshots/model/version';
-import { emailLinkUrl } from '@/lib/email';
-import { getFirebase } from '@/lib/firebase/app';
-import { newLinkToken, reviewPath } from '../model/review';
+import { openReviewRound, sendReviewInvites } from './open-review-round';
 import { useCarryThreads } from './use-carry-threads';
 
 /** Falha de compilação ao congelar a versão da revisão (traz os erros do TeX). */
@@ -51,8 +46,7 @@ export interface RequestReviewResult {
   linkToken: string | null;
 }
 
-/** Teto das regras para reviewerEmails (validAccess em firestore.rules). */
-export const MAX_REVIEWER_EMAILS = 50;
+export { MAX_REVIEWER_EMAILS } from '../model/review';
 
 /**
  * Número da versão que "Solicitar revisão" vai congelar, para o diálogo
@@ -81,108 +75,51 @@ export function useRequestReview(projectId: string, projectName: string) {
 
   return useCallback(
     async ({ access, reviewerEmails, bump, title, description, documentIds, onStage }: RequestReviewInput): Promise<RequestReviewResult> => {
-      const emails = [...new Set(reviewerEmails)].slice(0, MAX_REVIEWER_EMAILS);
-      // O primeiro é o reviewerEmail (as regras conferem o grant dele no lote); os demais vão em reviewerEmails.
-      const reviewerEmail = emails[0] ?? '';
       const granted = [MAIN_DOCUMENT_ID, ...documentIds.filter((id) => id !== MAIN_DOCUMENT_ID)];
       const frozen = await freeze({ message: title, bump, onStage });
 
       onStage('opening');
-      const { db, auth } = getFirebase();
-      const uid = auth.currentUser!.uid;
-      const projectRef = doc(db, firestorePaths.project(projectId));
-      const project = (await getDoc(projectRef)).data() as ProjectDoc;
-
       // Rodada anterior: a revisão mais recente com algum dos mesmos revisores. A versão dela é a base
       // de "Ver alterações", e as threads abertas dela vêm junto.
-      const reviews = await getDocs(collection(db, firestorePaths.reviews(projectId)));
-      const previous = reviews.docs
-        .map((item) => ({ id: item.id, data: item.data() as ReviewDoc }))
-        .filter((item) => [item.data.reviewerEmail, ...(item.data.reviewerEmails ?? [])].some((email) => email && emails.includes(email)))
-        .sort((a, b) => b.data.number - a.data.number)[0];
-
-      const number = project.counters.reviews + 1;
-      const reviewRef = doc(collection(db, firestorePaths.reviews(projectId)));
-      const review: Omit<ReviewDoc, 'requestedAt' | 'lastActivityAt'> & { requestedAt: unknown; lastActivityAt: unknown } = {
-        number,
-        title,
-        description: description.trim() || null,
+      const round = await openReviewRound({
+        projectId,
         projectName,
+        projectKind: 'latex',
         snapshotId: frozen.snapshotId,
         snapshotLabel: frozen.label,
-        baseSnapshotId: previous && previous.data.snapshotId !== frozen.snapshotId ? previous.data.snapshotId : null,
-        previousReviewId: previous?.id ?? null,
-        requestedBy: uid,
-        requestedAt: serverTimestamp(),
-        reviewerEmail,
-        reviewerEmails: emails,
         access,
-        reviewerUid: null,
-        reviewerName: null,
-        status: 'invited',
-        grantedDocumentIds: granted,
-        lastActivityAt: serverTimestamp(),
-        closedAt: null,
-      };
-
-      const batch = writeBatch(db);
-      // Um grant por e-mail. merge: o mesmo revisor pode já ter acesso a esta versão por outra revisão.
-      for (const email of emails) {
-        batch.set(
-          doc(db, firestorePaths.snapshotGrant(projectId, frozen.snapshotId, email)),
-          {
-            documentIds: arrayUnion(...granted),
-            reviewIds: arrayUnion(reviewRef.id),
-            grantedBy: uid,
-            grantedAt: serverTimestamp(),
-            expiresAt: null,
-          },
-          { merge: true },
-        );
-      }
-      batch.set(reviewRef, review);
-      // Pelo link: o código nasce junto com a revisão (o id do documento é o código).
-      const linkToken = access === 'link' ? newLinkToken() : null;
-      if (linkToken) batch.set(doc(db, firestorePaths.reviewLink(projectId, reviewRef.id, linkToken)), { createdBy: uid, createdAt: serverTimestamp() });
-      batch.update(projectRef, {
-        counters: { snapshots: project.counters.snapshots, reviews: number },
-        updatedAt: serverTimestamp(),
+        reviewerEmails,
+        title,
+        description,
+        documentIds: granted,
+        previousRound: 'same-reviewers',
       });
-      await batch.commit();
 
       // Rodada seguinte: o diff em PDF já fica guardado para o revisor (que não lê o código).
-      if (review.baseSnapshotId) {
+      if (round.baseSnapshotId) {
         onStage('diff');
         for (const documentId of granted) {
-          await betweenVersions(review.baseSnapshotId, frozen.snapshotId, documentId, true).catch(() => undefined);
+          await betweenVersions(round.baseSnapshotId, frozen.snapshotId, documentId, true).catch(() => undefined);
         }
       }
 
       // Threads ainda abertas da rodada anterior do mesmo revisor vêm junto, reancoradas na versão nova.
       let carriedThreads = 0;
-      if (review.previousReviewId) {
+      if (round.previous) {
         onStage('carry');
-        carriedThreads = await carryThreads(review.previousReviewId, { id: reviewRef.id, snapshotId: frozen.snapshotId, grantedDocumentIds: granted }).catch(() => 0);
+        carriedThreads = await carryThreads(round.previous.id, { id: round.reviewId, snapshotId: frozen.snapshotId, grantedDocumentIds: granted }).catch(() => 0);
       }
 
-      // Cada convidado recebe o próprio link de acesso (melhor esforço: a revisão já está aberta).
-      const sent = await Promise.all(
-        emails.map((email) =>
-          sendSignInLinkToEmail(auth, email, { url: emailLinkUrl(email, reviewPath(projectId, reviewRef.id)), handleCodeInApp: true }).then(
-            () => true,
-            () => false,
-          ),
-        ),
-      );
+      const emailsSent = await sendReviewInvites(projectId, round.reviewId, round.reviewerEmails);
       return {
-        reviewId: reviewRef.id,
-        number,
+        reviewId: round.reviewId,
+        number: round.number,
         snapshotLabel: frozen.label,
-        reviewerEmails: emails,
-        emailsSent: sent.filter(Boolean).length,
+        reviewerEmails: round.reviewerEmails,
+        emailsSent,
         carriedThreads,
         snapshotId: frozen.snapshotId,
-        linkToken,
+        linkToken: round.linkToken,
       };
     },
     [freeze, betweenVersions, carryThreads, projectId, projectName],

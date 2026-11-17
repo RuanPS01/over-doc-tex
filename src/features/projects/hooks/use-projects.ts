@@ -14,7 +14,7 @@ import {
 } from 'firebase/firestore';
 import { useEffect } from 'react';
 import { firestorePaths } from '@shared/firestore/paths';
-import type { ProjectDoc, ProjectRole } from '@shared/firestore/types';
+import type { ProjectDoc, ProjectKind, ProjectRole } from '@shared/firestore/types';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { getFirebase, isFirebaseConfigured } from '@/lib/firebase/app';
 import { t } from '@/lib/i18n';
@@ -25,7 +25,10 @@ import { MAIN_DOCUMENT_ID, MAIN_FILE_ID, buildNewProject, memberProfileOf, start
 export interface ProjectSummary {
   id: string;
   name: string;
+  /** "pdf": sala de revisão de PDF avulso, listada à parte. */
+  kind: ProjectKind;
   role: ProjectRole;
+  latestSnapshotId: string | null;
   updatedAt: Date | null;
 }
 
@@ -35,7 +38,9 @@ function toSummary(snapshot: QueryDocumentSnapshot, uid: string): ProjectSummary
   return {
     id: snapshot.id,
     name: data.name,
+    kind: data.kind ?? 'latex',
     role: data.members[uid] ?? 'viewer',
+    latestSnapshotId: data.latestSnapshotId ?? null,
     updatedAt: data.updatedAt?.toDate() ?? null,
   };
 }
@@ -49,7 +54,7 @@ function projectsQuery(uid: string) {
   );
 }
 
-/** Projetos de que o usuário é membro, em tempo real. */
+/** Projetos de que o usuário é membro (os LaTeX e as salas de PDF), em tempo real. */
 export function useProjects() {
   const queryClient = useQueryClient();
   const { user } = useAuth();

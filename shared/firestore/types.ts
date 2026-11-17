@@ -58,6 +58,8 @@ export type CommentId = string;
 // ---------------------------------------------------------------------------
 
 export type ProjectRole = 'owner' | 'editor' | 'viewer';
+/** "latex": projeto com código-fonte (padrão); "pdf": sala de revisão de um PDF anexado, sem código. */
+export type ProjectKind = 'latex' | 'pdf';
 export type LatexEngine = 'pdflatex' | 'xelatex' | 'lualatex';
 export type FileKind = 'folder' | 'tex' | 'bib' | 'sty' | 'cls' | 'image' | 'pdf' | 'data' | 'other';
 export type DocumentRole = 'main' | 'secondary';
@@ -135,6 +137,12 @@ export interface MemberProfile {
 
 export interface ProjectDoc {
   name: string;
+  /**
+   * Ausente vale "latex". "pdf" é uma sala de revisão de PDF avulso (docs/07-fluxos.md, cenário E):
+   * sem arquivos nem documentos, cada PDF enviado vira uma versão e cada versão, uma rodada de revisão.
+   * Definido na criação e nunca mais muda; só o dono exclui a sala inteira.
+   */
+  kind?: ProjectKind;
   description: string | null;
   ownerId: UserId;
   /** Mapa uid para papel. Fonte da verdade usada pelas regras de segurança. */
@@ -328,6 +336,8 @@ export interface ReviewDoc {
   description: string | null;
   /** Denormalizado para o revisor, que não lê o documento do projeto. */
   projectName: string;
+  /** Também denormalizado: "pdf" numa rodada de sala de PDF avulso (sem código nem diff em PDF). Ausente vale "latex". */
+  projectKind?: ProjectKind;
   snapshotId: SnapshotId;
   snapshotLabel: string;
   /** Versão anterior usada como base do diff; nulo na primeira rodada. */

@@ -54,7 +54,9 @@ interface ReviewHeaderProps {
 export function ReviewHeader({ review, role, onShowChanges, onStatusChange, onOpenSharing, guestName, onChangeGuestName }: ReviewHeaderProps) {
   const { t } = useT();
   const actions = statusActions(role, review.status);
-  const backHref = role === 'author' ? `/p/${review.projectId}` : '/';
+  // Sala de PDF avulso não tem editor: o autor volta à tela inicial, onde as salas ficam.
+  const isPdfRoom = review.projectKind === 'pdf';
+  const backHref = role === 'author' && !isPdfRoom ? `/p/${review.projectId}` : '/';
   // Quem entrou pelo link não tem lista de projetos para onde voltar.
   const showBack = !guestName;
 
@@ -62,7 +64,7 @@ export function ReviewHeader({ review, role, onShowChanges, onStatusChange, onOp
     <header className="flex h-header shrink-0 items-center gap-1 border-b bg-background px-2 pt-safe">
       {showBack && (
         <Button variant="ghost" size="icon" asChild>
-          <Link href={backHref} aria-label={role === 'author' ? t('Voltar ao editor') : t('Voltar aos projetos')}>
+          <Link href={backHref} aria-label={role === 'author' && !isPdfRoom ? t('Voltar ao editor') : t('Voltar aos projetos')}>
             <ArrowLeft />
           </Link>
         </Button>

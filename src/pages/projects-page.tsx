@@ -7,12 +7,13 @@ import { AiSettingsDialog } from '@/features/ai-assistant/components/ai-settings
 import { AccountMenu } from '@/features/auth/components/account-menu';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { NotificationBell } from '@/features/notifications/components/notification-bell';
+import { PdfRoomsSection } from '@/features/pdf-rooms/components/pdf-rooms-section';
 import { NewProjectDialog } from '@/features/projects/components/new-project-dialog';
 import { DemoProjectList, ProjectList } from '@/features/projects/components/project-list';
 import { MyReviewsSection } from '@/features/review/components/my-reviews-section';
 import { useT } from '@/hooks/use-t';
 
-/** Rota /. Projetos do usuário (no modo demonstração, um projeto de exemplo). */
+/** Rota /. Projetos do usuário, salas de revisão de PDF avulso e revisões pedidas a ele (no modo demonstração, um projeto de exemplo). */
 export default function ProjectsPage() {
   const { t } = useT();
   const { status, user } = useAuth();
@@ -50,6 +51,7 @@ export default function ProjectsPage() {
       ) : (
         <>
           <ProjectList onCreate={() => setCreating(true)} />
+          <PdfRoomsSection />
           <MyReviewsSection />
         </>
       )}

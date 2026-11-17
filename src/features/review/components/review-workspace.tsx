@@ -383,7 +383,7 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
       pendingKey={pendingKey}
       selectedThreadId={selectedThreadId}
       canWrite={canWrite}
-      canOpenSource={role === 'author'}
+      canOpenSource={role === 'author' && review.projectKind !== 'pdf'}
       viewer={viewer}
       relocation={relocating ? { threadId: relocating.thread.id, tool, isDrawing: pending?.kind === 'draw' } : null}
       onSelect={selectThread}

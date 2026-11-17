@@ -12,6 +12,9 @@ interface ReviewVersionNoticeProps {
   bump: VersionBump;
   disabled?: boolean;
   onBumpChange: (bump: VersionBump) => void;
+  /** Textos próprios (sala de PDF avulso): o título já com o número e a explicação. */
+  title?: string;
+  description?: string;
 }
 
 /**
@@ -19,17 +22,18 @@ interface ReviewVersionNoticeProps {
  * congelada (com o número que ela vai ter), e é essa versão que os revisores
  * veem. Cada revisão nova congela uma versão.
  */
-export function ReviewVersionNotice({ labels, isFirst, isLoading, bump, disabled, onBumpChange }: ReviewVersionNoticeProps) {
+export function ReviewVersionNotice({ labels, isFirst, isLoading, bump, disabled, onBumpChange, title, description }: ReviewVersionNoticeProps) {
   const { t } = useT();
   const version = labels[isFirst ? 'minor' : bump];
   return (
     <section aria-label={t('Versão congelada para a revisão')} className="flex flex-col gap-2 rounded-md border bg-muted/40 p-3 text-sm">
       <p className="flex items-center gap-2 font-medium">
         {isLoading ? <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" aria-hidden /> : <Snowflake className="size-4 shrink-0 text-muted-foreground" aria-hidden />}
-        {isLoading ? t('Conferindo o número da versão') : t('A versão {version} será congelada para esta revisão', { version })}
+        {isLoading ? t('Conferindo o número da versão') : (title ?? t('A versão {version} será congelada para esta revisão', { version }))}
       </p>
       <p className="text-xs text-muted-foreground">
-        {t('O projeto como está agora vira uma cópia imutável, e é ela que os revisores veem. Cada revisão nova congela uma versão; a edição continua normalmente.')}
+        {description ??
+          t('O projeto como está agora vira uma cópia imutável, e é ela que os revisores veem. Cada revisão nova congela uma versão; a edição continua normalmente.')}
       </p>
       {!isFirst && !isLoading && (
         <div role="radiogroup" aria-label={t('Tipo de versão')} className="grid grid-cols-2 gap-1 rounded-md bg-muted p-1 text-xs">

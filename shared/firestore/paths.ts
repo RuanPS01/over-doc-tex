@@ -32,12 +32,15 @@ export const firestorePaths = {
    * Arquivos gerados no congelamento ({documentId}.pdf, .synctex, .pages):
    * gravados antes do documento do snapshot e imutáveis depois.
    */
+  snapshotFiles: (projectId: ProjectId, snapshotId: SnapshotId) => `projects/${projectId}/snapshots/${snapshotId}/files`,
   snapshotFile: (projectId: ProjectId, snapshotId: SnapshotId, fileName: string) =>
     `projects/${projectId}/snapshots/${snapshotId}/files/${fileName}`,
+  snapshotGrants: (projectId: ProjectId, snapshotId: SnapshotId) => `projects/${projectId}/snapshots/${snapshotId}/grants`,
   /** O id do grant é o e-mail do revisor em minúsculas. */
   snapshotGrant: (projectId: ProjectId, snapshotId: SnapshotId, email: string) =>
     `projects/${projectId}/snapshots/${snapshotId}/grants/${email.toLowerCase()}`,
   /** Ficha do revisor que entrou pelo link (uid da sessão anônima ou da conta). */
+  snapshotGuests: (projectId: ProjectId, snapshotId: SnapshotId) => `projects/${projectId}/snapshots/${snapshotId}/guests`,
   snapshotGuest: (projectId: ProjectId, snapshotId: SnapshotId, uid: UserId) =>
     `projects/${projectId}/snapshots/${snapshotId}/guests/${uid}`,
   reviews: (projectId: ProjectId) => `projects/${projectId}/reviews`,

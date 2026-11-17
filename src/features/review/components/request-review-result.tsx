@@ -12,10 +12,12 @@ interface RequestReviewResultViewProps {
   projectId: string;
   projectName: string;
   result: RequestReviewResult;
+  /** Primeira frase no lugar de "A versão X foi congelada" (sala de PDF avulso). */
+  summary?: string;
 }
 
 /** Revisão aberta: versão congelada, convites enviados, link para copiar e "Abrir a revisão". */
-export function RequestReviewResultView({ projectId, projectName, result }: RequestReviewResultViewProps) {
+export function RequestReviewResultView({ projectId, projectName, result, summary }: RequestReviewResultViewProps) {
   const { t } = useT();
   const [copied, setCopied] = useState(false);
   const emails = result.reviewerEmails;
@@ -43,7 +45,7 @@ export function RequestReviewResultView({ projectId, projectName, result }: Requ
 
   return (
     <div className="flex flex-col gap-3 text-sm">
-      <p>{t('A versão {version} foi congelada para esta revisão.', { version: result.snapshotLabel })}</p>
+      <p>{summary ?? t('A versão {version} foi congelada para esta revisão.', { version: result.snapshotLabel })}</p>
       {result.carriedThreads > 0 && (
         <p>
           {result.carriedThreads === 1
