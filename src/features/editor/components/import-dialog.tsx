@@ -233,7 +233,7 @@ export function ImportDialog() {
                 )}
               </div>
 
-              <fieldset className="flex flex-col gap-2">
+              <fieldset className="flex min-w-0 flex-col gap-2">
                 <legend className="mb-1 text-sm font-medium">{t('Arquivos com o mesmo nome na pasta')}</legend>
                 {(
                   [

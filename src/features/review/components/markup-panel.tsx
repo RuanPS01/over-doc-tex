@@ -143,26 +143,28 @@ function Slider({ label, value, min, max, step = 1, unit, onChange }: { label: s
   );
 }
 
-function DrawOptions({ style, onChange }: { style: DrawStyle; onChange: (style: DrawStyle) => void }) {
+function DrawOptions({ style, onChange, showTools }: { style: DrawStyle; onChange: (style: DrawStyle) => void; showTools: boolean }) {
   const { t } = useT();
   const closed = isClosedShape(style.tool);
   const set = (patch: Partial<DrawStyle>) => onChange({ ...style, ...patch });
   return (
     <>
-      <Field label={t('Ferramenta')}>
-        <div role="group" aria-label={t('Ferramenta de desenho')} className="grid grid-cols-6 gap-1">
-          {STROKE_TOOLS.map((tool) => (
-            <Toggle
-              key={tool.id}
-              pressed={style.tool === tool.id}
-              label={t(tool.label)}
-              onClick={() => set(tool.id === 'highlighter' && style.tool !== 'highlighter' ? { tool: tool.id, opacity: 0.4, widthPx: Math.max(style.widthPx, 12) } : { tool: tool.id })}
-            >
-              {TOOL_ICONS[tool.id]}
-            </Toggle>
-          ))}
-        </div>
-      </Field>
+      {showTools && (
+        <Field label={t('Ferramenta')}>
+          <div role="group" aria-label={t('Ferramenta de desenho')} className="grid grid-cols-6 gap-1">
+            {STROKE_TOOLS.map((tool) => (
+              <Toggle
+                key={tool.id}
+                pressed={style.tool === tool.id}
+                label={t(tool.label)}
+                onClick={() => set(tool.id === 'highlighter' && style.tool !== 'highlighter' ? { tool: tool.id, opacity: 0.4, widthPx: Math.max(style.widthPx, 12) } : { tool: tool.id })}
+              >
+                {TOOL_ICONS[tool.id]}
+              </Toggle>
+            ))}
+          </div>
+        </Field>
+      )}
       <Field label={closed ? t('Cor da borda') : t('Cor do traço')}>
         <Swatches label={closed ? t('Cor da borda') : t('Cor do traço')} value={style.color} onChange={(color) => color && set({ color })} />
       </Field>
@@ -341,6 +343,11 @@ interface MarkupPanelProps {
   editing: { onSave: () => void; onCancel: () => void; canSave: boolean } | null;
   /** Recolhido enquanto a pessoa não escolheu (no celular, para não cobrir a página). */
   defaultCollapsed?: boolean;
+  /**
+   * Desenho ou texto gravado selecionado no PDF: o painel mostra o estilo dele, sem as ferramentas
+   * de criar, e cada ajuste muda o selecionado (gravado sozinho).
+   */
+  selection?: boolean;
 }
 
 /**
@@ -348,11 +355,11 @@ interface MarkupPanelProps {
  * do desenho (ferramenta, cores, espessura, opacidade, linha e preenchimento)
  * ou do texto (fonte, tamanho, estilo, cores, fundo, borda e rotação).
  */
-export function MarkupPanel({ mode, drawStyle, onDrawStyle, textStyle, onTextStyle, activeText, editing, defaultCollapsed = false }: MarkupPanelProps) {
+export function MarkupPanel({ mode, drawStyle, onDrawStyle, textStyle, onTextStyle, activeText, editing, defaultCollapsed = false, selection = false }: MarkupPanelProps) {
   const { t } = useT();
   const [stored, setCollapsed] = useStoredToggle('overdoctex.markup-panel-collapsed');
   const collapsed = stored ?? defaultCollapsed;
-  const title = mode === 'draw' ? t('Desenho') : t('Texto');
+  const title = mode === 'draw' ? (selection ? t('Desenho selecionado') : t('Desenho')) : selection ? t('Texto selecionado') : t('Texto');
   const icon = mode === 'draw' ? <Shapes /> : <Type />;
 
   const footer = editing && (
@@ -400,11 +407,12 @@ export function MarkupPanel({ mode, drawStyle, onDrawStyle, textStyle, onTextSty
         </Button>
       </header>
       <div className="flex min-h-0 flex-col gap-3 overflow-y-auto p-3">
+        {selection && <p className="text-xs text-muted-foreground">{t('Os ajustes mudam o selecionado e são gravados sozinhos.')}</p>}
         {mode === 'draw' ? (
-          <DrawOptions style={drawStyle} onChange={onDrawStyle} />
+          <DrawOptions style={drawStyle} onChange={onDrawStyle} showTools={!selection} />
         ) : (
           <>
-            {!activeText && <p className="text-xs text-muted-foreground">{t('Clique na página para criar uma caixa de texto. Os ajustes valem para a caixa escolhida e para as próximas.')}</p>}
+            {!activeText && !selection && <p className="text-xs text-muted-foreground">{t('Clique na página para criar uma caixa de texto. Os ajustes valem para a caixa escolhida e para as próximas.')}</p>}
             <TextOptions style={textStyle} onChange={onTextStyle} rotation={activeText?.rotation ?? null} onRotation={(degrees) => activeText?.onRotation(degrees)} />
             {activeText && (
               <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={activeText.onDelete}>

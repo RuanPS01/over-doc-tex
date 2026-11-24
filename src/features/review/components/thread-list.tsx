@@ -95,7 +95,7 @@ export function ThreadList({
       <p className="text-xs text-muted-foreground">
         {threads.length === 0
           ? canWrite
-            ? t('Nenhum comentário ainda. Selecione um trecho do PDF, ou use Ponto ou Desenhar no topo.')
+            ? t('Nenhum comentário ainda. Selecione um trecho do PDF ou use Ponto no topo.')
             : t('Nenhum comentário ainda.')
           : threads.length === 1
             ? t('1 comentário, {open} em aberto', { open: openCount })

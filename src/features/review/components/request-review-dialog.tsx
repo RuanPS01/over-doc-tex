@@ -158,7 +158,7 @@ export function RequestReviewDialog({ open, onOpenChange, projectId, projectName
               />
             </label>
             {secondaries.length > 0 && (
-              <fieldset className="flex flex-col gap-1.5 text-sm">
+              <fieldset className="flex min-w-0 flex-col gap-1.5 text-sm">
                 <legend className="mb-1 font-medium">{t('Documentos que o revisor vê')}</legend>
                 <label className="flex items-center gap-2 text-muted-foreground">
                   <input type="checkbox" checked disabled className="size-4 accent-primary" />

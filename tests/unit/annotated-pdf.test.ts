@@ -180,7 +180,8 @@ describe('PDF com anotações: arquivo final', () => {
           bounds: { x: 0.1, y: 0.1, width: 0.8, height: 0.6 },
           strokes: [
             { tool: 'rect', color: 'annotation-8', width: 0.004, points: [0.1, 0.1, 0.4, 0.3], fill: { color: 'annotation-1', opacity: 0.3 } },
-            { tool: 'ellipse', color: 'annotation-3', width: 0.003, points: [0.5, 0.1, 0.9, 0.3], dash: 'dashed', opacity: 0.5 },
+            { tool: 'ellipse', color: 'annotation-3', width: 0.003, points: [0.5, 0.1, 0.9, 0.3], dash: 'dashed', opacity: 0.5, rotation: 30 },
+            { tool: 'rect', color: 'annotation-5', width: 0.003, points: [0.5, 0.4, 0.7, 0.5], rotation: -45 },
             { tool: 'arrow', color: 'annotation-2', width: 0.004, points: [0.1, 0.5, 0.6, 0.6], dash: 'dotted' },
             { tool: 'highlighter', color: 'annotation-1', width: 0.02, points: [0.1, 0.7, 0.5, 0.7] },
           ],
