@@ -1,6 +1,6 @@
 import type { AnnotationColor, LineStyle, NormalizedPoint, Stroke, StrokeTool, TextAlign, TextBox, TextFont } from '@shared/firestore/types';
 import { msg } from '@/lib/i18n';
-import { TEXT_LINE_HEIGHT, TEXT_PADDING, flattenStroke } from '@/lib/pdf/drawing';
+import { TEXT_LINE_HEIGHT, TEXT_PADDING, flattenStroke, strokeOpacity } from '@/lib/pdf/drawing';
 
 export { HIGHLIGHTER_OPACITY, TEXT_BORDER_FRACTION, TEXT_LINE_HEIGHT, TEXT_PADDING, arrowHead, strokeOpacity } from '@/lib/pdf/drawing';
 
@@ -175,6 +175,54 @@ export function styledStroke(style: DrawStyle, points: number[]): Stroke {
   return stroke;
 }
 
+/** Estilo do painel a partir de um traço gravado (para mostrar o desenho escolhido). */
+export function styleOfStroke(stroke: Stroke): DrawStyle {
+  return {
+    tool: stroke.tool,
+    color: stroke.color,
+    widthPx: Math.max(1, Math.round(stroke.width * REFERENCE_PAGE_PX)),
+    opacity: strokeOpacity(stroke),
+    dash: stroke.dash ?? 'solid',
+    fill: stroke.fill?.color ?? null,
+    fillOpacity: stroke.fill?.opacity ?? DEFAULT_DRAW_STYLE.fillOpacity,
+  };
+}
+
+/** Só o que mudou entre dois estilos (o painel manda o estilo inteiro a cada ajuste). */
+export function changedKeys<T extends object>(before: T, after: T): Partial<T> {
+  const patch: Partial<T> = {};
+  for (const key of Object.keys(after) as Array<keyof T>) {
+    if (JSON.stringify(before[key]) !== JSON.stringify(after[key])) patch[key] = after[key];
+  }
+  return patch;
+}
+
+/**
+ * Aplica num traço gravado só o que mudou no painel: cor, espessura,
+ * opacidade, linha e preenchimento (este só no retângulo e na elipse). O tipo,
+ * os pontos e a rotação ficam como estavam.
+ */
+export function applyDrawPatch(stroke: Stroke, patch: Partial<DrawStyle>): Stroke {
+  const next: Stroke = { ...stroke };
+  if (patch.color) next.color = patch.color;
+  if (patch.widthPx !== undefined) next.width = Math.round((patch.widthPx / REFERENCE_PAGE_PX) * 100_000) / 100_000;
+  if (patch.opacity !== undefined) {
+    if (patch.opacity < 1) next.opacity = Math.round(patch.opacity * 100) / 100;
+    else delete next.opacity;
+  }
+  if (patch.dash !== undefined) {
+    if (patch.dash === 'solid') delete next.dash;
+    else next.dash = patch.dash;
+  }
+  if (isClosedShape(stroke.tool) && (patch.fill !== undefined || patch.fillOpacity !== undefined)) {
+    const color = patch.fill !== undefined ? patch.fill : (stroke.fill?.color ?? null);
+    const opacity = patch.fillOpacity ?? stroke.fill?.opacity ?? DEFAULT_DRAW_STYLE.fillOpacity;
+    if (color) next.fill = { color, opacity: Math.round(opacity * 100) / 100 };
+    else delete next.fill;
+  }
+  return next;
+}
+
 /**
  * Ponto final com Shift: quadrado, círculo, ou linha em múltiplos de 45 graus.
  * As contas são em pixels da página (`aspect` = altura / largura).
@@ -249,6 +297,12 @@ export function styleOfText(box: TextBox, pageWidthPt: number): TextStyle {
 export function withTextStyle(box: TextBox, style: TextStyle, pageWidthPt: number): TextBox {
   const { sizePt, ...rest } = style;
   return { ...box, ...rest, size: sizeFromPt(sizePt, pageWidthPt) };
+}
+
+/** Aplica numa caixa gravada só o que mudou no painel (o tamanho, só se ele mudou). */
+export function applyTextPatch(box: TextBox, patch: Partial<TextStyle>, pageWidthPt: number): TextBox {
+  const { sizePt, ...rest } = patch;
+  return { ...box, ...rest, ...(sizePt !== undefined ? { size: sizeFromPt(sizePt, pageWidthPt) } : {}) };
 }
 
 /**

@@ -43,7 +43,9 @@ const DialogContent = React.forwardRef<
       <DialogPrimitive.Content
         ref={ref}
         className={cn(
-          'fixed left-1/2 top-1/2 z-50 grid w-[calc(100vw-1rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl border bg-background p-6 shadow-lg',
+          // Coluna minmax(0, 1fr): conteúdo que não quebra (nome de arquivo, e-mail, link) encolhe com
+          // truncate em vez de alargar o diálogo e abrir rolagem horizontal.
+          'fixed left-1/2 top-1/2 z-50 grid w-[calc(100vw-1rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 grid-cols-[minmax(0,1fr)] gap-4 rounded-xl border bg-background p-6 shadow-lg',
           // tv-screen: liga e desliga como TV antiga (globals.css).
           'tv-screen max-h-[calc(100dvh-1rem)]',
           className,

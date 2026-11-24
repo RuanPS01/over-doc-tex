@@ -16,17 +16,28 @@ import { useUndoShortcuts } from '@/hooks/use-undo-shortcuts';
 import { downloadBytes, slugify } from '@/lib/download';
 import { msg } from '@/lib/i18n';
 import { sourceAt } from '@/lib/latex/synctex';
-import { A4_ASPECT, buildDrawing, movePin, pinPointFor } from '@/lib/pdf/drawing';
+import { A4_ASPECT, boundsOf, buildDrawing, movePin, pinPointFor } from '@/lib/pdf/drawing';
 import { buildQuote, normalizeRects } from '@/lib/pdf/text-anchor';
 import { cn } from '@/lib/utils';
-import type { NormalizedPoint, ParticipantRole, ReviewStatus, SourceLocation, Stroke, TextBox } from '@shared/firestore/types';
+import type { Drawing, NormalizedPoint, ParticipantRole, ReviewStatus, SourceLocation, Stroke, TextBox } from '@shared/firestore/types';
 import { useAnnotatedPdf } from '../hooks/use-annotated-pdf';
 import { markingFrom, useReviewActions, useReviewViewer, type GuestIdentity, type NewAnnotation } from '../hooks/use-review-actions';
 import { useReviewDocuments, useReviewPageTexts, useReviewPdf, useReviewSyncData } from '../hooks/use-review-files';
 import { useReviewHistory } from '../hooks/use-review-history';
 import { useTextSelection } from '../hooks/use-text-selection';
 import { useThreads } from '../hooks/use-threads';
-import { DEFAULT_DRAW_STYLE, DEFAULT_TEXT_STYLE, newTextBox, styleOfText, withTextStyle, type DrawStyle, type TextStyle } from '../model/markup';
+import {
+  DEFAULT_DRAW_STYLE,
+  DEFAULT_TEXT_STYLE,
+  applyDrawPatch,
+  applyTextPatch,
+  changedKeys,
+  newTextBox,
+  styleOfStroke,
+  styleOfText,
+  type DrawStyle,
+  type TextStyle,
+} from '../model/markup';
 import { anchorPoint, canManageThread, type PendingAnnotation, type ReviewSummary, type ReviewTool, type ThreadSummary } from '../model/review';
 import { AnnotationLayer } from './annotation-layer';
 import { MarkupPanel } from './markup-panel';
@@ -39,6 +50,10 @@ import { ThreadList } from './thread-list';
 
 /** Remarcação com desenho: o desenho vale quando a pessoa para de desenhar por este tempo (dá para fazer vários traços). */
 const RELOCATE_DRAW_DELAY = 1200;
+/** Traço livre: os traços feitos em sequência viram um desenho só, gravado quando a pessoa para por este tempo. */
+const INK_GROUP_DELAY = 1200;
+/** Estilo mudado no painel para o desenho selecionado: grava quando os ajustes param por este tempo. */
+const STYLE_SAVE_DELAY = 600;
 
 const TOOLS: Array<{ id: ReviewTool; label: string; icon: ReactNode }> = [
   { id: 'select', label: msg('Selecionar texto'), icon: <TextSelect /> },
@@ -94,6 +109,12 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
   const [activeTextIndex, setActiveTextIndex] = useState<number | null>(null);
   // Desenho já gravado aberto para editar: o rascunho começa com ele, e "Salvar alterações" troca a marcação.
   const [editingThread, setEditingThread] = useState<ThreadSummary | null>(null);
+  // Edição do texto ali mesmo (clique com "Texto" ou duplo clique): grava sozinha quando a caixa sai de edição.
+  const [editAutoSave, setEditAutoSave] = useState(false);
+  // Estilo do desenho selecionado mudado no painel, mostrado antes de gravar.
+  const [drawingPreview, setDrawingPreview] = useState<{ threadId: string; drawing: Drawing } | null>(null);
+  const previewTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const flushPreviewRef = useRef<() => void>(() => undefined);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [selectedDrawingId, setSelectedDrawingId] = useState<string | null>(null);
   // "Refazer a marcação": a marcação antiga sai do PDF e a thread espera a nova, que vale assim que é feita.
@@ -184,18 +205,39 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
       const base = current?.kind === 'draw' && current.page === page ? current : { strokes: [], texts: [] };
       return { kind: 'draw', page, ...change({ strokes: base.strokes, texts: base.texts }) };
     });
-    // No celular o Sheet só abre pelo botão: abrir a cada traço impediria desenhar o resto.
     setSelectedThreadId(null);
     setSelectedDrawingId(null);
-    if (isDesktop && !relocatingId && !editingThread) comments.expand();
+  };
+
+  /**
+   * Desenho e texto novos não pedem comentário (para comentar, marca-se um ponto sobre eles): o
+   * rascunho vira um desenho sem comentário assim que fica parado. Sai da tela na hora; o Firestore
+   * mostra o desenho gravado antes de o servidor confirmar.
+   */
+  const commitDraft = (submitted: Extract<PendingAnnotation, { kind: 'draw' }>) => {
+    setPending((current) => (current === submitted ? null : current));
+    setActiveTextIndex(null);
+    void run(async () => {
+      const { annotation, sourceHint } = annotationOf(submitted);
+      if (annotation.kind === 'pin') await reviewHistory.createDrawing(documentId, annotation, sourceHint);
+    });
+  };
+
+  /** Desenho em outra página ainda não gravado: grava antes de começar o desta. */
+  const commitOtherPage = (page: number) => {
+    if (pending?.kind === 'draw' && pending.page !== page && !editingThread && !relocating) commitDraft(pending);
   };
 
   const handleStroke = (page: number, stroke: Stroke) => {
-    if (pending?.kind === 'draw' && pending.page !== page) setActiveTextIndex(null);
+    // Na edição de um desenho gravado, ele fica na página dele.
+    if (editingThread && pending?.kind === 'draw' && pending.page !== page) return;
+    commitOtherPage(page);
     updateDraft(page, (draft) => ({ ...draft, strokes: [...draft.strokes, stroke] }));
   };
 
   const createText = (page: number, point: NormalizedPoint) => {
+    if (editingThread && pending?.kind === 'draw' && pending.page !== page) return;
+    commitOtherPage(page);
     const box = newTextBox(point, textStyle, pageOf(page));
     const index = pending?.kind === 'draw' && pending.page === page ? pending.texts.length : 0;
     updateDraft(page, (draft) => ({ ...draft, texts: [...draft.texts, box] }));
@@ -232,10 +274,25 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
   const activeText = tool === 'write' && activeTextIndex !== null && pending?.kind === 'draw' ? (pending.texts[activeTextIndex] ?? null) : null;
   const activePageWidth = pending?.kind === 'draw' ? pageOf(pending.page).width : 595;
 
-  /** Painel "Texto": muda a caixa escolhida e vira o padrão das próximas. */
+  /** Painel "Texto": muda a caixa escolhida (só o que mudou) e vira o padrão das próximas. */
   const changeTextStyle = (style: TextStyle) => {
-    setTextStyle(style);
-    if (activeText && activeTextIndex !== null) updateText(activeTextIndex, withTextStyle(activeText, style, activePageWidth));
+    const shown = activeText ? styleOfText(activeText, activePageWidth) : textStyle;
+    const patch = changedKeys(shown, style);
+    setTextStyle((current) => ({ ...current, ...patch }));
+    if (activeText && activeTextIndex !== null) updateText(activeTextIndex, applyTextPatch(activeText, patch, activePageWidth));
+  };
+
+  /**
+   * Painel "Desenho": vale para os próximos traços e, na edição de um desenho gravado, muda também
+   * os traços dele (o painel começa a edição com o estilo e a ferramenta do primeiro traço).
+   */
+  const changeDrawStyle = (style: DrawStyle) => {
+    const patch = changedKeys(drawStyle, style);
+    setDrawStyle(style);
+    const { tool: _tool, ...stylePatch } = patch;
+    if (editingThread && Object.keys(stylePatch).length > 0) {
+      setPending((current) => (current?.kind === 'draw' ? { ...current, strokes: current.strokes.map((stroke) => applyDrawPatch(stroke, stylePatch)) } : current));
+    }
   };
 
   /** Linha do código sob o ponto (SyncTeX da versão), guardada na thread para "Abrir no código". */
@@ -280,17 +337,6 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
     if (created) setSelectedThreadId((current) => current ?? created.threadId);
   };
 
-  /** "Manter só o desenho": o desenho fica no PDF sem comentário (sem cartão), e dá para apagá-lo depois. */
-  const keepDrawing = async () => {
-    if (pending?.kind !== 'draw') return;
-    const submitted = pending;
-    const { annotation, sourceHint } = annotationOf(submitted);
-    if (annotation.kind !== 'pin') return;
-    setTool('select');
-    await reviewHistory.createDrawing(documentId, annotation, sourceHint);
-    setPending((current) => (current === submitted ? null : current));
-  };
-
   /**
    * "Refazer a marcação": a marcação antiga sai do PDF e a ferramenta segue o tipo dela (trecho
    * seleciona texto, ponto marca ponto, desenho desenha na mesma cor). A marcação nova vale assim
@@ -315,46 +361,88 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
   };
 
   /** "Editar": o desenho gravado vira o rascunho (formas e textos editáveis); a marcação antiga sai do PDF até salvar ou cancelar. */
-  const startEdit = (thread: ThreadSummary) => {
+  const startEdit = (thread: ThreadSummary, inline = false) => {
     if (thread.anchor.type !== 'pin' || !thread.anchor.drawing) return;
     const { strokes, texts = [] } = thread.anchor.drawing;
+    // Um rascunho novo ainda não gravado vai antes (a edição usa o mesmo lugar do rascunho).
+    if (pending?.kind === 'draw' && !editingThread && !relocating) commitDraft(pending);
+    flushPreviewRef.current();
     setShowMarkings(true);
     clearSelection();
     setRelocatingId(null);
     setSelectedThreadId(null);
     setSelectedDrawingId(null);
-    setActiveTextIndex(null);
     setEditingThread(thread);
+    setEditAutoSave(inline);
     setPending({ kind: 'draw', page: thread.anchor.page, strokes, texts });
-    setTool(texts.length > 0 && strokes.length === 0 ? 'write' : 'draw');
+    const textOnly = texts.length > 0 && strokes.length === 0;
+    setTool(inline || textOnly ? 'write' : 'draw');
+    if (strokes[0]) setDrawStyle(styleOfStroke(strokes[0]));
+    // Texto editado ali mesmo: a primeira caixa já abre para digitar.
+    setActiveTextIndex(inline && texts.length > 0 ? 0 : null);
     if (!isDesktop) setSheetOpen(false);
   };
 
   const cancelEdit = () => {
     setEditingThread(null);
+    setEditAutoSave(false);
     setActiveTextIndex(null);
     setPending(null);
     setTool('select');
   };
 
-  /** Grava o desenho editado no lugar do antigo (dá para desfazer); o número fica no canto dele, como na criação. */
+  /**
+   * Grava o desenho editado no lugar do antigo (dá para desfazer); o número fica no canto dele,
+   * como na criação. Sem mudança, nada é gravado. Desenho sem comentário que ficou vazio sai do PDF
+   * (o desfazer traz de volta); o comentário com desenho vira um ponto.
+   */
   const saveEdit = () => {
     const target = editingThread;
-    if (!target || pending?.kind !== 'draw') return;
+    if (!target || target.anchor.type !== 'pin' || pending?.kind !== 'draw') return;
     const size = pageOf(pending.page);
     const drawing = buildDrawing(pending.strokes, pending.texts, size.height / size.width);
-    if (!drawing) {
-      setActionError(t('Desenho vazio ou grande demais.'));
-      return;
-    }
-    const point = pinPointFor(drawing.bounds);
-    const annotation: NewAnnotation = { kind: 'pin', page: pending.page, point, drawing };
-    const marking = markingFrom(annotation, sourceHintAt(pending.page, point.x, point.y));
+    const original = target.anchor.drawing;
     // O rascunho sai na hora: um Ctrl+Z durante a gravação desfaz a edição, não um traço dele. O
     // Firestore aplica a mudança na tela antes de o servidor confirmar, então o desenho antigo não pisca.
     cancelEdit();
-    void run(() => reviewHistory.setMarking(target, marking));
+    if (!drawing && target.drawingOnly) {
+      void run(() => deleteThread(target));
+      return;
+    }
+    const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+    if (drawing && original && same(drawing.strokes, original.strokes) && same(drawing.texts ?? [], original.texts ?? [])) return;
+    const point = drawing ? pinPointFor(drawing.bounds) : target.anchor.point;
+    const annotation: NewAnnotation = { kind: 'pin', page: pending.page, point, drawing };
+    void run(() => reviewHistory.setMarking(target, markingFrom(annotation, sourceHintAt(pending.page, point.x, point.y))));
   };
+
+  /** Desenho selecionado movido, girado, redimensionado ou com o estilo mudado: grava no lugar (dá para desfazer). */
+  const commitDrawing = (thread: ThreadSummary, drawing: Drawing) =>
+    run(async () => {
+      if (thread.anchor.type !== 'pin') return;
+      const page = thread.anchor.page;
+      const point = pinPointFor(drawing.bounds);
+      await reviewHistory.setMarking(thread, markingFrom({ kind: 'pin', page, point, drawing }, sourceHintAt(page, point.x, point.y)));
+      setDrawingPreview((current) => (current?.drawing === drawing ? null : current));
+    });
+
+  /** Estilo mudado no painel para o desenho selecionado: aparece na hora e grava quando os ajustes param. */
+  const previewDrawing = (thread: ThreadSummary, drawing: Drawing) => {
+    setDrawingPreview({ threadId: thread.id, drawing });
+    clearTimeout(previewTimerRef.current);
+    const commit = () => {
+      flushPreviewRef.current = () => undefined;
+      void commitDrawing(thread, drawing);
+    };
+    flushPreviewRef.current = () => {
+      clearTimeout(previewTimerRef.current);
+      commit();
+    };
+    previewTimerRef.current = setTimeout(commit, STYLE_SAVE_DELAY);
+  };
+
+  // Ao trocar ou tirar a seleção (ou sair da tela), o estilo ainda não gravado é gravado na hora.
+  useEffect(() => () => flushPreviewRef.current(), [selectedDrawingId]);
 
   const cancelRelocate = () => {
     setRelocatingId(null);
@@ -397,6 +485,31 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
     timer = setTimeout(attempt, RELOCATE_DRAW_DELAY);
     return () => clearTimeout(timer);
   }, [pending, relocatingId]);
+
+  // Desenho e texto novos são gravados sozinhos quando o rascunho fica parado: na hora, para formas e
+  // textos (o texto, quando sai de edição); depois de uma pausa, para o traço livre, que junta os traços
+  // feitos em sequência num desenho só. Um traço em andamento adia a gravação.
+  useEffect(() => {
+    if (pending?.kind !== 'draw' || relocating || editingThread || activeTextIndex !== null) return;
+    const submitted = pending;
+    if (submitted.strokes.length === 0 && !submitted.texts.some((box) => box.text.trim())) {
+      setPending(null);
+      return;
+    }
+    const freehand = submitted.strokes.some((stroke) => stroke.tool === 'pen' || stroke.tool === 'highlighter');
+    let timer: ReturnType<typeof setTimeout>;
+    const attempt = () => {
+      if (strokingRef.current) timer = setTimeout(attempt, 300);
+      else commitDraft(submitted);
+    };
+    timer = setTimeout(attempt, freehand ? INK_GROUP_DELAY : 0);
+    return () => clearTimeout(timer);
+  }, [pending, relocatingId, editingThread, activeTextIndex]);
+
+  // Texto editado ali mesmo: grava sozinho quando a caixa sai de edição (clique fora, Esc, outra ferramenta).
+  useEffect(() => {
+    if (editingThread && editAutoSave && activeTextIndex === null) saveEdit();
+  }, [editingThread, editAutoSave, activeTextIndex]);
 
   // Esc cancela a remarcação (a marcação antiga volta).
   useEffect(() => {
@@ -460,17 +573,9 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
   };
 
   // Na remarcação não há painel: a marcação vale sozinha e o cartão mostra o andamento e o cancelar.
-  const pendingPanel = pending && !relocating && !editingThread ? (
-    <PendingAnnotationPanel
-      pending={pending}
-      onUndoStroke={() => setPending((current) => (current?.kind === 'draw' ? { ...current, strokes: current.strokes.slice(0, -1) } : current))}
-      onSubmit={submitPending}
-      onKeepDrawing={keepDrawing}
-      onCancel={() => {
-        setPending(null);
-        setActiveTextIndex(null);
-      }}
-    />
+  // Só ponto e trecho pedem comentário; o desenho e o texto flutuante são gravados sozinhos.
+  const pendingPanel = pending && pending.kind !== 'draw' && !relocating ? (
+    <PendingAnnotationPanel pending={pending} onSubmit={submitPending} onCancel={() => setPending(null)} />
   ) : null;
   const pendingKey = pendingPanel && pending ? (pending.kind === 'text' ? `text-${pending.anchor.page}` : `${pending.kind}-${pending.page}`) : null;
 
@@ -506,10 +611,13 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
       <Select
         value={documentId}
         onValueChange={(next) => {
+          // Desenho novo ainda não gravado vai para o documento em que foi feito.
+          if (pending?.kind === 'draw' && !editingThread && !relocating) commitDraft(pending);
           setDocumentId(next);
           setPending(null);
           setRelocatingId(null);
           setEditingThread(null);
+          setEditAutoSave(false);
           setActiveTextIndex(null);
           setSelectedThreadId(null);
           setSelectedDrawingId(null);
@@ -534,11 +642,14 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
   const toggleMarkings = (visible: boolean) => {
     setShowMarkings(visible);
     if (visible) return;
-    // Sem marcações não há onde marcar: a ferramenta volta a "Selecionar texto" e a marcação pendente sai.
+    // Sem marcações não há onde marcar: a ferramenta volta a "Selecionar texto" e a marcação pendente sai
+    // (o desenho novo ainda não gravado é gravado antes; a edição de um desenho é descartada).
+    if (pending?.kind === 'draw' && !editingThread && !relocating) commitDraft(pending);
     setTool('select');
     setPending(null);
     setRelocatingId(null);
     setEditingThread(null);
+    setEditAutoSave(false);
     setActiveTextIndex(null);
     clearSelection();
   };
@@ -591,13 +702,15 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
         ? t('Desenhe a marcação nova do comentário {number}; ela vale quando você parar de desenhar.', { number: relocating.number })
         : t('Selecione o trecho novo do comentário {number}.', { number: relocating.number })
     : editingThread
-      ? t('Editando o desenho: mude, mova ou apague o que quiser e use "Salvar alterações" no painel.')
+      ? editAutoSave
+        ? t('Editando o texto: clique fora da caixa para gravar.')
+        : t('Editando o desenho: mude, mova ou apague o que quiser e use "Salvar alterações" no painel.')
       : tool === 'pin'
         ? t('Clique no ponto do PDF que quer comentar.')
         : tool === 'draw'
-          ? t('Desenhe sobre a página; depois escreva o comentário ao lado.')
+          ? t('Desenhe sobre a página: cada desenho é gravado ao terminar. Para comentar, use Ponto.')
           : tool === 'write'
-            ? t('Clique na página para escrever; arraste as alças para mover, redimensionar e girar.')
+            ? t('Clique na página para escrever; o texto é gravado ao clicar fora. Clique num texto para editá-lo.')
             : null;
   const authorMessage = review.description ? (
     <>
@@ -637,7 +750,25 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
   ) : null;
 
   // Painel flutuante de desenho e texto: aparece com essas ferramentas e na edição de um desenho gravado.
-  const showMarkupPanel = canAnnotate && (tool === 'draw' || tool === 'write' || Boolean(editingThread));
+  // Desenho ou texto gravado selecionado (em "Selecionar texto"), por quem pode mexer nele: o painel
+  // mostra o estilo dele e cada ajuste muda o selecionado.
+  const selectedDrawing = tool === 'select' && canAnnotate && !editingThread ? (drawings.find((thread) => thread.id === selectedDrawingId) ?? null) : null;
+  const selectedBase =
+    selectedDrawing && selectedDrawing.anchor.type === 'pin' && canManageThread(selectedDrawing, viewer)
+      ? drawingPreview?.threadId === selectedDrawing.id
+        ? drawingPreview.drawing
+        : selectedDrawing.anchor.drawing
+      : null;
+  const selectedPage = selectedDrawing ? pageOf(selectedDrawing.anchor.page) : pageOf(1);
+  const selectedMode: 'draw' | 'write' = selectedBase && selectedBase.strokes.length === 0 ? 'write' : 'draw';
+  const selectedDrawStyle = selectedBase?.strokes[0] ? styleOfStroke(selectedBase.strokes[0]) : drawStyle;
+  const selectedTextStyle = selectedBase?.texts?.[0] ? styleOfText(selectedBase.texts[0], selectedPage.width) : textStyle;
+  const restyleSelected = (change: (drawing: Drawing) => Drawing) => {
+    if (selectedDrawing && selectedBase) previewDrawing(selectedDrawing, change(selectedBase));
+  };
+
+  // Painel flutuante de desenho e texto: com essas ferramentas, na edição de um desenho gravado e com um selecionado.
+  const showMarkupPanel = canAnnotate && (tool === 'draw' || tool === 'write' || Boolean(editingThread) || Boolean(selectedBase));
 
   const pdfBaseName = `${slugify(review.projectName)}-v${review.snapshotLabel}${documentId === 'main' ? '' : `-${slugify(currentDocument?.title ?? documentId)}`}`;
 
@@ -664,8 +795,9 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
       title={toolbarTitle}
       actions={
         <>
-          {markingsSwitch}
+          {/* As ferramentas vêm antes do interruptor: quando somem (marcações desligadas), ele não muda de lugar. */}
           {tools}
+          {markingsSwitch}
           {canWrite && (
             <UndoRedoButtons
               className="hidden sm:flex"
@@ -678,9 +810,10 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
               isBusy={history.isBusy}
             />
           )}
-          {commentsToggle}
         </>
       }
+      // O botão dos comentários fica no fim da barra, junto do painel que ele abre.
+      trailingActions={commentsToggle}
       textLayer
       onPageSizes={setPageSizes}
       outlineKey="review"
@@ -698,12 +831,42 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
       ]}
       isPreparingDownload={isExporting}
       floatingPanel={
-        showMarkupPanel ? (
+        showMarkupPanel && selectedDrawing && selectedBase ? (
+          <MarkupPanel
+            selection
+            defaultCollapsed={!isDesktop}
+            mode={selectedMode}
+            drawStyle={selectedDrawStyle}
+            onDrawStyle={(style) => {
+              const { tool: _tool, ...patch } = changedKeys(selectedDrawStyle, style);
+              restyleSelected((drawing) => ({ ...drawing, strokes: drawing.strokes.map((stroke) => applyDrawPatch(stroke, patch)) }));
+            }}
+            textStyle={selectedTextStyle}
+            onTextStyle={(style) => {
+              const patch = changedKeys(selectedTextStyle, style);
+              restyleSelected((drawing) => ({ ...drawing, texts: drawing.texts?.map((box) => applyTextPatch(box, patch, selectedPage.width)) }));
+            }}
+            activeText={
+              selectedMode === 'write' && selectedBase.texts?.length === 1
+                ? {
+                    rotation: selectedBase.texts[0]!.rotation,
+                    onRotation: (rotation) =>
+                      restyleSelected((drawing) => {
+                        const texts = (drawing.texts ?? []).map((box) => ({ ...box, rotation }));
+                        return { ...drawing, texts, bounds: boundsOf(drawing.strokes, texts, selectedPage.height / selectedPage.width) };
+                      }),
+                    onDelete: () => void run(() => deleteThread(selectedDrawing)),
+                  }
+                : null
+            }
+            editing={null}
+          />
+        ) : showMarkupPanel ? (
           <MarkupPanel
             defaultCollapsed={!isDesktop}
             mode={tool === 'write' ? 'write' : 'draw'}
             drawStyle={drawStyle}
-            onDrawStyle={setDrawStyle}
+            onDrawStyle={changeDrawStyle}
             textStyle={activeText ? styleOfText(activeText, activePageWidth) : textStyle}
             onTextStyle={changeTextStyle}
             activeText={
@@ -716,7 +879,8 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
                 : null
             }
             editing={
-              editingThread
+              // O texto editado ali mesmo grava sozinho; salvar e cancelar são da edição pelo botão "Editar".
+              editingThread && !editAutoSave
                 ? {
                     onSave: saveEdit,
                     onCancel: cancelEdit,
@@ -755,7 +919,10 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
                 onTextCreate={createText}
                 onTextSelect={selectText}
                 onTextChange={updateText}
-                onEditDrawing={startEdit}
+                onEditDrawing={(thread) => startEdit(thread)}
+                onEditText={(thread) => startEdit(thread, true)}
+                onTransformDrawing={(thread, drawing) => void commitDrawing(thread, drawing)}
+                drawingPreview={drawingPreview}
                 onSelect={selectThread}
                 onSelectDrawing={(threadId) => {
                   setSelectedDrawingId((current) => (current === threadId ? null : threadId));
@@ -858,7 +1025,7 @@ export function ReviewWorkspace({ review, role, guest = null, onChangeGuestName,
             ) : (
               <Button className="absolute bottom-4 right-4 z-20 shadow-lg" onClick={() => setSheetOpen(true)}>
                 <MessageSquare />
-                {pending ? t('Escrever comentário') : t('Comentários ({count})', { count: threads.length })}
+                {pending && pending.kind !== 'draw' ? t('Escrever comentário') : t('Comentários ({count})', { count: threads.length })}
               </Button>
             )}
           </>

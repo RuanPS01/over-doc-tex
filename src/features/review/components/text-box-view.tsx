@@ -56,11 +56,12 @@ interface TextBoxViewProps {
   faded?: boolean;
   /** Clicável (desenho sem comentário em "Selecionar texto", ou a caixa do rascunho em "Texto"). */
   onClick?: () => void;
+  onDoubleClick?: () => void;
   label?: string;
 }
 
 /** Texto flutuante gravado ou do rascunho, sem edição: a caixa girada com fundo, borda e o texto. */
-export function TextBoxView({ box, pageWidth, faded = false, onClick, label }: TextBoxViewProps) {
+export function TextBoxView({ box, pageWidth, faded = false, onClick, onDoubleClick, label }: TextBoxViewProps) {
   if (pageWidth === 0) return null;
   const Tag = onClick ? 'button' : 'div';
   return (
@@ -76,6 +77,14 @@ export function TextBoxView({ box, pageWidth, faded = false, onClick, label }: T
           ? (event) => {
               event.stopPropagation();
               onClick();
+            }
+          : undefined
+      }
+      onDoubleClick={
+        onDoubleClick
+          ? (event) => {
+              event.stopPropagation();
+              onDoubleClick();
             }
           : undefined
       }

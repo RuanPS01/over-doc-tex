@@ -23,7 +23,7 @@ const OPTIONS: ReadonlyArray<{ value: ReviewAccess; title: string; description: 
 export function ReviewAccessChoice({ value, disabled, onChange }: { value: ReviewAccess; disabled?: boolean; onChange: (access: ReviewAccess) => void }) {
   const { t } = useT();
   return (
-    <fieldset className="flex flex-col gap-2" disabled={disabled}>
+    <fieldset className="flex min-w-0 flex-col gap-2" disabled={disabled}>
       <legend className="mb-1 text-sm font-medium">{t('Quem pode abrir a revisão')}</legend>
       {OPTIONS.map((option) => {
         const Icon = option.icon;

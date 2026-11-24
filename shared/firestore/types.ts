@@ -424,6 +424,11 @@ export interface Stroke {
   dash?: LineStyle;
   /** Preenchimento do retângulo e da elipse. Ausente ou nulo: sem preenchimento. */
   fill?: { color: AnnotationColor; opacity: number } | null;
+  /**
+   * Retângulo e elipse girados (graus no sentido horário, em torno do centro da caixa dos dois
+   * cantos). Ausente: 0. Nos outros traços a rotação já fica nos próprios pontos.
+   */
+  rotation?: number;
 }
 
 export type TextFont = 'sans' | 'serif' | 'mono';

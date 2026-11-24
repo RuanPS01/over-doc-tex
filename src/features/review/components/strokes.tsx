@@ -57,13 +57,17 @@ function StrokeShape({ stroke, size, hit, onClick, label }: { stroke: Stroke; si
       };
   const cap = stroke.tool === 'highlighter' ? 'butt' : 'round';
 
-  if (stroke.tool === 'rect') {
+  if (stroke.tool === 'rect' || stroke.tool === 'ellipse') {
     const box = boxOf(stroke.points, width, height);
-    return <rect x={box.x} y={box.y} width={box.w} height={box.h} strokeLinejoin="round" {...common} />;
-  }
-  if (stroke.tool === 'ellipse') {
-    const box = boxOf(stroke.points, width, height);
-    return <ellipse cx={box.x + box.w / 2} cy={box.y + box.h / 2} rx={box.w / 2} ry={box.h / 2} {...common} />;
+    const cx = box.x + box.w / 2;
+    const cy = box.y + box.h / 2;
+    // A rotação própria da forma é em pixels da página, em torno do centro dela.
+    const transform = stroke.rotation ? `rotate(${stroke.rotation} ${cx} ${cy})` : undefined;
+    return stroke.tool === 'rect' ? (
+      <rect x={box.x} y={box.y} width={box.w} height={box.h} strokeLinejoin="round" transform={transform} {...common} />
+    ) : (
+      <ellipse cx={cx} cy={cy} rx={box.w / 2} ry={box.h / 2} transform={transform} {...common} />
+    );
   }
   if (stroke.tool === 'line' || stroke.tool === 'arrow') {
     const [x1 = 0, y1 = 0, x2 = 0, y2 = 0] = stroke.points.map((value, index) => value * (index % 2 === 0 ? width : height));

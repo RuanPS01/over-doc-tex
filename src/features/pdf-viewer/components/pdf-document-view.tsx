@@ -33,6 +33,8 @@ interface PdfDocumentViewProps {
   renderOverlay?: (pageNumber: number) => ReactNode;
   /** Ações extras na barra, antes do download. */
   actions?: ReactNode;
+  /** Ações no fim da barra, depois do zoom (ex.: o botão que abre o painel ao lado). */
+  trailingActions?: ReactNode;
   scrollRef?: RefObject<HTMLDivElement>;
   /** Ex.: espaço para o botão de fechar do diálogo. */
   toolbarClassName?: string;
@@ -65,6 +67,7 @@ export function PdfDocumentView({
   loadingLabel,
   renderOverlay,
   actions,
+  trailingActions,
   scrollRef,
   toolbarClassName,
   textLayer,
@@ -172,6 +175,7 @@ export function PdfDocumentView({
         >
           <ZoomIn />
         </Button>
+        {trailingActions}
       </div>
       <PdfOutlineFrame outline={outline} frameRef={frameRef} widthKey={`overdoctex.pdf-outline-width.${outlineKey}`}>
         <div className="relative flex min-h-0 min-w-0 flex-1">

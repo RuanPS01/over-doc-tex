@@ -9,16 +9,18 @@ interface DrawingViewProps {
   faded?: boolean;
   /** Desenho sem comentário em "Selecionar texto": clicar no traço ou no texto seleciona. */
   onClick?: () => void;
+  /** Duplo clique no texto (edita ali mesmo). */
+  onDoubleClick?: () => void;
   label?: string;
 }
 
 /** Traços e formas por baixo, textos flutuantes por cima. */
-export function DrawingView({ strokes, texts = [], size, faded = false, onClick, label }: DrawingViewProps) {
+export function DrawingView({ strokes, texts = [], size, faded = false, onClick, onDoubleClick, label }: DrawingViewProps) {
   return (
     <>
       <Strokes strokes={strokes} size={size} faded={faded} onClick={onClick} label={label} />
       {texts.map((box, index) => (
-        <TextBoxView key={index} box={box} pageWidth={size.width} faded={faded} onClick={onClick} label={label} />
+        <TextBoxView key={index} box={box} pageWidth={size.width} faded={faded} onClick={onClick} onDoubleClick={onDoubleClick} label={label} />
       ))}
     </>
   );
