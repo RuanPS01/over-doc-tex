@@ -155,7 +155,7 @@ export function useReviewActions(review: ReviewSummary | null | undefined, role:
         return { threadId: threadRef.id, commentId: commentRef.id };
       },
 
-      /** "Manter só o desenho": thread sem comentário (sem cartão), que aparece no PDF e pode ser apagada. */
+      /** Desenho ou texto flutuante (gravado sem comentário): thread sem cartão, que aparece no PDF e pode ser apagada. */
       createDrawing: async (documentId: string, annotation: Extract<NewAnnotation, { kind: 'pin' }>, sourceHint: SourceLocation | null) => {
         if (!review || !annotation.drawing) return null;
         const user = currentUser();

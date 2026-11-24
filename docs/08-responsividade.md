@@ -21,6 +21,8 @@ A altura entra na condição do desktop porque um celular deitado tem mais de 10
 
 Breakpoints do Tailwind usados: `xs` (360px, próprio), `sm` (640px), `lg` (1024px) e `landscape-short` (variante `raw` com a mesma media query do modo paisagem).
 
+O `DialogContent` usa uma coluna `grid-cols-[minmax(0,1fr)]`: texto que não quebra (nome de arquivo, e-mail, link) encolhe com `truncate` em vez de alargar o diálogo e abrir rolagem horizontal. Pelo mesmo motivo, `fieldset` dentro de diálogo leva `min-w-0` (o padrão do navegador é não encolher abaixo do conteúdo).
+
 Cuidado com `xs`: ele já vale em 360px. Dentro de um diálogo, a largura útil é bem menor que a janela (em 360px sobram uns 300px depois das margens), então três botões com rótulo lado a lado a partir de `xs` transbordam. Para o que fica dentro de diálogo, use `sm`.
 
 ## 3. Código do layout

@@ -1,5 +1,5 @@
 import { useRef, useState, type MouseEvent, type PointerEvent } from 'react';
-import type { NormalizedPoint, Stroke, TextBox } from '@shared/firestore/types';
+import type { Drawing, NormalizedPoint, Stroke, TextBox } from '@shared/firestore/types';
 import { useElementSize } from '@/hooks/use-element-size';
 import { useT } from '@/hooks/use-t';
 import { movePin } from '@/lib/pdf/drawing';
@@ -39,6 +39,12 @@ interface AnnotationLayerProps {
   onTextChange: (index: number, box: TextBox) => void;
   /** Abre um desenho gravado para editar. */
   onEditDrawing: (thread: ThreadSummary) => void;
+  /** Edita ali mesmo o texto de um desenho gravado (clique com "Texto", duplo clique na seleção). */
+  onEditText: (thread: ThreadSummary) => void;
+  /** Desenho selecionado arrastado, girado ou redimensionado. */
+  onTransformDrawing: (thread: ThreadSummary, drawing: Drawing) => void;
+  /** Estilo do desenho selecionado mudado no painel e ainda não gravado. */
+  drawingPreview: { threadId: string; drawing: Drawing } | null;
   onSelect: (threadId: string) => void;
   onSelectDrawing: (threadId: string) => void;
   /** Pins (com ou sem desenho) que a pessoa pode arrastar, e desenhos que ela pode apagar: quem criou ou edita o projeto. */
@@ -77,6 +83,9 @@ export function AnnotationLayer({
   onTextSelect,
   onTextChange,
   onEditDrawing,
+  onEditText,
+  onTransformDrawing,
+  drawingPreview,
   onSelect,
   onSelectDrawing,
   canMove,
@@ -160,6 +169,7 @@ export function AnnotationLayer({
   return (
     <div
       ref={rootRef}
+      data-annotation-layer
       className={cn(
         'absolute inset-0 z-10',
         tool === 'select' && 'pointer-events-none',
@@ -179,12 +189,16 @@ export function AnnotationLayer({
             key={thread.id}
             thread={thread}
             size={size}
+            preview={drawingPreview?.threadId === thread.id ? drawingPreview.drawing : null}
             isSelected={thread.id === selectedDrawingId}
             isInteractive={tool === 'select'}
-            canDelete={canMove(thread)}
+            canManage={canMove(thread)}
             onSelect={() => onSelectDrawing(thread.id)}
             onDelete={() => onDeleteDrawing(thread)}
             onEdit={() => onEditDrawing(thread)}
+            // Com "Texto", clicar num texto gravado (de quem pode mexer nele) edita o texto ali mesmo.
+            onEditText={(tool === 'write' || tool === 'select') && canMove(thread) && thread.anchor.type === 'pin' && thread.anchor.drawing?.texts?.length ? () => onEditText(thread) : undefined}
+            onTransform={(drawing) => onTransformDrawing(thread, drawing)}
           />
         ),
       )}

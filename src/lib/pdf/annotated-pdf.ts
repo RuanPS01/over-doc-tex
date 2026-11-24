@@ -358,12 +358,21 @@ function drawStroke(ctx: Context, page: PDFPage, stroke: Stroke, width: number, 
   const fill = stroke.fill ? { color: colorOf(ctx, input.palette.annotation[stroke.fill.color]), opacity: stroke.fill.opacity * fade } : null;
   const [x1 = 0, y1 = 0, x2 = 0, y2 = 0] = stroke.points;
 
+  // Rotação própria do retângulo e da elipse: horária na tela (y para baixo), anti-horária aqui (y para cima).
+  const rotation = stroke.rotation ? -stroke.rotation : 0;
   if (stroke.tool === 'rect') {
+    const boxWidth = Math.abs(x2 - x1) * width;
+    const boxHeight = Math.abs(y2 - y1) * height;
+    const center = { x: ((x1 + x2) / 2) * width, y: height - ((y1 + y2) / 2) * height };
+    const radians = (rotation * Math.PI) / 180;
+    // O pdf-lib gira o retângulo em torno do canto (x, y): o canto já vai girado em torno do centro.
+    const [dx, dy] = [-boxWidth / 2, -boxHeight / 2];
     page.drawRectangle({
-      x: Math.min(x1, x2) * width,
-      y: height - Math.max(y1, y2) * height,
-      width: Math.abs(x2 - x1) * width,
-      height: Math.abs(y2 - y1) * height,
+      x: center.x + dx * Math.cos(radians) - dy * Math.sin(radians),
+      y: center.y + dx * Math.sin(radians) + dy * Math.cos(radians),
+      width: boxWidth,
+      height: boxHeight,
+      rotate: lib.degrees(rotation),
       borderColor,
       borderWidth: lineWidth,
       borderOpacity: opacity,
@@ -379,6 +388,7 @@ function drawStroke(ctx: Context, page: PDFPage, stroke: Stroke, width: number, 
       y: height - ((y1 + y2) / 2) * height,
       xScale: (Math.abs(x2 - x1) / 2) * width,
       yScale: (Math.abs(y2 - y1) / 2) * height,
+      rotate: lib.degrees(rotation),
       borderColor,
       borderWidth: lineWidth,
       borderOpacity: opacity,

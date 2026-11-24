@@ -191,7 +191,9 @@ export function PdfRoundDialog({ open, onOpenChange, room, latestRound = null }:
               <FileUp className="size-5 text-muted-foreground" aria-hidden />
               {file ? (
                 <>
-                  <span className="max-w-full truncate font-medium">{file.name}</span>
+                  <span className="max-w-full truncate font-medium" title={file.name}>
+                    {file.name}
+                  </span>
                   <span className="text-xs text-muted-foreground">
                     {formatBytes(file.size, locale)} · {t('Escolher outro PDF')}
                   </span>

@@ -3,6 +3,9 @@ import type { TextBox } from '@shared/firestore/types';
 import {
   DEFAULT_DRAW_STYLE,
   DEFAULT_TEXT_STYLE,
+  applyDrawPatch,
+  applyTextPatch,
+  changedKeys,
   constrainEnd,
   dashArray,
   newTextBox,
@@ -10,10 +13,24 @@ import {
   ptFromSize,
   sizeFromPt,
   strokeFromInput,
+  styleOfStroke,
   styleOfText,
   withTextStyle,
 } from '@/features/review/model/markup';
-import { A4_ASPECT, boundsOf, buildDrawing, MAX_DRAWING_TEXTS, movePin, shiftDrawing, strokeOpacity, textCorners } from '@/lib/pdf/drawing';
+import {
+  A4_ASPECT,
+  boundsOf,
+  buildDrawing,
+  fitInPage,
+  MAX_DRAWING_TEXTS,
+  moveDrawing,
+  movePin,
+  rotateDrawing,
+  scaleDrawing,
+  shiftDrawing,
+  strokeOpacity,
+  textCorners,
+} from '@/lib/pdf/drawing';
 
 const A4 = { width: 595, height: 842 };
 
@@ -121,5 +138,78 @@ describe('desenho: gravar, mover e levar adiante', () => {
     expect(moved.drawing!.strokes[0]!.points[0]).toBeCloseTo(0.1 + dx, 4);
     // Deslocar sem textos não cria o campo.
     expect(shiftDrawing({ strokes: [rect], bounds: boundsOf([rect]) }, 0.1, 0)).not.toHaveProperty('texts');
+  });
+});
+
+describe('desenho selecionado: mover, girar, redimensionar e mudar o estilo', () => {
+  const rect = strokeFromInput({ ...DEFAULT_DRAW_STYLE, tool: 'rect' }, [[0.2, 0.2], [0.4, 0.3]])!;
+  const pen = strokeFromInput(DEFAULT_DRAW_STYLE, [[0.2, 0.4], [0.3, 0.45], [0.4, 0.4]])!;
+  const drawing = buildDrawing([rect, pen], [], A4_ASPECT)!;
+
+  it('girar 90 graus em torno do centro: o retângulo guarda a rotação e os pontos do traço giram', () => {
+    const pivot = { x: drawing.bounds.x + drawing.bounds.width / 2, y: drawing.bounds.y + drawing.bounds.height / 2 };
+    const turned = rotateDrawing(drawing, 90, pivot, A4_ASPECT);
+    expect(turned.strokes[0]!.rotation).toBe(90);
+    // O centro do retângulo gira em torno do centro do desenho; a caixa dele não muda de tamanho.
+    const [x1, y1, x2, y2] = turned.strokes[0]!.points;
+    expect(x2! - x1!).toBeCloseTo(0.2, 4);
+    expect(y2! - y1!).toBeCloseTo(0.1, 4);
+    // Os limites passam a ser os do desenho girado: largura e altura trocam na tela.
+    expect(turned.bounds.width * 1).toBeCloseTo(drawing.bounds.height * A4_ASPECT, 2);
+    // Girar de volta devolve o desenho.
+    const back = rotateDrawing(turned, -90, pivot, A4_ASPECT);
+    expect(back.strokes[0]).not.toHaveProperty('rotation');
+    expect(back.strokes[1]!.points[0]).toBeCloseTo(pen.points[0]!, 3);
+  });
+
+  it('esticar a partir do canto de cima: pontos e caixa crescem, a espessura não', () => {
+    const origin = { x: drawing.bounds.x, y: drawing.bounds.y };
+    const scaled = scaleDrawing(drawing, 2, 1.5, origin, A4_ASPECT);
+    expect(scaled.bounds.x).toBeCloseTo(drawing.bounds.x, 4);
+    expect(scaled.bounds.width).toBeCloseTo(drawing.bounds.width * 2, 3);
+    expect(scaled.bounds.height).toBeCloseTo(drawing.bounds.height * 1.5, 3);
+    expect(scaled.strokes[0]!.width).toBe(rect.width);
+  });
+
+  it('o texto acompanha: gira junto e a letra cresce com a escala', () => {
+    const withText = buildDrawing([], [box({ rect: { x: 0.3, y: 0.3, width: 0.2, height: 0.05 } })], A4_ASPECT)!;
+    const origin = { x: withText.bounds.x, y: withText.bounds.y };
+    expect(scaleDrawing(withText, 2, 2, origin, A4_ASPECT).texts![0]!.size).toBeCloseTo(withText.texts![0]!.size * 2, 4);
+    const pivot = { x: 0.4, y: 0.325 };
+    expect(rotateDrawing(withText, 30, pivot, A4_ASPECT).texts![0]!.rotation).toBe(30);
+  });
+
+  it('mover não deixa sair da página; girar perto da borda empurra de volta para dentro', () => {
+    const moved = moveDrawing(drawing, 5, -5);
+    expect(moved.bounds.x + moved.bounds.width).toBeLessThanOrEqual(1.0001);
+    expect(moved.bounds.y).toBeGreaterThanOrEqual(0);
+    const corner = buildDrawing([strokeFromInput({ ...DEFAULT_DRAW_STYLE, tool: 'rect' }, [[0.9, 0.1], [0.99, 0.12]])!], [], A4_ASPECT)!;
+    const turned = rotateDrawing(corner, 45, { x: 0.945, y: 0.11 }, A4_ASPECT);
+    expect(turned.bounds.x + turned.bounds.width).toBeLessThanOrEqual(1.0001);
+    expect(fitInPage(turned, A4_ASPECT)).toEqual(turned);
+  });
+
+  it('a forma girada entra nos limites pelos cantos girados', () => {
+    const turned = { ...rect, rotation: 45 };
+    expect(boundsOf([turned], [], A4_ASPECT).width).toBeGreaterThan(boundsOf([rect], [], A4_ASPECT).width);
+  });
+
+  it('o painel muda só o que mudou: cor e preenchimento sim, tipo e pontos não', () => {
+    const before = styleOfStroke(rect);
+    const patch = changedKeys(before, { ...before, color: 'annotation-3', fill: 'annotation-1' });
+    expect(patch).toEqual({ color: 'annotation-3', fill: 'annotation-1' });
+    const restyled = applyDrawPatch(rect, patch);
+    expect(restyled).toMatchObject({ tool: 'rect', points: rect.points, color: 'annotation-3', fill: { color: 'annotation-1', opacity: 0.25 }, width: rect.width });
+    // Linha não ganha preenchimento; opacidade cheia e linha contínua saem do documento.
+    const line = applyDrawPatch({ ...pen, opacity: 0.5, dash: 'dashed' }, { fill: 'annotation-1', opacity: 1, dash: 'solid' });
+    expect(line).not.toHaveProperty('fill');
+    expect(line).not.toHaveProperty('opacity');
+    expect(line).not.toHaveProperty('dash');
+  });
+
+  it('o tamanho do texto só muda quando o tamanho mudou no painel', () => {
+    const original = box({ size: 0.02351 });
+    expect(applyTextPatch(original, { bold: true }, 595)).toMatchObject({ bold: true, size: 0.02351 });
+    expect(applyTextPatch(original, { sizePt: 20 }, 595).size).toBe(sizeFromPt(20, 595));
   });
 });
